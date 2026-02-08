@@ -57,6 +57,7 @@
 - 日志使用 Python logging，不用 print
 - 配置项写 `.env` 文件，通过 pydantic-settings 加载
 - 所有代码需要详细的中文注释
+- 每次完成一个模块，需要更新README.md，增加项目说明
 
 ## OpenSpec 工作流
 
