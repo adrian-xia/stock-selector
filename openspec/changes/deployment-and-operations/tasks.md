@@ -1,13 +1,13 @@
 ## 1. 打包脚本实现
 
-- [ ] 1.1 创建 `scripts/package.py` 脚本文件
-- [ ] 1.2 实现版本号获取逻辑（优先使用 git tag，回退到 commit hash）
-- [ ] 1.3 实现文件收集逻辑（app/, scripts/, templates/, uv.lock, .env.example, README.md）
-- [ ] 1.4 实现排除规则（排除 tests/, .git/, __pycache__/, *.pyc, .env）
-- [ ] 1.5 实现包内容验证（检查必需文件：app/main.py, uv.lock, .env.example, README.md）
-- [ ] 1.6 实现 tarball 打包逻辑（创建 dist/stock-selector-<version>.tar.gz）
-- [ ] 1.7 添加打包日志输出（版本号、文件数量、包大小）
-- [ ] 1.8 测试打包脚本（验证生成的包可以正常解压）
+- [x] 1.1 创建 `scripts/package.py` 脚本文件
+- [x] 1.2 实现版本号获取逻辑（优先使用 git tag，回退到 commit hash）
+- [x] 1.3 实现文件收集逻辑（app/, scripts/, templates/, uv.lock, .env.example, README.md）
+- [x] 1.4 实现排除规则（排除 tests/, .git/, __pycache__/, *.pyc, .env）
+- [x] 1.5 实现包内容验证（检查必需文件：app/main.py, uv.lock, .env.example, README.md）
+- [x] 1.6 实现 tarball 打包逻辑（创建 dist/stock-selector-<version>.tar.gz）
+- [x] 1.7 添加打包日志输出（版本号、文件数量、包大小）
+- [x] 1.8 测试打包脚本（验证生成的包可以正常解压）
 
 ## 2. 服务管理脚本实现
 

@@ -32,3 +32,4 @@ logs/
 # Node (前端)
 web/node_modules/
 web/dist/
+dist/

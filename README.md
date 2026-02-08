@@ -176,6 +176,50 @@ pnpm dev
 
 前端开发服务器启动在 http://localhost:5173，API 请求自动代理到后端。
 
+## 部署
+
+### 打包项目
+
+使用打包脚本将项目打包为 tarball，便于传输到生产服务器：
+
+```bash
+uv run python -m scripts.package
+```
+
+打包脚本会：
+- 自动获取版本号（git tag 或 commit hash）
+- 收集必需文件（app/, scripts/, alembic/, uv.lock, .env.example, README.md 等）
+- 排除开发文件（tests/, .git/, __pycache__/, .env 等）
+- 验证包内容完整性
+- 生成 `dist/stock-selector-<version>.tar.gz`
+
+### 部署到服务器
+
+```bash
+# 1. 传输到目标服务器
+scp dist/stock-selector-<version>.tar.gz user@server:/path/
+
+# 2. 在服务器上解压
+tar -xzf stock-selector-<version>.tar.gz
+cd stock-selector
+
+# 3. 安装依赖
+uv sync
+
+# 4. 配置环境变量
+cp .env.example .env
+vim .env  # 填入数据库连接、Redis、Gemini API Key 等
+
+# 5. 初始化数据库
+uv run alembic upgrade head
+
+# 6. 初始化数据（使用交互式向导）
+uv run python -m scripts.init_data
+
+# 7. 启动服务
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
 ## 项目结构
 
 ```
