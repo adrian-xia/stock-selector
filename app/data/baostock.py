@@ -39,12 +39,28 @@ class BaoStockClient:
     async def fetch_daily(
         self, code: str, start_date: date, end_date: date
     ) -> list[dict]:
+        import time
+
         if self._pool:
+            # 记录连接池等待时间
+            pool_start = time.monotonic()
             session = await self._pool.acquire()
+            pool_elapsed = time.monotonic() - pool_start
+
             try:
-                return await self._with_retry(
+                # 记录实际 API 调用时间
+                api_start = time.monotonic()
+                result = await self._with_retry(
                     self._fetch_daily_sync, code, start_date, end_date, session
                 )
+                api_elapsed = time.monotonic() - api_start
+
+                # 记录细粒度日志
+                logger.debug(
+                    "[fetch_daily] %s: 连接池等待=%.2fs, API调用=%.2fs",
+                    code, pool_elapsed, api_elapsed,
+                )
+                return result
             finally:
                 await self._pool.release(session)
         else:

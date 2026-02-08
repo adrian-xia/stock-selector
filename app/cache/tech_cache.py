@@ -1,6 +1,7 @@
 """技术指标缓存层：Cache-Aside 模式，支持单只/批量读取。"""
 
 import logging
+import time
 from typing import Optional
 
 import redis.asyncio as aioredis
@@ -37,6 +38,9 @@ class TechIndicatorCache:
     ) -> None:
         self._redis = redis_client
         self._session_factory = session_factory
+        # 缓存命中率统计
+        self._hit_count = 0
+        self._miss_count = 0
 
     async def get_latest(self, ts_code: str) -> Optional[dict[str, str]]:
         """获取单只股票的最新技术指标。
@@ -54,11 +58,13 @@ class TechIndicatorCache:
             try:
                 data = await self._redis.hgetall(cache_key)
                 if data:
+                    self._hit_count += 1
                     return {k.decode(): v.decode() for k, v in data.items()}
             except Exception as e:
                 logger.warning("Redis 读取失败（%s），回源 DB：%s", cache_key, e)
 
         # 2. Cache Miss → 查 DB
+        self._miss_count += 1
         logger.debug("Cache miss: %s", cache_key)
         columns_sql = ", ".join(INDICATOR_COLUMNS)
         async with self._session_factory() as session:
@@ -139,6 +145,21 @@ class TechIndicatorCache:
 
         return result
 
+    def get_hit_rate(self) -> tuple[int, int, float]:
+        """获取缓存命中率统计。
+
+        Returns:
+            (hit_count, miss_count, hit_rate) 三元组
+        """
+        total = self._hit_count + self._miss_count
+        hit_rate = (self._hit_count / total * 100) if total > 0 else 0.0
+        return self._hit_count, self._miss_count, hit_rate
+
+    def reset_stats(self) -> None:
+        """重置统计计数器。"""
+        self._hit_count = 0
+        self._miss_count = 0
+
 
 async def refresh_all_tech_cache(
     redis_client: aioredis.Redis,
@@ -158,7 +179,11 @@ async def refresh_all_tech_cache(
     Returns:
         刷新的股票数量
     """
+    start_time = time.time()
+
     try:
+        # 1. 查询数据库
+        db_start = time.time()
         columns_sql = "ts_code, " + ", ".join(INDICATOR_COLUMNS)
         async with session_factory() as session:
             result = await session.execute(
@@ -170,11 +195,15 @@ async def refresh_all_tech_cache(
                 """)
             )
             rows = result.fetchall()
+        db_elapsed = time.time() - db_start
 
+        # 2. 批量写入 Redis
+        redis_start = time.time()
         batch_size = settings.cache_refresh_batch_size
         ttl = settings.cache_tech_ttl
         pipe = redis_client.pipeline()
         count = 0
+        batch_count = 0
 
         for row in rows:
             ts_code = row[0]
@@ -193,13 +222,33 @@ async def refresh_all_tech_cache(
             if count % batch_size == 0 and count > 0:
                 await pipe.execute()
                 pipe = redis_client.pipeline()
+                batch_count += 1
+
+                # 记录进度日志（每 1000 只股票）
+                if count % 1000 == 0:
+                    logger.info("[缓存刷新] 进度：%d 只股票已刷新", count)
 
         # 执行剩余
         await pipe.execute()
-        logger.info("技术指标缓存刷新完成: %d 只股票", count)
+        redis_elapsed = time.time() - redis_start
+
+        # 3. 记录总体汇总日志
+        total_elapsed = time.time() - start_time
+        logger.info(
+            "[缓存刷新] 完成：%d 只股票，DB查询=%.1fs，Redis写入=%.1fs，总耗时=%.1fs",
+            count, db_elapsed, redis_elapsed, total_elapsed,
+        )
+
+        # 检测慢速操作（>5 秒）
+        if db_elapsed > 5.0:
+            logger.warning("[缓存刷新] 慢速操作：DB 查询耗时 %.1fs", db_elapsed)
+        if redis_elapsed > 5.0:
+            logger.warning("[缓存刷新] 慢速操作：Redis 写入耗时 %.1fs", redis_elapsed)
+
         return count
     except Exception as e:
-        logger.warning("技术指标缓存全量刷新失败：%s", e)
+        elapsed = time.time() - start_time
+        logger.warning("技术指标缓存全量刷新失败（耗时 %.1fs）：%s", elapsed, e)
         return 0
 
 

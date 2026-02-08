@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_name: str = "stock-selector"
     app_env: str = "development"
     log_level: str = "INFO"
+    performance_log_level: str = "INFO"  # 性能日志级别：DEBUG/INFO/WARNING
     api_prefix: str = "/api/v1"
 
     # --- Database ---

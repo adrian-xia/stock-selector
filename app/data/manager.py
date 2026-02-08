@@ -85,9 +85,13 @@ class DataManager:
         end_date: date,
     ) -> dict:
         """Fetch daily bars for a single stock with primary/backup fallback."""
+        import time
+
         clean_fn = clean_baostock_daily
         source_name = self._primary
 
+        # 1. API 调用计时
+        api_start = time.monotonic()
         try:
             raw_rows = await self._primary_client.fetch_daily(
                 code, start_date, end_date
@@ -115,15 +119,34 @@ class DataManager:
                 raise DataSyncError(
                     f"All sources failed for {code}"
                 ) from primary_err
+        api_elapsed = time.monotonic() - api_start
 
+        # 2. 数据清洗计时
+        clean_start = time.monotonic()
         cleaned = clean_fn(raw_rows)
+        clean_elapsed = time.monotonic() - clean_start
+
         if not cleaned:
+            logger.debug(
+                "[sync_daily] %s: API总计=%.2fs, 清洗=%.2fs, 入库=0s (无数据)",
+                code, api_elapsed, clean_elapsed,
+            )
             return {"inserted": 0, "skipped": 0, "source": source_name}
 
+        # 3. 数据库写入计时
+        db_start = time.monotonic()
         async with self._session_factory() as session:
             count = await batch_insert(
                 session, StockDaily.__table__, cleaned
             )
+        db_elapsed = time.monotonic() - db_start
+
+        # 记录细粒度日志（DEBUG 级别）
+        # 注意：api_elapsed 包含连接池等待时间，详细分解见 BaoStockClient 日志
+        logger.debug(
+            "[sync_daily] %s: API总计=%.2fs, 清洗=%.2fs, 入库=%.2fs",
+            code, api_elapsed, clean_elapsed, db_elapsed,
+        )
 
         return {"inserted": count, "source": source_name}
 

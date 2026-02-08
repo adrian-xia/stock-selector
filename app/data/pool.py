@@ -79,7 +79,7 @@ class BaoStockConnectionPool:
     async def acquire(self) -> BaoStockSession:
         """从连接池获取一个可用的会话。
 
-        如果队列为空且未达到池大小上限，创建新会话。
+        如果队列为空且未达到池大小上限，立即创建新会话。
         如果会话已过期（超过 TTL），重新 login。
 
         Returns:
@@ -92,20 +92,27 @@ class BaoStockConnectionPool:
         if self._closed:
             raise RuntimeError("连接池已关闭")
 
+        session = None
+
+        # 优先尝试从队列获取（非阻塞）
         try:
-            # 尝试从队列获取连接
-            session = await asyncio.wait_for(
-                self._queue.get(),
-                timeout=self._timeout,
-            )
-        except asyncio.TimeoutError:
+            session = self._queue.get_nowait()
+        except asyncio.QueueEmpty:
             # 队列为空，检查是否可以创建新连接
             if self._created_count < self._size:
+                # 立即创建新会话，不等待
                 session = await self._create_session()
             else:
-                raise TimeoutError(
-                    f"连接池获取超时（{self._timeout}s），所有连接都在使用中"
-                )
+                # 已达上限，阻塞等待其他会话释放
+                try:
+                    session = await asyncio.wait_for(
+                        self._queue.get(),
+                        timeout=self._timeout,
+                    )
+                except asyncio.TimeoutError:
+                    raise TimeoutError(
+                        f"连接池获取超时（{self._timeout}s），所有连接都在使用中"
+                    )
 
         # 检查会话是否过期
         now = time.time()

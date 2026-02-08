@@ -301,28 +301,58 @@ def compute_single_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
     low = result["low"].astype(float)
     vol = result["vol"].astype(float)
 
+    # 记录各指标计算耗时
+    indicator_times = {}
+
     # --- 均线 ---
+    ma_start = time.time()
     for period in (5, 10, 20, 60, 120, 250):
         result[f"ma{period}"] = _compute_ma(close, period)
+    indicator_times["MA"] = time.time() - ma_start
 
     # --- MACD ---
+    macd_start = time.time()
     result["macd_dif"], result["macd_dea"], result["macd_hist"] = _compute_macd(close)
+    indicator_times["MACD"] = time.time() - macd_start
 
     # --- KDJ ---
+    kdj_start = time.time()
     result["kdj_k"], result["kdj_d"], result["kdj_j"] = _compute_kdj(high, low, close)
+    indicator_times["KDJ"] = time.time() - kdj_start
 
     # --- RSI ---
+    rsi_start = time.time()
     for period in (6, 12, 24):
         result[f"rsi{period}"] = _compute_rsi(close, period)
+    indicator_times["RSI"] = time.time() - rsi_start
 
     # --- 布林带 ---
+    boll_start = time.time()
     result["boll_upper"], result["boll_mid"], result["boll_lower"] = _compute_boll(close)
+    indicator_times["BOLL"] = time.time() - boll_start
 
     # --- 成交量指标 ---
+    vol_start = time.time()
     result["vol_ma5"], result["vol_ma10"], result["vol_ratio"] = _compute_vol_indicators(vol)
+    indicator_times["VOL"] = time.time() - vol_start
 
     # --- ATR ---
+    atr_start = time.time()
     result["atr14"] = _compute_atr(high, low, close)
+    indicator_times["ATR"] = time.time() - atr_start
+
+    # 记录总耗时和慢速指标（DEBUG 级别）
+    total_time = sum(indicator_times.values())
+    logger.debug(
+        "[compute_indicators] 总耗时=%.3fs, MA=%.3fs, MACD=%.3fs, KDJ=%.3fs, RSI=%.3fs, BOLL=%.3fs, VOL=%.3fs, ATR=%.3fs",
+        total_time, indicator_times["MA"], indicator_times["MACD"], indicator_times["KDJ"],
+        indicator_times["RSI"], indicator_times["BOLL"], indicator_times["VOL"], indicator_times["ATR"],
+    )
+
+    # 检测慢速指标（>0.1 秒）
+    for name, elapsed in indicator_times.items():
+        if elapsed > 0.1:
+            logger.warning("[compute_indicators] 慢速指标：%s 耗时 %.3fs", name, elapsed)
 
     return result
 
@@ -519,7 +549,18 @@ async def compute_all_stocks(
         "failed": failed,
         "elapsed_seconds": elapsed,
     }
-    logger.info("全量计算完成: %s", summary)
+
+    # 记录总体汇总日志
+    avg_time = elapsed / total if total > 0 else 0
+    logger.info(
+        "[技术指标] 全量计算完成：成功 %d 只，失败 %d 只，总耗时 %.1fs，平均 %.3fs/只",
+        success, failed, elapsed, avg_time,
+    )
+
+    # 检测慢速计算（总耗时 >30 分钟）
+    if elapsed > 1800:
+        logger.warning("[技术指标] 慢速计算：全量计算耗时 %.1fs (%.1f分钟)", elapsed, elapsed / 60)
+
     return summary
 
 
@@ -658,5 +699,16 @@ async def compute_incremental(
         "failed": failed,
         "elapsed_seconds": elapsed,
     }
-    logger.info("增量计算完成: %s", summary)
+
+    # 记录总体汇总日志
+    avg_time = elapsed / total if total > 0 else 0
+    logger.info(
+        "[技术指标] 增量计算完成：日期 %s，成功 %d 只，失败 %d 只，总耗时 %.1fs，平均 %.3fs/只",
+        target_date, success, failed, elapsed, avg_time,
+    )
+
+    # 检测慢速计算（总耗时 >10 分钟）
+    if elapsed > 600:
+        logger.warning("[技术指标] 慢速计算：增量计算耗时 %.1fs (%.1f分钟)", elapsed, elapsed / 60)
+
     return summary

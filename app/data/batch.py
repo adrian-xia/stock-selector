@@ -96,15 +96,24 @@ async def batch_sync_daily(
     # 并发控制
     semaphore = asyncio.Semaphore(concurrency)
 
-    async def sync_one(code: str) -> tuple[str, bool]:
-        """同步单只股票，返回 (code, success)。"""
+    async def sync_one(code: str) -> tuple[str, bool, float, str]:
+        """同步单只股票，返回 (code, success, elapsed, error_msg)。"""
         async with semaphore:
+            stock_start = time.monotonic()
             try:
                 await manager.sync_daily(code, target_date, target_date)
-                return (code, True)
+                elapsed = time.monotonic() - stock_start
+
+                # 检测慢速股票（>5秒）
+                if elapsed > 5.0:
+                    logger.warning("[批量同步] 慢速股票：%s 耗时 %.1fs", code, elapsed)
+
+                return (code, True, elapsed, "")
             except Exception as e:
-                logger.warning("[批量同步] %s 失败：%s", code, e)
-                return (code, False)
+                elapsed = time.monotonic() - stock_start
+                error_msg = str(e)
+                logger.warning("[批量同步] 失败：%s - %s", code, error_msg)
+                return (code, False, elapsed, error_msg)
 
     # 逐批执行
     for batch_idx, batch in enumerate(batches, 1):
@@ -114,13 +123,13 @@ async def batch_sync_daily(
         results = await asyncio.gather(*[sync_one(code) for code in batch])
 
         # 统计结果
-        batch_success = sum(1 for _, success in results if success)
+        batch_success = sum(1 for _, success, _, _ in results if success)
         batch_failed = len(batch) - batch_success
         success_count += batch_success
         failed_count += batch_failed
 
         # 记录失败的股票
-        for code, success in results:
+        for code, success, _, _ in results:
             if not success:
                 failed_codes.append(code)
 
@@ -131,9 +140,10 @@ async def batch_sync_daily(
         )
 
     elapsed = time.monotonic() - start_time
+    avg_time = elapsed / total if total > 0 else 0
     logger.info(
-        "[批量同步] 完成：成功 %d 只，失败 %d 只，总耗时 %.1fs",
-        success_count, failed_count, elapsed,
+        "[批量同步] 完成：成功 %d 只，失败 %d 只，总耗时 %.1fs，平均 %.3fs/只",
+        success_count, failed_count, elapsed, avg_time,
     )
 
     return {
