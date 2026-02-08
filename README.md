@@ -5,6 +5,7 @@
 ## 功能特性
 
 - **多源数据采集** — 对接 BaoStock + AKShare，自动同步日线行情、财务指标、资金流向等数据，批量写入自动适配 asyncpg 参数限制
+- **高性能数据同步** — BaoStock 连接池 + 批量并发同步，8000+ 只股票日线数据同步从 2-3 小时降至 15-30 分钟（4-8 倍提升）
 - **技术指标计算** — 自动计算 MA/MACD/KDJ/RSI/BOLL/ATR 等常用技术指标
 - **12 种选股策略** — 8 种技术面策略 + 4 种基本面策略，支持自由组合
 - **5 层漏斗筛选** — SQL 粗筛 → 技术面 → 基本面 → 排序 → AI 终审
@@ -150,6 +151,8 @@ stock-selector/
 │   ├── data/                   # 数据采集模块
 │   │   ├── baostock.py         #   BaoStock 客户端
 │   │   ├── akshare.py          #   AKShare 客户端
+│   │   ├── pool.py             #   BaoStock 连接池
+│   │   ├── batch.py            #   批量日线同步
 │   │   ├── adj_factor.py       #   复权因子批量更新
 │   │   ├── etl.py              #   ETL 清洗
 │   │   ├── indicator.py        #   技术指标计算

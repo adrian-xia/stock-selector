@@ -8,6 +8,14 @@ import pytest
 from app.scheduler.jobs import run_post_market_chain, sync_daily_step
 
 
+# Mock batch_sync_daily 避免真实连接池和数据库操作
+@pytest.fixture(autouse=True)
+def mock_batch_sync():
+    with patch("app.scheduler.jobs.batch_sync_daily") as mock:
+        mock.return_value = {"success": 0, "failed": 0, "failed_codes": [], "elapsed_seconds": 0.1}
+        yield mock
+
+
 class TestRunPostMarketChain:
     """测试盘后链路。"""
 
@@ -75,36 +83,32 @@ class TestRunPostMarketChain:
 class TestSyncDailyStep:
     """测试日线同步步骤。"""
 
-    async def test_sync_all_stocks(self) -> None:
-        """应逐只同步所有上市股票。"""
+    async def test_sync_all_stocks(self, mock_batch_sync: MagicMock) -> None:
+        """应批量同步所有上市股票。"""
         mock_mgr = AsyncMock()
         mock_mgr.get_stock_list.return_value = [
             {"ts_code": "600519.SH", "name": "贵州茅台"},
             {"ts_code": "000858.SZ", "name": "五粮液"},
         ]
-        mock_mgr.sync_daily.return_value = {"inserted": 1}
+
+        mock_batch_sync.return_value = {"success": 2, "failed": 0, "failed_codes": [], "elapsed_seconds": 1.5}
 
         await sync_daily_step(date(2024, 1, 8), manager=mock_mgr)
 
-        assert mock_mgr.sync_daily.call_count == 2
+        mock_batch_sync.assert_called_once()
+        assert len(mock_batch_sync.call_args.kwargs["stock_codes"]) == 2
 
-    async def test_partial_failure_continues(self) -> None:
-        """部分股票同步失败不应中断其他股票。"""
+    async def test_partial_failure_continues(self, mock_batch_sync: MagicMock) -> None:
+        """部分股票同步失败不应中断整体。"""
         mock_mgr = AsyncMock()
         mock_mgr.get_stock_list.return_value = [
             {"ts_code": "600519.SH", "name": "贵州茅台"},
             {"ts_code": "000858.SZ", "name": "五粮液"},
             {"ts_code": "300750.SZ", "name": "宁德时代"},
         ]
-        # 第二只股票失败
-        mock_mgr.sync_daily.side_effect = [
-            {"inserted": 1},
-            RuntimeError("timeout"),
-            {"inserted": 1},
-        ]
 
-        # 不应抛出异常
+        mock_batch_sync.return_value = {"success": 2, "failed": 1, "failed_codes": ["000858.SZ"], "elapsed_seconds": 1.5}
+
         await sync_daily_step(date(2024, 1, 8), manager=mock_mgr)
 
-        # 三只股票都应尝试同步
-        assert mock_mgr.sync_daily.call_count == 3
+        mock_batch_sync.assert_called_once()

@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     baostock_retry_interval: float = 2.0
     baostock_timeout: int = 30
     baostock_qps_limit: int = 5
+    baostock_pool_size: int = 5                 # 连接池大小（最大并发连接数）
+    baostock_pool_timeout: float = 30.0         # 获取连接的超时时间（秒）
+    baostock_session_ttl: float = 3600.0        # 会话生存时间（秒）
 
     # --- AKShare ---
     akshare_retry_count: int = 3
@@ -45,6 +48,10 @@ class Settings(BaseSettings):
     # --- ETL ---
     etl_batch_size: int = 5000
     etl_commit_interval: int = 10
+
+    # --- Daily Sync ---
+    daily_sync_batch_size: int = 100        # 批量同步每批股票数
+    daily_sync_concurrency: int = 10        # 批量同步并发数
 
     # --- Scheduler ---
     scheduler_post_market_cron: str = "30 15 * * 1-5"  # 周一至周五 15:30
