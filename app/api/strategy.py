@@ -43,6 +43,9 @@ class StockPickResponse(BaseModel):
     pct_chg: float
     matched_strategies: list[str]
     match_count: int
+    ai_score: int | None = None
+    ai_signal: str | None = None
+    ai_summary: str | None = None
 
 
 class StrategyRunResponse(BaseModel):
@@ -52,6 +55,7 @@ class StrategyRunResponse(BaseModel):
     total_picks: int
     elapsed_ms: int
     layer_stats: dict[str, int]
+    ai_enabled: bool = False
     picks: list[StockPickResponse]
 
 
@@ -111,6 +115,7 @@ async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
         total_picks=len(result.picks),
         elapsed_ms=result.elapsed_ms,
         layer_stats=result.layer_stats,
+        ai_enabled=result.ai_enabled,
         picks=[
             StockPickResponse(
                 ts_code=p.ts_code,
@@ -119,6 +124,9 @@ async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
                 pct_chg=p.pct_chg,
                 matched_strategies=p.matched_strategies,
                 match_count=p.match_count,
+                ai_score=p.ai_score,
+                ai_signal=p.ai_signal,
+                ai_summary=p.ai_summary,
             )
             for p in result.picks
         ],

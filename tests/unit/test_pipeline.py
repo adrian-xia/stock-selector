@@ -10,7 +10,7 @@ from app.strategy.pipeline import (
     PipelineResult,
     StockPick,
     _layer4_rank_and_topn,
-    _layer5_ai_placeholder,
+    _layer5_ai_analysis,
     execute_pipeline,
 )
 
@@ -87,18 +87,22 @@ class TestLayer4RankAndTopN:
         assert picks == []
 
 
-class TestLayer5AIPlaceholder:
-    """测试 Layer 5 AI 占位。"""
+class TestLayer5AIAnalysis:
+    """测试 Layer 5 AI 分析（AI 未启用时透传）。"""
 
     @pytest.mark.asyncio
-    async def test_passthrough(self) -> None:
-        """直接透传输入。"""
+    @patch("app.ai.manager.get_ai_manager")
+    async def test_passthrough_when_disabled(self, mock_get_manager: MagicMock) -> None:
+        """AI 未启用时直接透传输入。"""
+        mock_manager = MagicMock()
+        mock_manager.is_enabled = False
+        mock_get_manager.return_value = mock_manager
+
         picks = [
             StockPick(ts_code="A", name="A", close=10.0, pct_chg=1.0),
             StockPick(ts_code="B", name="B", close=20.0, pct_chg=2.0),
         ]
-        result = await _layer5_ai_placeholder(picks)
-        assert result == picks
+        result = await _layer5_ai_analysis(picks, pd.DataFrame(), date(2026, 2, 7))
         assert len(result) == 2
 
 

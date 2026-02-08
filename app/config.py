@@ -50,5 +50,13 @@ class Settings(BaseSettings):
     scheduler_post_market_cron: str = "30 15 * * 1-5"  # 周一至周五 15:30
     scheduler_stock_sync_cron: str = "0 8 * * 6"       # 周六 08:00
 
+    # --- AI (Gemini) ---
+    gemini_api_key: str = ""                    # 为空则 AI 分析不启用
+    gemini_model_id: str = "gemini-2.0-flash"   # V1 固定用 Flash
+    gemini_max_tokens: int = 4000               # 单次请求最大输出 token
+    gemini_timeout: int = 30                    # 请求超时（秒）
+    gemini_max_retries: int = 2                 # 瞬态错误重试次数
+    ai_daily_budget_usd: float = 1.0            # 每日预算上限（V1 仅日志告警）
+
 
 settings = Settings()
