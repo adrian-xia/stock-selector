@@ -30,7 +30,7 @@
 ## V1 范围（当前阶段）
 
 - 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层，批量写入自动适配 asyncpg 参数限制
-- 性能优化：BaoStock 连接池 + 批量并发同步，日线同步性能提升 4-8 倍
+- 性能优化：BaoStock 连接池 + 批量并发同步，日线同步性能提升 4-8 倍，详细性能日志支持瓶颈分析
 - 策略引擎：10-15 种核心策略，扁平继承，单模式接口
 - AI 分析：仅 Gemini Flash 单模型，无降级链路
 - 回测：Backtrader 同步执行，无 Redis 队列
@@ -44,7 +44,7 @@
 - **回测：** Backtrader
 - **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
-- **性能优化：** BaoStock 连接池（asyncio.Queue）+ 批量并发同步（asyncio.Semaphore）
+- **性能优化：** BaoStock 连接池（asyncio.Queue）+ 批量并发同步（asyncio.Semaphore）+ 详细性能日志（批次进度、慢速检测、平均耗时）
 - **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
 - **前端构建：** Vite 6 + pnpm
