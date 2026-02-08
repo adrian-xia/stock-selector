@@ -1,7 +1,7 @@
 """BaoStockClient 单元测试。"""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,9 +11,11 @@ from app.exceptions import DataSourceError
 
 # --- 辅助：构造客户端实例（不依赖 settings） ---
 
-def _make_client() -> BaoStockClient:
+def _make_client(**kwargs) -> BaoStockClient:
     """创建测试用客户端，显式传参避免读取 settings。"""
-    return BaoStockClient(retry_count=2, retry_interval=0.01, qps_limit=5)
+    defaults = dict(retry_count=2, retry_interval=0.01, qps_limit=5)
+    defaults.update(kwargs)
+    return BaoStockClient(**defaults)
 
 
 # ============================================================
@@ -242,3 +244,99 @@ class TestHealthCheck:
             side_effect=DataSourceError("login failed"),
         ):
             assert await client.health_check() is False
+
+
+# ============================================================
+# 5. 连接池集成
+# ============================================================
+
+class _FakeResultSet:
+    """模拟 BaoStock ResultSet。"""
+
+    def __init__(
+        self, rows: list[list[str]], fields: list[str],
+        error_code: str = "0", error_msg: str = "",
+    ) -> None:
+        self.fields = fields
+        self.error_code = error_code
+        self.error_msg = error_msg
+        self._rows = rows
+        self._index = -1
+
+    def next(self) -> bool:
+        self._index += 1
+        return self._index < len(self._rows)
+
+    def get_row_data(self) -> list[str]:
+        return self._rows[self._index]
+
+
+class TestConnectionPoolIntegration:
+    """BaoStockClient 使用连接池时的行为测试。"""
+
+    @patch("app.data.baostock.bs")
+    async def test_with_pool_no_login_logout(self, mock_bs: MagicMock) -> None:
+        """使用连接池时，不应调用 login/logout。"""
+        mock_bs.query_history_k_data_plus.return_value = _FakeResultSet(
+            rows=[], fields=[],
+        )
+
+        mock_pool = MagicMock()
+        mock_session = MagicMock()
+        mock_pool.acquire = AsyncMock(return_value=mock_session)
+        mock_pool.release = AsyncMock()
+
+        client = _make_client(connection_pool=mock_pool)
+        from datetime import date
+        await client.fetch_daily("600519.SH", date(2025, 1, 6), date(2025, 1, 6))
+
+        # 不应调用 login/logout
+        mock_bs.login.assert_not_called()
+        mock_bs.logout.assert_not_called()
+        # 应调用 pool.acquire 和 pool.release
+        mock_pool.acquire.assert_called_once()
+        mock_pool.release.assert_called_once()
+
+    @patch("app.data.baostock.bs")
+    async def test_with_pool_release_on_error(self, mock_bs: MagicMock) -> None:
+        """使用连接池时，即使查询失败也应 release 连接。"""
+        mock_bs.query_history_k_data_plus.return_value = _FakeResultSet(
+            rows=[], fields=[], error_code="10001", error_msg="query error",
+        )
+
+        mock_pool = MagicMock()
+        mock_session = MagicMock()
+        mock_pool.acquire = AsyncMock(return_value=mock_session)
+        mock_pool.release = AsyncMock()
+
+        client = _make_client(retry_count=0, connection_pool=mock_pool)
+        from datetime import date
+        with pytest.raises(DataSourceError):
+            await client.fetch_daily("600519.SH", date(2025, 1, 6), date(2025, 1, 6))
+
+        # 即使失败也应 release
+        mock_pool.release.assert_called_once()
+
+
+class TestBackwardCompatibility:
+    """无连接池时的向后兼容性测试。"""
+
+    @patch("app.data.baostock.bs")
+    async def test_without_pool_uses_login_logout(self, mock_bs: MagicMock) -> None:
+        """不提供连接池时，应使用旧的 login/logout 逻辑。"""
+        mock_bs.login.return_value = MagicMock(error_code="0")
+        mock_bs.query_history_k_data_plus.return_value = _FakeResultSet(
+            rows=[], fields=[],
+        )
+
+        client = _make_client()  # 无连接池
+        from datetime import date
+        await client.fetch_daily("600519.SH", date(2025, 1, 6), date(2025, 1, 6))
+
+        mock_bs.login.assert_called()
+        mock_bs.logout.assert_called()
+
+    def test_default_pool_is_none(self) -> None:
+        """默认构造时连接池应为 None。"""
+        client = _make_client()
+        assert client._pool is None

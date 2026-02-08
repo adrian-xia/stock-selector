@@ -9,8 +9,10 @@ from app.cache.redis_client import get_redis
 from app.cache.tech_cache import refresh_all_tech_cache
 from app.data.akshare import AKShareClient
 from app.data.baostock import BaoStockClient
+from app.data.batch import batch_sync_daily
 from app.data.indicator import compute_incremental
 from app.data.manager import DataManager
+from app.data.pool import get_pool
 from app.database import async_session_factory
 from app.strategy.factory import StrategyFactory
 from app.strategy.pipeline import execute_pipeline
@@ -19,9 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 def _build_manager() -> DataManager:
-    """构造 DataManager 实例。"""
+    """构造 DataManager 实例（使用连接池）。"""
+    pool = get_pool()
     clients = {
-        "baostock": BaoStockClient(),
+        "baostock": BaoStockClient(connection_pool=pool),
         "akshare": AKShareClient(),
     }
     return DataManager(
@@ -82,7 +85,7 @@ async def sync_daily_step(
     target_date: date,
     manager: DataManager | None = None,
 ) -> None:
-    """日线增量同步：查询所有上市股票，逐只同步当日数据。
+    """日线增量同步：使用批量并发同步所有上市股票。
 
     Args:
         target_date: 目标日期
@@ -92,23 +95,23 @@ async def sync_daily_step(
     step_start = time.monotonic()
     logger.info("[日线同步] 开始：%s", target_date)
 
+    # 获取所有上市股票
     stocks = await mgr.get_stock_list(status="L")
-    success_count = 0
-    fail_count = 0
+    stock_codes = [s["ts_code"] for s in stocks]
 
-    for stock in stocks:
-        code = stock["ts_code"]
-        try:
-            await mgr.sync_daily(code, target_date, target_date)
-            success_count += 1
-        except Exception as e:
-            fail_count += 1
-            logger.warning("[日线同步] %s 失败：%s", code, e)
+    # 使用批量同步
+    pool = get_pool()
+    result = await batch_sync_daily(
+        session_factory=async_session_factory,
+        stock_codes=stock_codes,
+        target_date=target_date,
+        connection_pool=pool,
+    )
 
     elapsed = int(time.monotonic() - step_start)
     logger.info(
         "[日线同步] 完成：成功 %d 只，失败 %d 只，耗时 %ds",
-        success_count, fail_count, elapsed,
+        result["success"], result["failed"], elapsed,
     )
 
 async def cache_refresh_step(target_date: date) -> None:

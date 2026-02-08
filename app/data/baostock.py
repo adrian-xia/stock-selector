@@ -2,46 +2,81 @@ import asyncio
 import logging
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import TYPE_CHECKING
 
 import baostock as bs
 
 from app.config import settings
 from app.exceptions import DataSourceError
 
+if TYPE_CHECKING:
+    from app.data.pool import BaoStockConnectionPool
+
 logger = logging.getLogger(__name__)
 
 
 class BaoStockClient:
-    """BaoStock data source client with async wrappers over sync API."""
+    """BaoStock data source client with async wrappers over sync API.
+
+    支持可选的连接池参数，用于复用 BaoStock 登录会话。
+    如果不提供连接池，则使用旧逻辑（每次请求 login/logout）。
+    """
 
     def __init__(
         self,
         retry_count: int = settings.baostock_retry_count,
         retry_interval: float = settings.baostock_retry_interval,
         qps_limit: int = settings.baostock_qps_limit,
+        connection_pool: "BaoStockConnectionPool | None" = None,
     ) -> None:
         self._retry_count = retry_count
         self._retry_interval = retry_interval
         self._semaphore = asyncio.Semaphore(qps_limit)
+        self._pool = connection_pool
 
     # --- Public async interface ---
 
     async def fetch_daily(
         self, code: str, start_date: date, end_date: date
     ) -> list[dict]:
-        return await self._with_retry(
-            self._fetch_daily_sync, code, start_date, end_date
-        )
+        if self._pool:
+            session = await self._pool.acquire()
+            try:
+                return await self._with_retry(
+                    self._fetch_daily_sync, code, start_date, end_date, session
+                )
+            finally:
+                await self._pool.release(session)
+        else:
+            return await self._with_retry(
+                self._fetch_daily_sync, code, start_date, end_date, None
+            )
 
     async def fetch_stock_list(self) -> list[dict]:
-        return await self._with_retry(self._fetch_stock_list_sync)
+        if self._pool:
+            session = await self._pool.acquire()
+            try:
+                return await self._with_retry(self._fetch_stock_list_sync, session)
+            finally:
+                await self._pool.release(session)
+        else:
+            return await self._with_retry(self._fetch_stock_list_sync, None)
 
     async def fetch_trade_calendar(
         self, start_date: date, end_date: date
     ) -> list[dict]:
-        return await self._with_retry(
-            self._fetch_trade_calendar_sync, start_date, end_date
-        )
+        if self._pool:
+            session = await self._pool.acquire()
+            try:
+                return await self._with_retry(
+                    self._fetch_trade_calendar_sync, start_date, end_date, session
+                )
+            finally:
+                await self._pool.release(session)
+        else:
+            return await self._with_retry(
+                self._fetch_trade_calendar_sync, start_date, end_date, None
+            )
 
     async def health_check(self) -> bool:
         try:
@@ -65,9 +100,18 @@ class BaoStockClient:
         Returns:
             list[dict]，每个 dict 含 ts_code, trade_date, adj_factor
         """
-        return await self._with_retry(
-            self._fetch_adj_factor_sync, code, start_date, end_date
-        )
+        if self._pool:
+            session = await self._pool.acquire()
+            try:
+                return await self._with_retry(
+                    self._fetch_adj_factor_sync, code, start_date, end_date, session
+                )
+            finally:
+                await self._pool.release(session)
+        else:
+            return await self._with_retry(
+                self._fetch_adj_factor_sync, code, start_date, end_date, None
+            )
 
     # --- Retry + rate limit wrapper ---
 
@@ -117,37 +161,52 @@ class BaoStockClient:
         bs.logout()
 
     def _fetch_daily_sync(
+        self, code: str, start_date: date, end_date: date, session=None
+    ) -> list[dict]:
+        """同步获取日线数据。
+
+        如果提供了 session，直接使用；否则使用旧逻辑 login/logout。
+        """
+        if session is not None:
+            # 使用连接池会话（已在异步层面获取）
+            return self._query_daily(code, start_date, end_date)
+        else:
+            # 旧逻辑：login → query → logout
+            self._login()
+            try:
+                return self._query_daily(code, start_date, end_date)
+            finally:
+                self._logout()
+
+    def _query_daily(
         self, code: str, start_date: date, end_date: date
     ) -> list[dict]:
-        self._login()
-        try:
-            bs_code = self._to_baostock_code(code)
-            fields = (
-                "date,code,open,high,low,close,preclose,volume,amount,"
-                "turn,tradestatus,pctChg,isST"
+        """执行日线数据查询（假设已登录）。"""
+        bs_code = self._to_baostock_code(code)
+        fields = (
+            "date,code,open,high,low,close,preclose,volume,amount,"
+            "turn,tradestatus,pctChg,isST"
+        )
+        rs = bs.query_history_k_data_plus(
+            bs_code,
+            fields,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            frequency="d",
+            adjustflag="3",
+        )
+        if rs.error_code != "0":
+            raise DataSourceError(
+                f"BaoStock query failed for {code}: {rs.error_msg}"
             )
-            rs = bs.query_history_k_data_plus(
-                bs_code,
-                fields,
-                start_date=start_date.isoformat(),
-                end_date=end_date.isoformat(),
-                frequency="d",
-                adjustflag="3",
-            )
-            if rs.error_code != "0":
-                raise DataSourceError(
-                    f"BaoStock query failed for {code}: {rs.error_msg}"
-                )
 
-            rows: list[dict] = []
-            while rs.next():
-                row = rs.get_row_data()
-                field_names = rs.fields
-                raw = dict(zip(field_names, row))
-                rows.append(self._parse_daily_row(raw))
-            return rows
-        finally:
-            self._logout()
+        rows: list[dict] = []
+        while rs.next():
+            row = rs.get_row_data()
+            field_names = rs.fields
+            raw = dict(zip(field_names, row))
+            rows.append(self._parse_daily_row(raw))
+        return rows
 
     def _parse_daily_row(self, raw: dict) -> dict:
         def _dec(val: str) -> Decimal | None:
@@ -173,59 +232,77 @@ class BaoStockClient:
             "trade_status": "1" if raw.get("tradestatus") == "1" else "0",
         }
 
-    def _fetch_stock_list_sync(self) -> list[dict]:
-        self._login()
-        try:
-            rs = bs.query_stock_basic()
-            if rs.error_code != "0":
-                raise DataSourceError(
-                    f"BaoStock stock list query failed: {rs.error_msg}"
-                )
-            rows: list[dict] = []
-            while rs.next():
-                row = rs.get_row_data()
-                field_names = rs.fields
-                raw = dict(zip(field_names, row))
-                ts_code = self._to_standard_code(raw.get("code", ""))
-                rows.append({
-                    "ts_code": ts_code,
-                    "symbol": ts_code.split(".")[0] if "." in ts_code else ts_code,
-                    "name": raw.get("code_name", ""),
-                    "industry": "",
-                    "area": "",
-                    "market": "",
-                    "list_date": raw.get("ipoDate", ""),
-                    "list_status": "D" if raw.get("outDate", "") else "L",
-                })
-            return rows
-        finally:
-            self._logout()
+    def _fetch_stock_list_sync(self, session=None) -> list[dict]:
+        """同步获取股票列表。"""
+        if session is not None:
+            return self._query_stock_list()
+        else:
+            self._login()
+            try:
+                return self._query_stock_list()
+            finally:
+                self._logout()
+
+    def _query_stock_list(self) -> list[dict]:
+        """执行股票列表查询（假设已登录）。"""
+        rs = bs.query_stock_basic()
+        if rs.error_code != "0":
+            raise DataSourceError(
+                f"BaoStock stock list query failed: {rs.error_msg}"
+            )
+        rows: list[dict] = []
+        while rs.next():
+            row = rs.get_row_data()
+            field_names = rs.fields
+            raw = dict(zip(field_names, row))
+            ts_code = self._to_standard_code(raw.get("code", ""))
+            rows.append({
+                "ts_code": ts_code,
+                "symbol": ts_code.split(".")[0] if "." in ts_code else ts_code,
+                "name": raw.get("code_name", ""),
+                "industry": "",
+                "area": "",
+                "market": "",
+                "list_date": raw.get("ipoDate", ""),
+                "list_status": "D" if raw.get("outDate", "") else "L",
+            })
+        return rows
 
     def _fetch_trade_calendar_sync(
+        self, start_date: date, end_date: date, session=None
+    ) -> list[dict]:
+        """同步获取交易日历。"""
+        if session is not None:
+            return self._query_trade_calendar(start_date, end_date)
+        else:
+            self._login()
+            try:
+                return self._query_trade_calendar(start_date, end_date)
+            finally:
+                self._logout()
+
+    def _query_trade_calendar(
         self, start_date: date, end_date: date
     ) -> list[dict]:
-        self._login()
-        try:
-            rs = bs.query_trade_dates(
-                start_date=start_date.isoformat(),
-                end_date=end_date.isoformat(),
+        """执行交易日历查询（假设已登录）。"""
+        rs = bs.query_trade_dates(
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+        if rs.error_code != "0":
+            raise DataSourceError(
+                f"BaoStock trade calendar query failed: {rs.error_msg}"
             )
-            if rs.error_code != "0":
-                raise DataSourceError(
-                    f"BaoStock trade calendar query failed: {rs.error_msg}"
-                )
-            rows: list[dict] = []
-            while rs.next():
-                row = rs.get_row_data()
-                field_names = rs.fields
-                raw = dict(zip(field_names, row))
-                rows.append({
-                    "cal_date": raw.get("calendar_date", ""),
-                    "is_open": raw.get("is_trading_day", "0") == "1",
-                })
-            return rows
-        finally:
-            self._logout()
+        rows: list[dict] = []
+        while rs.next():
+            row = rs.get_row_data()
+            field_names = rs.fields
+            raw = dict(zip(field_names, row))
+            rows.append({
+                "cal_date": raw.get("calendar_date", ""),
+                "is_open": raw.get("is_trading_day", "0") == "1",
+            })
+        return rows
 
     def _health_check_sync(self) -> bool:
         self._login()
@@ -233,39 +310,48 @@ class BaoStockClient:
         return True
 
     def _fetch_adj_factor_sync(
+        self, code: str, start_date: date, end_date: date, session=None
+    ) -> list[dict]:
+        """同步获取复权因子。"""
+        if session is not None:
+            return self._query_adj_factor(code, start_date, end_date)
+        else:
+            self._login()
+            try:
+                return self._query_adj_factor(code, start_date, end_date)
+            finally:
+                self._logout()
+
+    def _query_adj_factor(
         self, code: str, start_date: date, end_date: date
     ) -> list[dict]:
-        """同步获取复权因子（在线程池中执行）。"""
-        self._login()
-        try:
-            bs_code = self._to_baostock_code(code)
-            rs = bs.query_adjust_factor(
-                code=bs_code,
-                start_date=start_date.isoformat(),
-                end_date=end_date.isoformat(),
+        """执行复权因子查询（假设已登录）。"""
+        bs_code = self._to_baostock_code(code)
+        rs = bs.query_adjust_factor(
+            code=bs_code,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+        if rs.error_code != "0":
+            raise DataSourceError(
+                f"BaoStock adj_factor query failed for {code}: {rs.error_msg}"
             )
-            if rs.error_code != "0":
-                raise DataSourceError(
-                    f"BaoStock adj_factor query failed for {code}: {rs.error_msg}"
-                )
 
-            rows: list[dict] = []
-            while rs.next():
-                row = rs.get_row_data()
-                field_names = rs.fields
-                raw = dict(zip(field_names, row))
-                adj_val = raw.get("foreAdjustFactor", "")
-                if not adj_val or adj_val in ("", "N/A", "--", "None"):
-                    continue
-                try:
-                    adj_factor = Decimal(adj_val)
-                except InvalidOperation:
-                    continue
-                rows.append({
-                    "ts_code": self._to_standard_code(raw.get("code", bs_code)),
-                    "trade_date": raw.get("dividOperateDate", ""),
-                    "adj_factor": adj_factor,
-                })
-            return rows
-        finally:
-            self._logout()
+        rows: list[dict] = []
+        while rs.next():
+            row = rs.get_row_data()
+            field_names = rs.fields
+            raw = dict(zip(field_names, row))
+            adj_val = raw.get("foreAdjustFactor", "")
+            if not adj_val or adj_val in ("", "N/A", "--", "None"):
+                continue
+            try:
+                adj_factor = Decimal(adj_val)
+            except InvalidOperation:
+                continue
+            rows.append({
+                "ts_code": self._to_standard_code(raw.get("code", bs_code)),
+                "trade_date": raw.get("dividOperateDate", ""),
+                "adj_factor": adj_factor,
+            })
+        return rows
