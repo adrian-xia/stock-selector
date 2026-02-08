@@ -95,6 +95,7 @@ stock-selector/
 │   ├── logger.py             # 日志配置
 │   ├── data/                 # 数据采集模块
 │   │   ├── sources/          # BaoStock / AKShare 客户端
+│   │   ├── adj_factor.py     # 复权因子批量更新
 │   │   ├── etl.py            # ETL 清洗
 │   │   └── manager.py        # DataManager
 │   ├── strategy/             # 策略引擎

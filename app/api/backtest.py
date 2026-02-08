@@ -139,20 +139,32 @@ async def run_backtest_api(req: BacktestRunRequest) -> BacktestRunResponse:
 
     # 创建 task 记录
     async with async_session_factory() as session:
+        # 查找策略 ID
+        strategy_row = await session.execute(
+            text("SELECT id FROM strategies WHERE name = :name"),
+            {"name": req.strategy_name},
+        )
+        strategy_id = strategy_row.scalar_one_or_none()
+        if strategy_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"未知策略: {req.strategy_name}",
+            )
+
         result = await session.execute(
             text("""
                 INSERT INTO backtest_tasks (
-                    strategy_name, strategy_params, stock_codes,
+                    strategy_id, strategy_params, stock_codes,
                     start_date, end_date, initial_capital, status
                 ) VALUES (
-                    :strategy_name, :strategy_params::jsonb,
-                    :stock_codes::jsonb,
+                    :strategy_id, CAST(:strategy_params AS jsonb),
+                    CAST(:stock_codes AS jsonb),
                     :start_date, :end_date, :initial_capital, 'pending'
                 )
                 RETURNING id
             """),
             {
-                "strategy_name": req.strategy_name,
+                "strategy_id": strategy_id,
                 "strategy_params": json.dumps(req.strategy_params),
                 "stock_codes": json.dumps(req.stock_codes),
                 "start_date": req.start_date,
@@ -241,7 +253,12 @@ async def get_backtest_result(task_id: int) -> BacktestResultResponse:
     async with async_session_factory() as session:
         # 查询 task
         task_row = await session.execute(
-            text("SELECT * FROM backtest_tasks WHERE id = :tid"),
+            text("""
+                SELECT t.*, COALESCE(s.name, '') AS strategy_name
+                FROM backtest_tasks t
+                LEFT JOIN strategies s ON t.strategy_id = s.id
+                WHERE t.id = :tid
+            """),
             {"tid": task_id},
         )
         task = task_row.mappings().first()

@@ -453,7 +453,6 @@ async def compute_all_stocks(
                     select(StockDaily)
                     .where(StockDaily.ts_code == ts_code)
                     .order_by(StockDaily.trade_date.asc())
-                    .limit(LOOKBACK_DAYS)
                 )
                 result = await session.execute(stmt)
                 rows = result.scalars().all()

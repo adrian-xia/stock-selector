@@ -12,12 +12,40 @@ from app.config import settings
 from app.database import async_session_factory, engine
 from app.logger import setup_logging
 from app.scheduler.core import start_scheduler, stop_scheduler
+from app.strategy.factory import StrategyFactory
+
+
+async def _sync_strategies_to_db() -> None:
+    """将内存中注册的策略同步到 strategies 表（UPSERT）。"""
+    from sqlalchemy import text
+
+    all_meta = StrategyFactory.get_all()
+    async with async_session_factory() as session:
+        for meta in all_meta:
+            await session.execute(
+                text("""
+                    INSERT INTO strategies (name, category, description, params)
+                    VALUES (:name, :category, :description, :params)
+                    ON CONFLICT (name) DO UPDATE SET
+                        category = EXCLUDED.category,
+                        description = EXCLUDED.description,
+                        updated_at = NOW()
+                """),
+                {
+                    "name": meta.name,
+                    "category": meta.category,
+                    "description": meta.description or "",
+                    "params": "{}",
+                },
+            )
+        await session.commit()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(settings.log_level)
     await init_redis()
+    await _sync_strategies_to_db()
     # 缓存预热（受配置开关控制）
     if settings.cache_warmup_on_startup:
         redis = get_redis()

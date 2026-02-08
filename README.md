@@ -98,6 +98,12 @@ uv run python -m app.data.cli sync-stocks
 # 同步日线行情（指定日期范围）
 uv run python -m app.data.cli sync-daily --start 2024-01-01 --end 2026-02-07
 
+# 同步复权因子（首次全量导入，约 30-60 分钟）
+uv run python -m app.data.cli sync-adj-factor
+
+# 强制刷新所有复权因子（除权除息日后使用）
+uv run python -m app.data.cli sync-adj-factor --force
+
 # 计算技术指标
 uv run python -m app.data.cli calc-indicators --start 2024-01-01 --end 2026-02-07
 ```
@@ -144,6 +150,7 @@ stock-selector/
 │   ├── data/                   # 数据采集模块
 │   │   ├── baostock.py         #   BaoStock 客户端
 │   │   ├── akshare.py          #   AKShare 客户端
+│   │   ├── adj_factor.py       #   复权因子批量更新
 │   │   ├── etl.py              #   ETL 清洗
 │   │   ├── indicator.py        #   技术指标计算
 │   │   └── manager.py          #   DataManager

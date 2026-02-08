@@ -175,7 +175,7 @@ class BacktestResultWriter:
                         :task_id, :total_return, :annual_return, :max_drawdown,
                         :sharpe_ratio, :win_rate, :profit_loss_ratio, :total_trades,
                         :calmar_ratio, :sortino_ratio, :volatility,
-                        :trades_json::jsonb, :equity_curve_json::jsonb
+                        CAST(:trades_json AS jsonb), CAST(:equity_curve_json AS jsonb)
                     )
                 """),
                 {
