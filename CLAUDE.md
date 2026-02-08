@@ -43,7 +43,7 @@
 - **回测：** Backtrader
 - **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
-- **AI：** Gemini Flash（V1 单模型）
+- **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
 - **前端构建：** Vite 6 + pnpm
 - **前端数据层：** TanStack React Query + Axios + Zustand

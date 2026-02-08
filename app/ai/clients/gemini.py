@@ -49,8 +49,8 @@ class GeminiClient:
     """Gemini Flash 异步客户端。
 
     支持两种认证方式（二选一）：
-    - API Key：传入 api_key 参数
-    - ADC：设置 use_adc=True，通过 google.auth.default() 获取凭据
+    - API Key：传入 api_key 参数，走 Google AI API
+    - ADC：设置 use_adc=True，走 Vertex AI API（需要 gcp_project 和 gcp_location）
 
     优先级：api_key 非空时使用 API Key，忽略 use_adc 设置。
 
@@ -60,6 +60,8 @@ class GeminiClient:
         timeout: 请求超时秒数
         max_retries: 瞬态错误重试次数
         use_adc: 是否使用 Application Default Credentials 认证
+        gcp_project: GCP 项目 ID（ADC 模式必填）
+        gcp_location: GCP 区域（ADC 模式，默认 us-central1）
     """
 
     def __init__(
@@ -69,6 +71,8 @@ class GeminiClient:
         timeout: int = 30,
         max_retries: int = 2,
         use_adc: bool = False,
+        gcp_project: str = "",
+        gcp_location: str = "us-central1",
     ) -> None:
         self._model_id = model_id
         self._timeout = timeout
@@ -79,17 +83,23 @@ class GeminiClient:
             "total_tokens": 0,
         }
 
-        # 认证优先级：API Key > ADC > 报错
+        # 认证优先级：API Key > ADC (Vertex AI) > 报错
         if api_key:
             self._client = genai.Client(api_key=api_key)
         elif use_adc:
+            if not gcp_project:
+                raise ValueError(
+                    "ADC 模式需要配置 GEMINI_GCP_PROJECT（GCP 项目 ID）"
+                )
             try:
-                import google.auth  # noqa: F811
-                credentials, _ = google.auth.default()
-                self._client = genai.Client(credentials=credentials)
+                self._client = genai.Client(
+                    vertexai=True,
+                    project=gcp_project,
+                    location=gcp_location,
+                )
             except Exception as exc:
                 raise ValueError(
-                    f"ADC 凭据获取失败，请先运行 gcloud auth application-default login：{exc}"
+                    f"ADC Vertex AI 客户端初始化失败：{exc}"
                 ) from exc
         else:
             raise ValueError(

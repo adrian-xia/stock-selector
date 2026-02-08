@@ -55,6 +55,8 @@ class AIManager:
                 timeout=self._settings.gemini_timeout,
                 max_retries=self._settings.gemini_max_retries,
                 use_adc=self._settings.gemini_use_adc,
+                gcp_project=self._settings.gemini_gcp_project,
+                gcp_location=self._settings.gemini_gcp_location,
             )
         return self._client
 

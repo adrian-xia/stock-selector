@@ -70,8 +70,10 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selecto
 # AI 分析（可选，不填则跳过 AI 评分）
 # 方式一：API Key
 GEMINI_API_KEY=your-gemini-api-key
-# 方式二：Google ADC 认证（适用于 Google AI Pro 用户）
-GEMINI_USE_ADC=true   # 需先运行 gcloud auth application-default login
+# 方式二：Google ADC 认证（Vertex AI，需要 GCP 项目和 Billing）
+GEMINI_USE_ADC=true
+GEMINI_GCP_PROJECT=your-gcp-project-id   # ADC 模式必填
+GEMINI_GCP_LOCATION=us-central1           # ADC 模式，默认 us-central1
 
 # Redis（可选，不配置则缓存功能自动降级）
 REDIS_HOST=localhost

@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     # --- AI (Gemini) ---
     gemini_api_key: str = ""                    # 为空则 AI 分析不启用
     gemini_use_adc: bool = False                # 使用 Google ADC 认证（与 API Key 二选一）
+    gemini_gcp_project: str = ""                # GCP 项目 ID（ADC 模式必填）
+    gemini_gcp_location: str = "us-central1"    # GCP 区域（ADC 模式）
     gemini_model_id: str = "gemini-2.0-flash"   # V1 固定用 Flash
     gemini_max_tokens: int = 4000               # 单次请求最大输出 token
     gemini_timeout: int = 30                    # 请求超时（秒）
