@@ -71,31 +71,31 @@
 
 ## 7. 技术指标计算性能日志
 
-- [ ] 7.1 在 `app/data/indicator.py` 添加每个指标的计算耗时日志
-- [ ] 7.2 添加指标计算总体汇总日志（总指标数、总耗时）
-- [ ] 7.3 添加慢速指标检测和日志（耗时 >30 秒的指标）
+- [x] 7.1 在 `app/data/indicator.py` 添加每个指标的计算耗时日志
+- [x] 7.2 添加指标计算总体汇总日志（总指标数、总耗时）
+- [x] 7.3 添加慢速指标检测和日志（耗时 >30 秒的指标）
 - [ ] 7.4 测试指标计算日志（验证日志格式和内容）
 
 ## 8. 缓存刷新性能日志
 
-- [ ] 8.1 在 `app/cache/tech_cache.py` 添加缓存刷新进度日志
-- [ ] 8.2 添加缓存命中率统计和日志
-- [ ] 8.3 添加缓存刷新总体汇总日志（总股票数、命中率、总耗时）
-- [ ] 8.4 添加慢速缓存操作检测和日志（耗时 >5 秒的操作）
+- [x] 8.1 在 `app/cache/tech_cache.py` 添加缓存刷新进度日志
+- [x] 8.2 添加缓存命中率统计和日志
+- [x] 8.3 添加缓存刷新总体汇总日志（总股票数、命中率、总耗时）
+- [x] 8.4 添加慢速缓存操作检测和日志（耗时 >5 秒的操作）
 - [ ] 8.5 测试缓存刷新日志（验证日志格式和内容）
 
 ## 9. 调度器任务性能日志
 
-- [ ] 9.1 在 `app/scheduler/jobs.py` 的 `sync_daily_step` 添加详细日志
-- [ ] 9.2 在 `app/scheduler/jobs.py` 的 `indicator_step` 添加详细日志
-- [ ] 9.3 在 `app/scheduler/jobs.py` 的 `cache_refresh_step` 添加详细日志
-- [ ] 9.4 在 `run_post_market_chain` 添加总体耗时日志（包含分钟格式）
+- [x] 9.1 在 `app/scheduler/jobs.py` 的 `sync_daily_step` 添加详细日志
+- [x] 9.2 在 `app/scheduler/jobs.py` 的 `indicator_step` 添加详细日志
+- [x] 9.3 在 `app/scheduler/jobs.py` 的 `cache_refresh_step` 添加详细日志
+- [x] 9.4 在 `run_post_market_chain` 添加总体耗时日志（包含分钟格式）
 - [ ] 9.5 测试调度器任务日志（验证日志格式和内容）
 
 ## 10. 性能日志配置
 
-- [ ] 10.1 在 `app/config.py` 添加 `PERFORMANCE_LOG_LEVEL` 配置项
-- [ ] 10.2 在 `.env.example` 添加性能日志配置说明
+- [x] 10.1 在 `app/config.py` 添加 `PERFORMANCE_LOG_LEVEL` 配置项
+- [x] 10.2 在 `.env.example` 添加性能日志配置说明
 - [ ] 10.3 实现日志级别控制逻辑（DEBUG/INFO/WARNING）
 - [ ] 10.4 测试不同日志级别（验证日志输出符合预期）
 

@@ -44,27 +44,27 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     """
     target = target_date or date.today()
     chain_start = time.monotonic()
-    logger.info("===== 盘后链路开始：%s =====", target)
+    logger.info("===== [盘后链路] 开始：%s =====", target)
 
     # 交易日校验
     manager = _build_manager()
     is_trading = await manager.is_trade_day(target)
     if not is_trading:
-        logger.info("非交易日，跳过盘后任务：%s", target)
+        logger.info("[盘后链路] 非交易日，跳过：%s", target)
         return
 
     # 步骤 1：日线同步
     try:
         await sync_daily_step(target, manager)
     except Exception:
-        logger.error("盘后链路中断：日线同步失败\n%s", traceback.format_exc())
+        logger.error("[盘后链路] 中断：日线同步失败\n%s", traceback.format_exc())
         return
 
     # 步骤 2：技术指标计算
     try:
         await indicator_step(target)
     except Exception:
-        logger.error("盘后链路中断：技术指标计算失败\n%s", traceback.format_exc())
+        logger.error("[盘后链路] 中断：技术指标计算失败\n%s", traceback.format_exc())
         return
 
     # 步骤 3：缓存刷新（非关键，失败不阻断）
@@ -74,11 +74,16 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     try:
         await pipeline_step(target)
     except Exception:
-        logger.error("盘后链路中断：策略管道执行失败\n%s", traceback.format_exc())
+        logger.error("[盘后链路] 中断：策略管道执行失败\n%s", traceback.format_exc())
         return
 
-    elapsed = int(time.monotonic() - chain_start)
-    logger.info("===== 盘后链路完成：%s，总耗时 %ds =====", target, elapsed)
+    elapsed = time.monotonic() - chain_start
+    elapsed_minutes = int(elapsed / 60)
+    elapsed_seconds = int(elapsed % 60)
+    logger.info(
+        "===== [盘后链路] 完成：%s，总耗时 %d分%d秒 (%.1fs) =====",
+        target, elapsed_minutes, elapsed_seconds, elapsed,
+    )
 
 
 async def sync_daily_step(
@@ -98,6 +103,7 @@ async def sync_daily_step(
     # 获取所有上市股票
     stocks = await mgr.get_stock_list(status="L")
     stock_codes = [s["ts_code"] for s in stocks]
+    logger.info("[日线同步] 待同步股票数：%d", len(stock_codes))
 
     # 使用批量同步
     pool = get_pool()
@@ -108,10 +114,11 @@ async def sync_daily_step(
         connection_pool=pool,
     )
 
-    elapsed = int(time.monotonic() - step_start)
+    elapsed = time.monotonic() - step_start
+    avg_time = elapsed / len(stock_codes) if stock_codes else 0
     logger.info(
-        "[日线同步] 完成：成功 %d 只，失败 %d 只，耗时 %ds",
-        result["success"], result["failed"], elapsed,
+        "[日线同步] 完成：成功 %d 只，失败 %d 只，总耗时 %.1fs，平均 %.3fs/只",
+        result["success"], result["failed"], elapsed, avg_time,
     )
 
 async def cache_refresh_step(target_date: date) -> None:
@@ -130,10 +137,11 @@ async def cache_refresh_step(target_date: date) -> None:
 
     try:
         count = await refresh_all_tech_cache(redis, async_session_factory)
-        elapsed = int(time.monotonic() - step_start)
-        logger.info("[缓存刷新] 完成：%d 只股票，耗时 %ds", count, elapsed)
+        elapsed = time.monotonic() - step_start
+        logger.info("[缓存刷新] 完成：%d 只股票，总耗时 %.1fs", count, elapsed)
     except Exception as e:
-        logger.warning("缓存刷新失败，策略管道将回源数据库：%s", e)
+        elapsed = time.monotonic() - step_start
+        logger.warning("[缓存刷新] 失败（耗时 %.1fs），策略管道将回源数据库：%s", elapsed, e)
 
 
 async def indicator_step(target_date: date) -> None:
@@ -149,8 +157,11 @@ async def indicator_step(target_date: date) -> None:
         async_session_factory, target_date=target_date
     )
 
-    elapsed = int(time.monotonic() - step_start)
-    logger.info("[技术指标] 完成：%s，耗时 %ds", result, elapsed)
+    elapsed = time.monotonic() - step_start
+    logger.info(
+        "[技术指标] 完成：成功 %d 只，失败 %d 只，总耗时 %.1fs",
+        result["success"], result["failed"], elapsed,
+    )
 
 
 async def pipeline_step(target_date: date) -> None:
