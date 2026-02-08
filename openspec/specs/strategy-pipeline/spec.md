@@ -19,6 +19,7 @@ async def execute_pipeline(
 - `picks: list[StockPick]` — final stock picks sorted by match count descending
 - `layer_stats: dict` — count of stocks passing each layer
 - `elapsed_ms: int` — total execution time in milliseconds
+- `ai_enabled: bool` — whether AI analysis was attempted
 
 `StockPick` SHALL be a dataclass containing:
 - `ts_code: str`
@@ -27,6 +28,9 @@ async def execute_pipeline(
 - `pct_chg: float`
 - `matched_strategies: list[str]` — names of strategies that selected this stock
 - `match_count: int`
+- `ai_score: int | None` — AI confidence score 0-100, default `None`
+- `ai_signal: str | None` — AI signal string, default `None`
+- `ai_summary: str | None` — AI analysis reasoning, default `None`
 
 #### Scenario: Full pipeline execution
 - **WHEN** `execute_pipeline(session_factory, ["ma-cross", "low-pe-high-roe"], date(2026, 2, 7))` is called
@@ -97,11 +101,37 @@ Layer 4 SHALL rank stocks by the number of strategies they matched (across all l
 - **THEN** Layer 4 SHALL return only the top 30 stocks by match count
 
 ### Requirement: Layer 5 AI placeholder
-Layer 5 SHALL be a pass-through that returns Layer 4 results unchanged. It SHALL define a clear interface for future AI integration.
+Layer 5 SHALL call `AIManager.analyze()` to perform AI analysis on the candidate stocks from Layer 4. It SHALL:
 
-#### Scenario: AI layer pass-through
-- **WHEN** Layer 5 receives 30 stock picks from Layer 4
-- **THEN** it SHALL return the same 30 picks without modification
+1. Obtain the `AIManager` singleton via `get_ai_manager()`
+2. Build `market_data` dict from the pipeline's market snapshot DataFrame for the stocks in `picks`
+3. Call `await ai_manager.analyze(picks, market_data, target_date)`
+4. Return the AI-scored and re-sorted picks
+
+If AIManager is disabled (no API key configured), Layer 5 SHALL behave as a pass-through and return Layer 4 results unchanged.
+
+The function signature SHALL be:
+```python
+async def _layer5_ai_analysis(
+    picks: list[StockPick],
+    market_snapshot: pd.DataFrame,
+    target_date: date,
+) -> list[StockPick]
+```
+
+#### Scenario: AI analysis enabled
+- **WHEN** Layer 5 runs with AI enabled and 30 stock picks from Layer 4
+- **THEN** it SHALL return picks re-sorted by `ai_score` descending
+- **AND** each pick SHALL have `ai_score`, `ai_signal`, and `ai_summary` populated
+
+#### Scenario: AI analysis disabled (no API key)
+- **WHEN** Layer 5 runs with AI disabled (no `GEMINI_API_KEY`)
+- **THEN** it SHALL return the same 30 picks from Layer 4 without modification
+
+#### Scenario: AI analysis failure
+- **WHEN** Layer 5 runs and the Gemini API call fails
+- **THEN** it SHALL return the original Layer 4 picks with `ai_score=None`
+- **AND** it SHALL log a warning
 
 ### Requirement: Previous day data for crossover detection
 The Pipeline SHALL provide previous trading day indicator values for crossover-based strategies. When building the market snapshot DataFrame, it SHALL join the prior trading day's `technical_daily` row and add columns with `_prev` suffix (e.g., `ma5_prev`, `macd_dif_prev`, `kdj_k_prev`).

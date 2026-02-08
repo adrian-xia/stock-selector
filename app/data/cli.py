@@ -133,7 +133,10 @@ def import_all(start: str | None, optimize_indexes: bool) -> None:
 @cli.command("sync-daily")
 def sync_daily() -> None:
     """Incremental sync of today's daily bar data."""
+    from app.data.adj_factor import batch_update_adj_factor
+
     manager = _build_manager()
+    bs_client = BaoStockClient()
 
     async def _run() -> None:
         today = date.today()
@@ -145,17 +148,27 @@ def sync_daily() -> None:
         stocks = await manager.get_stock_list()
         click.echo(f"Syncing daily data for {len(stocks)} stocks...")
 
-        stats = {"success": 0, "failed": 0}
+        stats = {"success": 0, "failed": 0, "adj_updated": 0}
         for stock in stocks:
             ts_code = stock["ts_code"]
             try:
                 await manager.sync_daily(ts_code, today, today)
+                # 同步当日复权因子
+                adj_records = await bs_client.fetch_adj_factor(ts_code, today, today)
+                if adj_records:
+                    updated = await batch_update_adj_factor(
+                        async_session_factory, ts_code, adj_records
+                    )
+                    stats["adj_updated"] += updated
                 stats["success"] += 1
             except Exception as e:
                 logger.error("Sync failed for %s: %s", ts_code, e)
                 stats["failed"] += 1
 
-        click.echo(f"Daily sync complete: {stats}")
+        click.echo(
+            f"Daily sync complete: success={stats['success']}, "
+            f"failed={stats['failed']}, adj_factor_updated={stats['adj_updated']}"
+        )
 
     asyncio.run(_run())
 
@@ -212,6 +225,79 @@ def update_indicators(target_date: str | None) -> None:
             f"成功={result['success']}, "
             f"失败={result['failed']}, "
             f"耗时={result['elapsed_seconds']}秒"
+        )
+
+    asyncio.run(_run())
+
+
+@cli.command("sync-adj-factor")
+@click.option("--force", is_flag=True, help="强制刷新所有股票的复权因子（忽略已有数据）")
+def sync_adj_factor(force: bool) -> None:
+    """全量导入复权因子到 stock_daily.adj_factor 字段。"""
+    from sqlalchemy import text as sa_text
+
+    from app.data.adj_factor import batch_update_adj_factor
+
+    manager = _build_manager()
+    bs_client = BaoStockClient()
+
+    async def _run() -> None:
+        stocks = await manager.get_stock_list()
+        total = len(stocks)
+
+        # 如果不是 force 模式，查询哪些股票还没有 adj_factor
+        if not force:
+            async with async_session_factory() as session:
+                rows = await session.execute(sa_text("""
+                    SELECT DISTINCT ts_code FROM stock_daily
+                    WHERE adj_factor IS NULL
+                """))
+                need_sync = {r[0] for r in rows.fetchall()}
+            stocks = [s for s in stocks if s["ts_code"] in need_sync]
+            click.echo(
+                f"需要同步复权因子: {len(stocks)}/{total} 只股票"
+                f"（{total - len(stocks)} 只已有数据，跳过）"
+            )
+        else:
+            click.echo(f"强制刷新所有 {total} 只股票的复权因子...")
+
+        total_to_sync = len(stocks)
+        if total_to_sync == 0:
+            click.echo("所有股票已有复权因子，无需同步。")
+            return
+
+        stats = {"success": 0, "failed": 0, "rows_updated": 0}
+        for i, stock in enumerate(stocks):
+            ts_code = stock["ts_code"]
+            list_date = stock.get("list_date")
+            try:
+                if isinstance(list_date, date):
+                    start = list_date
+                elif list_date:
+                    start = date.fromisoformat(str(list_date))
+                else:
+                    start = date(2015, 1, 1)
+                records = await bs_client.fetch_adj_factor(ts_code, start, date.today())
+                if records:
+                    updated = await batch_update_adj_factor(
+                        async_session_factory, ts_code, records
+                    )
+                    stats["rows_updated"] += updated
+                stats["success"] += 1
+            except Exception as e:
+                logger.error("复权因子同步失败 %s: %s", ts_code, e)
+                stats["failed"] += 1
+
+            if (i + 1) % 100 == 0:
+                click.echo(
+                    f"[{i + 1}/{total_to_sync}] 同步 {ts_code} — "
+                    f"成功={stats['success']}, 失败={stats['failed']}, "
+                    f"更新行数={stats['rows_updated']}"
+                )
+
+        click.echo(
+            f"复权因子同步完成: 成功={stats['success']}, "
+            f"失败={stats['failed']}, 更新行数={stats['rows_updated']}"
         )
 
     asyncio.run(_run())

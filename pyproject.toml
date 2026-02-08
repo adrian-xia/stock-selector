@@ -16,6 +16,10 @@ dependencies = [
     "click>=8.1.0",
     "pandas>=2.2.0",
     "backtrader>=1.9.78",
+    "apscheduler>=3.10.0",
+    "google-genai>=1.0.0",
+    "google-auth>=2.0.0",
+    "redis[hiredis]>=5.0.0",
 ]
 
 [project.optional-dependencies]

@@ -4,7 +4,7 @@ Layer 1: SQL 粗筛 — 剔除 ST/退市/停牌/低流动性
 Layer 2: 技术指标初筛 — 运行技术面策略
 Layer 3: 财务指标复筛 — 运行基本面策略
 Layer 4: 综合排序 — 按策略命中数排序，取 Top N
-Layer 5: AI 终审（占位）— 直接透传
+Layer 5: AI 终审 — 调用 Gemini 进行综合分析和评分
 """
 
 import logging
@@ -31,6 +31,9 @@ class StockPick:
     pct_chg: float
     matched_strategies: list[str] = field(default_factory=list)
     match_count: int = 0
+    ai_score: int | None = None
+    ai_signal: str | None = None
+    ai_summary: str | None = None
 
 
 @dataclass
@@ -41,6 +44,7 @@ class PipelineResult:
     picks: list[StockPick] = field(default_factory=list)
     layer_stats: dict[str, int] = field(default_factory=dict)
     elapsed_ms: int = 0
+    ai_enabled: bool = False
 
 
 # --- PLACEHOLDER FOR LAYER FUNCTIONS ---
@@ -349,12 +353,36 @@ def _layer4_rank_and_topn(
     return picks[:top_n]
 
 
-async def _layer5_ai_placeholder(
+async def _layer5_ai_analysis(
     picks: list[StockPick],
+    market_snapshot: pd.DataFrame,
+    target_date: date,
 ) -> list[StockPick]:
-    """Layer 5: AI 终审占位，直接透传 Layer 4 结果。"""
-    logger.info("Layer 5 AI 占位：透传 %d 只股票", len(picks))
-    return picks
+    """Layer 5: AI 终审，调用 Gemini 进行综合分析和评分。
+
+    未配置 API Key 或调用失败时静默降级，返回原始 picks。
+    """
+    from app.ai.manager import get_ai_manager
+
+    ai_manager = get_ai_manager()
+
+    if not ai_manager.is_enabled:
+        logger.info("Layer 5 AI 未启用，透传 %d 只股票", len(picks))
+        return picks
+
+    # 从 market_snapshot 构建 market_data 字典
+    market_data: dict[str, dict] = {}
+    if not market_snapshot.empty:
+        for _, row in market_snapshot.iterrows():
+            ts_code = row.get("ts_code")
+            if ts_code:
+                market_data[ts_code] = {
+                    k: v for k, v in row.to_dict().items()
+                    if k != "ts_code" and v is not None and not (isinstance(v, float) and v != v)
+                }
+
+    logger.info("Layer 5 AI 分析：%d 只股票", len(picks))
+    return await ai_manager.analyze(picks, market_data, target_date)
 
 
 async def execute_pipeline(
@@ -387,6 +415,7 @@ async def execute_pipeline(
             picks=[],
             layer_stats=layer_stats,
             elapsed_ms=elapsed,
+            ai_enabled=False,
         )
 
     async with session_factory() as session:
@@ -401,6 +430,7 @@ async def execute_pipeline(
                 picks=[],
                 layer_stats=layer_stats,
                 elapsed_ms=elapsed,
+                ai_enabled=False,
             )
 
         # 保存 ts_code -> name 映射
@@ -439,8 +469,11 @@ async def execute_pipeline(
     picks = _layer4_rank_and_topn(layer3_df, name_map, hit_records, top_n)
     layer_stats["layer4"] = len(picks)
 
-    # Layer 5: AI 占位
-    picks = await _layer5_ai_placeholder(picks)
+    # Layer 5: AI 分析
+    from app.ai.manager import get_ai_manager
+
+    ai_enabled = get_ai_manager().is_enabled
+    picks = await _layer5_ai_analysis(picks, snapshot_df, target_date)
 
     elapsed = int((time.monotonic() - start_time) * 1000)
     logger.info(
@@ -453,4 +486,5 @@ async def execute_pipeline(
         picks=picks,
         layer_stats=layer_stats,
         elapsed_ms=elapsed,
+        ai_enabled=ai_enabled,
     )

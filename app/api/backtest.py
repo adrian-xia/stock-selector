@@ -81,6 +81,28 @@ class EquityCurveEntry(BaseModel):
     value: float
 
 
+class BacktestListItem(BaseModel):
+    """回测任务列表项。"""
+
+    task_id: int
+    strategy_name: str
+    stock_count: int
+    start_date: date | None = None
+    end_date: date | None = None
+    status: str
+    annual_return: float | None = None
+    created_at: str
+
+
+class BacktestListResponse(BaseModel):
+    """回测任务列表响应。"""
+
+    total: int
+    page: int
+    page_size: int
+    items: list[BacktestListItem]
+
+
 class BacktestResultResponse(BaseModel):
     """回测结果详情响应。"""
 
@@ -117,20 +139,32 @@ async def run_backtest_api(req: BacktestRunRequest) -> BacktestRunResponse:
 
     # 创建 task 记录
     async with async_session_factory() as session:
+        # 查找策略 ID
+        strategy_row = await session.execute(
+            text("SELECT id FROM strategies WHERE name = :name"),
+            {"name": req.strategy_name},
+        )
+        strategy_id = strategy_row.scalar_one_or_none()
+        if strategy_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"未知策略: {req.strategy_name}",
+            )
+
         result = await session.execute(
             text("""
                 INSERT INTO backtest_tasks (
-                    strategy_name, strategy_params, stock_codes,
+                    strategy_id, strategy_params, stock_codes,
                     start_date, end_date, initial_capital, status
                 ) VALUES (
-                    :strategy_name, :strategy_params::jsonb,
-                    :stock_codes::jsonb,
+                    :strategy_id, CAST(:strategy_params AS jsonb),
+                    CAST(:stock_codes AS jsonb),
                     :start_date, :end_date, :initial_capital, 'pending'
                 )
                 RETURNING id
             """),
             {
-                "strategy_name": req.strategy_name,
+                "strategy_id": strategy_id,
                 "strategy_params": json.dumps(req.strategy_params),
                 "stock_codes": json.dumps(req.stock_codes),
                 "start_date": req.start_date,
@@ -219,7 +253,12 @@ async def get_backtest_result(task_id: int) -> BacktestResultResponse:
     async with async_session_factory() as session:
         # 查询 task
         task_row = await session.execute(
-            text("SELECT * FROM backtest_tasks WHERE id = :tid"),
+            text("""
+                SELECT t.*, COALESCE(s.name, '') AS strategy_name
+                FROM backtest_tasks t
+                LEFT JOIN strategies s ON t.strategy_id = s.id
+                WHERE t.id = :tid
+            """),
             {"tid": task_id},
         )
         task = task_row.mappings().first()
@@ -301,4 +340,63 @@ async def get_backtest_result(task_id: int) -> BacktestResultResponse:
         result=metrics,
         trades=trades,
         equity_curve=equity_curve,
+    )
+
+
+@router.get("/list", response_model=BacktestListResponse)
+async def list_backtest_tasks(
+    page: int = 1,
+    page_size: int = 20,
+) -> BacktestListResponse:
+    """分页查询回测任务列表，按创建时间倒序。"""
+    page_size = min(page_size, 100)
+    offset = (page - 1) * page_size
+
+    async with async_session_factory() as session:
+        # 查询总数
+        count_row = await session.execute(
+            text("SELECT COUNT(*) FROM backtest_tasks")
+        )
+        total = count_row.scalar_one()
+
+        # 分页查询，LEFT JOIN 获取策略名称和年化收益率
+        rows = await session.execute(
+            text("""
+                SELECT t.id, COALESCE(s.name, '') AS strategy_name,
+                       t.stock_codes, t.start_date,
+                       t.end_date, t.status, t.created_at,
+                       r.annual_return
+                FROM backtest_tasks t
+                LEFT JOIN strategies s ON t.strategy_id = s.id
+                LEFT JOIN backtest_results r ON t.id = r.task_id
+                ORDER BY t.created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            {"limit": page_size, "offset": offset},
+        )
+        tasks = rows.mappings().all()
+
+    items = []
+    for t in tasks:
+        stock_codes = t["stock_codes"]
+        if isinstance(stock_codes, str):
+            stock_codes = json.loads(stock_codes)
+        stock_count = len(stock_codes) if stock_codes else 0
+
+        items.append(BacktestListItem(
+            task_id=t["id"],
+            strategy_name=t["strategy_name"],
+            stock_count=stock_count,
+            start_date=t["start_date"],
+            end_date=t["end_date"],
+            status=t["status"],
+            annual_return=float(t["annual_return"]) if t["annual_return"] is not None else None,
+            created_at=str(t["created_at"]),
+        ))
+
+    return BacktestListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items,
     )

@@ -350,6 +350,7 @@ async def _upsert_technical_rows(
     """将技术指标数据 UPSERT 到 technical_daily 表。
 
     使用 PostgreSQL 的 INSERT ... ON CONFLICT DO UPDATE 实现幂等写入。
+    自动分片以适配 asyncpg 32767 参数限制。
 
     Args:
         session: 异步数据库会话
@@ -365,15 +366,21 @@ async def _upsert_technical_rows(
 
     table = TechnicalDaily.__table__
 
-    # 构建 UPSERT 语句：冲突时更新所有指标列
-    stmt = pg_insert(table).values(rows)
-    update_dict = {col: stmt.excluded[col] for col in INDICATOR_COLUMNS}
-    update_dict["updated_at"] = text("NOW()")
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["ts_code", "trade_date"],
-        set_=update_dict,
-    )
-    await session.execute(stmt)
+    # asyncpg 参数上限 32767，每行列数 = ts_code + trade_date + 指标列
+    cols_per_row = 2 + len(INDICATOR_COLUMNS)
+    chunk_size = 32767 // cols_per_row
+
+    for i in range(0, len(rows), chunk_size):
+        chunk = rows[i : i + chunk_size]
+        stmt = pg_insert(table).values(chunk)
+        update_dict = {col: stmt.excluded[col] for col in INDICATOR_COLUMNS}
+        update_dict["updated_at"] = text("NOW()")
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["ts_code", "trade_date"],
+            set_=update_dict,
+        )
+        await session.execute(stmt)
+
     return len(rows)
 
 
@@ -446,7 +453,6 @@ async def compute_all_stocks(
                     select(StockDaily)
                     .where(StockDaily.ts_code == ts_code)
                     .order_by(StockDaily.trade_date.asc())
-                    .limit(LOOKBACK_DAYS)
                 )
                 result = await session.execute(stmt)
                 rows = result.scalars().all()

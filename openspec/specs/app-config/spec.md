@@ -76,6 +76,87 @@ The settings SHALL include general application parameters:
 ### Requirement: .env.example template
 The project SHALL include a `.env.example` file documenting all available configuration variables with example values and comments.
 
+The `.env.example` file SHALL include the following AI-related entries:
+```
+# --- AI (Gemini) ---
+GEMINI_API_KEY=
+GEMINI_USE_ADC=false                # 使用 Google ADC 认证（与 API Key 二选一）
+GEMINI_MODEL_ID=gemini-2.0-flash
+GEMINI_MAX_TOKENS=4000
+GEMINI_TIMEOUT=30
+GEMINI_MAX_RETRIES=2
+AI_DAILY_BUDGET_USD=1.0
+```
+
+The `.env.example` file SHALL include the following cache-related entries:
+```
+# --- Cache (Redis) ---
+CACHE_TECH_TTL=90000
+CACHE_PIPELINE_RESULT_TTL=172800
+CACHE_WARMUP_ON_STARTUP=true
+CACHE_REFRESH_BATCH_SIZE=500
+```
+
 #### Scenario: Developer onboarding
 - **WHEN** a developer clones the repository
 - **THEN** they SHALL be able to copy `.env.example` to `.env` and fill in their local values to get the application running
+
+#### Scenario: AI configuration in .env.example
+- **WHEN** a developer reviews `.env.example`
+- **THEN** they SHALL see all Gemini-related configuration variables including `GEMINI_USE_ADC` with comments explaining its purpose
+
+#### Scenario: Cache configuration in .env.example
+- **WHEN** a developer reviews `.env.example`
+- **THEN** they SHALL see all cache-related configuration variables with comments explaining their purpose
+
+### Requirement: Gemini AI configuration
+The settings SHALL include Gemini AI configuration parameters:
+- `GEMINI_API_KEY` (str, default: `""`) — Gemini API key. Empty string means AI is disabled.
+- `GEMINI_MODEL_ID` (str, default: `"gemini-2.0-flash"`) — Gemini model identifier
+- `GEMINI_MAX_TOKENS` (int, default: `4000`) — maximum output tokens per request
+- `GEMINI_TIMEOUT` (int, default: `30`) — request timeout in seconds
+- `GEMINI_MAX_RETRIES` (int, default: `2`) — retry count on transient errors
+- `AI_DAILY_BUDGET_USD` (float, default: `1.0`) — daily spending limit in USD (for logging/warning only in V1)
+
+#### Scenario: Default Gemini configuration
+- **WHEN** no Gemini environment variables are set
+- **THEN** `settings.gemini_api_key` SHALL return `""`
+- **AND** `settings.gemini_model_id` SHALL return `"gemini-2.0-flash"`
+
+#### Scenario: Custom Gemini API key
+- **WHEN** `GEMINI_API_KEY=AIzaSy...` is set in `.env`
+- **THEN** `settings.gemini_api_key` SHALL return that value
+
+#### Scenario: Custom model ID
+- **WHEN** `GEMINI_MODEL_ID=gemini-2.5-flash` is set in `.env`
+- **THEN** `settings.gemini_model_id` SHALL return `"gemini-2.5-flash"`
+
+### Requirement: Gemini ADC configuration
+The settings SHALL include an ADC toggle for Gemini authentication:
+- `GEMINI_USE_ADC` (bool, default: `false`) — 是否使用 Google Application Default Credentials 认证
+
+#### Scenario: Default ADC configuration
+- **WHEN** no `GEMINI_USE_ADC` environment variable is set
+- **THEN** `settings.gemini_use_adc` SHALL return `False`
+
+#### Scenario: Enable ADC
+- **WHEN** `GEMINI_USE_ADC=true` is set in `.env`
+- **THEN** `settings.gemini_use_adc` SHALL return `True`
+
+### Requirement: Cache configuration
+The settings SHALL include Redis cache behavior parameters:
+- `CACHE_TECH_TTL` (int, default: `90000`) — 技术指标缓存 TTL，单位秒（默认 25 小时）
+- `CACHE_PIPELINE_RESULT_TTL` (int, default: `172800`) — 选股结果缓存 TTL，单位秒（默认 48 小时）
+- `CACHE_WARMUP_ON_STARTUP` (bool, default: `True`) — 应用启动时是否执行缓存预热
+- `CACHE_REFRESH_BATCH_SIZE` (int, default: `500`) — 全量刷新时 Redis Pipeline 批次大小
+
+#### Scenario: Default cache configuration
+- **WHEN** no cache environment variables are set
+- **THEN** `settings.cache_tech_ttl` SHALL return `90000`
+- **AND** `settings.cache_pipeline_result_ttl` SHALL return `172800`
+- **AND** `settings.cache_warmup_on_startup` SHALL return `True`
+- **AND** `settings.cache_refresh_batch_size` SHALL return `500`
+
+#### Scenario: Custom cache TTL
+- **WHEN** `CACHE_TECH_TTL=3600` is set in `.env`
+- **THEN** `settings.cache_tech_ttl` SHALL return `3600`

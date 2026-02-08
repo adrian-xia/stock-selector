@@ -29,7 +29,7 @@
 
 ## V1 范围（当前阶段）
 
-- 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层
+- 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层，批量写入自动适配 asyncpg 参数限制
 - 策略引擎：10-15 种核心策略，扁平继承，单模式接口
 - AI 分析：仅 Gemini Flash 单模型，无降级链路
 - 回测：Backtrader 同步执行，无 Redis 队列
@@ -42,10 +42,12 @@
 - **后端：** Python 3.12 + FastAPI + SQLAlchemy + Pydantic
 - **回测：** Backtrader
 - **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
-- **缓存：** Redis（仅缓存技术指标）
-- **AI：** Gemini Flash（V1 单模型）
+- **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
+- **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
-- **包管理：** uv
+- **前端构建：** Vite 6 + pnpm
+- **前端数据层：** TanStack React Query + Axios + Zustand
+- **包管理：** uv（后端）、pnpm（前端）
 - **部署：** 直接运行（uvicorn），不用 Docker/Nginx
 
 ## 编码规范
@@ -57,6 +59,10 @@
 - 日志使用 Python logging，不用 print
 - 配置项写 `.env` 文件，通过 pydantic-settings 加载
 - 所有代码需要详细的中文注释
+- **每次完成一个模块或功能变更，必须同步更新以下文件（不可遗漏）：**
+  - `README.md` — 功能特性、技术栈、环境要求、配置说明、项目结构、测试数量
+  - `CLAUDE.md` — 技术栈、V1 范围、目录结构
+  - 如果新增了依赖，还需更新 `.env.example`
 
 ## OpenSpec 工作流
 
@@ -89,6 +95,7 @@ stock-selector/
 │   ├── logger.py             # 日志配置
 │   ├── data/                 # 数据采集模块
 │   │   ├── sources/          # BaoStock / AKShare 客户端
+│   │   ├── adj_factor.py     # 复权因子批量更新
 │   │   ├── etl.py            # ETL 清洗
 │   │   └── manager.py        # DataManager
 │   ├── strategy/             # 策略引擎
@@ -106,14 +113,24 @@ stock-selector/
 │   │   ├── clients/          # Gemini 客户端
 │   │   └── manager.py        # AIManager
 │   ├── cache/                # Redis 缓存
-│   │   └── tech_cache.py     # 技术指标缓存
+│   │   ├── redis_client.py   # 连接管理（init/get/close）
+│   │   ├── tech_cache.py     # 技术指标缓存（Cache-Aside）
+│   │   └── pipeline_cache.py # 选股结果缓存
 │   ├── scheduler/            # 定时任务
 │   │   └── jobs.py           # APScheduler 任务
 │   └── api/                  # HTTP API
 │       ├── strategy.py       # 策略 API
 │       ├── backtest.py       # 回测 API
 │       └── data.py           # 数据查询 API
-├── web/                      # 前端（React）
+├── web/                      # 前端（React + TypeScript）
+│   ├── src/
+│   │   ├── api/              # API 请求函数（Axios）
+│   │   ├── layouts/          # 布局组件（AppLayout + Sider）
+│   │   ├── pages/
+│   │   │   ├── workbench/    # 选股工作台页面
+│   │   │   └── backtest/     # 回测中心页面
+│   │   └── types/            # TypeScript 类型定义
+│   └── vite.config.ts        # Vite 配置（含 /api 代理）
 ├── tests/
 │   ├── fixtures/             # 测试数据
 │   ├── unit/                 # 单元测试

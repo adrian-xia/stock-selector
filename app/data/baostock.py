@@ -50,6 +50,25 @@ class BaoStockClient:
         except Exception:
             return False
 
+    async def fetch_adj_factor(
+        self, code: str, start_date: date, end_date: date
+    ) -> list[dict]:
+        """获取复权因子数据。
+
+        调用 BaoStock query_adjust_factor() 接口，返回前复权因子。
+
+        Args:
+            code: 标准股票代码，如 "600519.SH"
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            list[dict]，每个 dict 含 ts_code, trade_date, adj_factor
+        """
+        return await self._with_retry(
+            self._fetch_adj_factor_sync, code, start_date, end_date
+        )
+
     # --- Retry + rate limit wrapper ---
 
     async def _with_retry(self, sync_fn, *args):
@@ -212,3 +231,41 @@ class BaoStockClient:
         self._login()
         self._logout()
         return True
+
+    def _fetch_adj_factor_sync(
+        self, code: str, start_date: date, end_date: date
+    ) -> list[dict]:
+        """同步获取复权因子（在线程池中执行）。"""
+        self._login()
+        try:
+            bs_code = self._to_baostock_code(code)
+            rs = bs.query_adjust_factor(
+                code=bs_code,
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
+            )
+            if rs.error_code != "0":
+                raise DataSourceError(
+                    f"BaoStock adj_factor query failed for {code}: {rs.error_msg}"
+                )
+
+            rows: list[dict] = []
+            while rs.next():
+                row = rs.get_row_data()
+                field_names = rs.fields
+                raw = dict(zip(field_names, row))
+                adj_val = raw.get("foreAdjustFactor", "")
+                if not adj_val or adj_val in ("", "N/A", "--", "None"):
+                    continue
+                try:
+                    adj_factor = Decimal(adj_val)
+                except InvalidOperation:
+                    continue
+                rows.append({
+                    "ts_code": self._to_standard_code(raw.get("code", bs_code)),
+                    "trade_date": raw.get("dividOperateDate", ""),
+                    "adj_factor": adj_factor,
+                })
+            return rows
+        finally:
+            self._logout()
