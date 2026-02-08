@@ -1,3 +1,6 @@
+import asyncio
+import logging
+import signal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,6 +17,61 @@ from app.database import async_session_factory, engine
 from app.logger import setup_logging
 from app.scheduler.core import start_scheduler, stop_scheduler
 from app.strategy.factory import StrategyFactory
+
+logger = logging.getLogger(__name__)
+
+# 全局标志：是否正在关闭
+_shutdown_event = asyncio.Event()
+_shutdown_timeout = 30  # 优雅关闭超时时间（秒）
+
+
+def _handle_shutdown_signal(signum: int, frame) -> None:
+    """信号处理器：捕获 SIGTERM 和 SIGINT 信号。
+
+    Args:
+        signum: 信号编号
+        frame: 当前栈帧
+    """
+    signal_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+    logger.info("[优雅关闭] 收到 %s 信号，开始优雅关闭...", signal_name)
+    _shutdown_event.set()
+
+
+async def _graceful_shutdown() -> None:
+    """优雅关闭逻辑：等待运行中的任务完成，超时后强制关闭。"""
+    logger.info("[优雅关闭] 停止接受新任务，等待运行中的任务完成...")
+    logger.info("[优雅关闭] 超时时间：%d 秒", _shutdown_timeout)
+
+    try:
+        # 停止调度器（等待运行中的任务完成）
+        await asyncio.wait_for(
+            stop_scheduler(),
+            timeout=_shutdown_timeout,
+        )
+        logger.info("[优雅关闭] 调度器已停止，所有任务已完成")
+
+    except asyncio.TimeoutError:
+        logger.warning(
+            "[优雅关闭] 等待超时（%d 秒），强制关闭调度器",
+            _shutdown_timeout,
+        )
+        # 超时后强制停止（stop_scheduler 内部已经处理了强制停止）
+        await stop_scheduler()
+
+    # 关闭其他资源
+    logger.info("[优雅关闭] 关闭连接池和数据库连接...")
+    await close_pool()
+    await close_redis()
+    await engine.dispose()
+
+    logger.info("[优雅关闭] 完成")
+
+
+def _setup_signal_handlers() -> None:
+    """设置信号处理器。"""
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+    logger.info("[优雅关闭] 信号处理器已设置（SIGTERM, SIGINT）")
 
 
 async def _sync_strategies_to_db() -> None:
@@ -47,6 +105,10 @@ async def lifespan(app: FastAPI):
     import os
 
     setup_logging(settings.log_level)
+
+    # 设置信号处理器（优雅关闭）
+    _setup_signal_handlers()
+
     await init_redis()
     get_pool()  # 初始化连接池
     await _sync_strategies_to_db()
@@ -61,10 +123,19 @@ async def lifespan(app: FastAPI):
     await start_scheduler(skip_integrity_check=skip_integrity_check)
 
     yield
-    await stop_scheduler()
-    await close_pool()  # 关闭连接池
-    await close_redis()
-    await engine.dispose()
+
+    # 检查是否收到关闭信号
+    if _shutdown_event.is_set():
+        # 已经通过信号处理器触发了优雅关闭
+        await _graceful_shutdown()
+    else:
+        # 正常关闭（例如 Ctrl+C 或 uvicorn 重启）
+        logger.info("[关闭] 正常关闭流程...")
+        await stop_scheduler()
+        await close_pool()
+        await close_redis()
+        await engine.dispose()
+        logger.info("[关闭] 完成")
 
 
 app = FastAPI(
