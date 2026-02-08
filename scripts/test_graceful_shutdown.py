@@ -158,6 +158,8 @@ def test_sigint_shutdown():
 
 def main():
     """主测试函数。"""
+    import sys
+
     print("\n" + "=" * 60)
     print("优雅关闭功能测试")
     print("=" * 60)
@@ -167,7 +169,10 @@ def main():
     print("  2. 数据库和 Redis 已启动")
     print("  3. 环境变量已配置（.env 文件）")
     print()
-    input("按 Enter 键开始测试...")
+
+    # 支持非交互模式（通过 --auto 参数）
+    if "--auto" not in sys.argv:
+        input("按 Enter 键开始测试...")
 
     results = []
 

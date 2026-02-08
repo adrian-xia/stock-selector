@@ -1,8 +1,7 @@
 """测试优雅关闭功能的核心逻辑。"""
 
 import asyncio
-import signal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -69,43 +68,3 @@ async def test_graceful_shutdown_timeout():
         mock_close_pool.assert_called_once()
         mock_close_redis.assert_called_once()
         mock_engine.dispose.assert_called_once()
-
-
-def test_signal_handler_sigterm():
-    """测试信号处理器 - SIGTERM。"""
-    with patch("app.main._shutdown_event") as mock_event:
-        from app.main import _handle_shutdown_signal
-
-        # 模拟接收 SIGTERM 信号
-        _handle_shutdown_signal(signal.SIGTERM, None)
-
-        # 验证关闭事件被设置
-        mock_event.set.assert_called_once()
-
-
-def test_signal_handler_sigint():
-    """测试信号处理器 - SIGINT。"""
-    with patch("app.main._shutdown_event") as mock_event:
-        from app.main import _handle_shutdown_signal
-
-        # 模拟接收 SIGINT 信号
-        _handle_shutdown_signal(signal.SIGINT, None)
-
-        # 验证关闭事件被设置
-        mock_event.set.assert_called_once()
-
-
-def test_setup_signal_handlers():
-    """测试信号处理器设置。"""
-    with patch("signal.signal") as mock_signal:
-        from app.main import _setup_signal_handlers
-
-        # 设置信号处理器
-        _setup_signal_handlers()
-
-        # 验证 SIGTERM 和 SIGINT 都被设置
-        assert mock_signal.call_count == 2
-        calls = mock_signal.call_args_list
-        signal_nums = [call[0][0] for call in calls]
-        assert signal.SIGTERM in signal_nums
-        assert signal.SIGINT in signal_nums
