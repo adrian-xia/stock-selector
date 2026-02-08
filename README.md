@@ -16,7 +16,7 @@
 - **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
 - **前端界面** — React 18 + Ant Design 5 + ECharts，选股工作台 + 回测中心
-- **测试覆盖** — 354 个单元测试用例，覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端
+- **测试覆盖** — 359 个单元测试用例，覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查
 
 ## 技术栈
 
@@ -130,6 +130,9 @@ DATA_INTEGRITY_CHECK_DAYS=30        # 检查最近 N 天的数据完整性
 
 ```bash
 uv run uvicorn app.main:app --reload
+
+# 跳过启动时数据完整性检查
+SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app --reload
 ```
 
 服务启动后访问 http://localhost:8000/docs 查看 API 文档。

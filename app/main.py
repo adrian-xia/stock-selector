@@ -44,6 +44,8 @@ async def _sync_strategies_to_db() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import os
+
     setup_logging(settings.log_level)
     await init_redis()
     get_pool()  # 初始化连接池
@@ -53,7 +55,11 @@ async def lifespan(app: FastAPI):
         redis = get_redis()
         if redis is not None:
             await warmup_cache(redis, async_session_factory)
-    await start_scheduler()
+
+    # 检查是否跳过数据完整性检查（支持环境变量）
+    skip_integrity_check = os.getenv("SKIP_INTEGRITY_CHECK", "false").lower() in ("true", "1", "yes")
+    await start_scheduler(skip_integrity_check=skip_integrity_check)
+
     yield
     await stop_scheduler()
     await close_pool()  # 关闭连接池
