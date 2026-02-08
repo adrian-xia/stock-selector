@@ -68,28 +68,30 @@ class AStockStrategy(bt.Strategy):
             return None
         return self.sell(data=d, size=size)
 
+    def notify_order(self, order: bt.Order) -> None:
+        """记录订单执行。
+
+        使用 notify_order 而不是 notify_trade 来记录交易，
+        因为 order.executed 包含准确的成交信息。
+        """
+        if order.status in [order.Completed]:
+            # 订单完成，记录交易
+            direction = "buy" if order.isbuy() else "sell"
+            self.trades_log.append({
+                "stock_code": self.p.ts_code,
+                "direction": direction,
+                "date": self.datas[0].datetime.date(0).isoformat(),
+                "price": round(float(order.executed.price), 2),
+                "size": abs(int(order.executed.size)),
+                "commission": round(float(order.executed.comm), 2),
+                "pnl": round(float(order.executed.pnl), 2),
+            })
+
     def notify_trade(self, trade: bt.Trade) -> None:
-        """记录交易日志。"""
-        if trade.isclosed:
-            self.trades_log.append({
-                "stock_code": self.p.ts_code,
-                "direction": "sell",
-                "date": self.datas[0].datetime.date(0).isoformat(),
-                "price": round(float(trade.price), 2),
-                "size": abs(int(trade.size)),
-                "commission": round(float(trade.commission), 2),
-                "pnl": round(float(trade.pnl), 2),
-            })
-        elif trade.isopen:
-            self.trades_log.append({
-                "stock_code": self.p.ts_code,
-                "direction": "buy",
-                "date": self.datas[0].datetime.date(0).isoformat(),
-                "price": round(float(trade.price), 2),
-                "size": abs(int(trade.size)),
-                "commission": round(float(trade.commission), 2),
-                "pnl": 0.0,
-            })
+        """记录交易日志（已废弃，改用 notify_order）。"""
+        # 不再使用 notify_trade，因为 trade.commission 是累计值
+        # 改用 notify_order 记录每笔订单的实际佣金
+        pass
 
 
 class SignalStrategy(AStockStrategy):
