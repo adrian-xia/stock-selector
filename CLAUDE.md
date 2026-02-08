@@ -87,6 +87,67 @@ openspec/
 3. `/opsx:apply` — 按 tasks 逐步实现
 4. `/opsx:archive` — 归档完成的变更
 
+## 部署和运维
+
+### 打包部署
+
+```bash
+# 1. 打包项目
+uv run python -m scripts.package
+# 输出：dist/stock-selector-<version>.tar.gz
+
+# 2. 传输到服务器
+scp dist/stock-selector-<version>.tar.gz user@server:/path/
+
+# 3. 在服务器上解压并部署
+tar -xzf stock-selector-<version>.tar.gz
+cd stock-selector
+uv sync
+cp .env.example .env && vim .env
+uv run alembic upgrade head
+uv run python -m scripts.init_data
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### 服务管理
+
+```bash
+# 启动服务
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 跳过启动时数据完整性检查
+SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app
+
+# 优雅关闭（等待任务完成，30秒超时）
+kill -TERM <pid>  # 或按 Ctrl+C
+```
+
+### 数据管理
+
+```bash
+# 数据初始化向导（首次部署）
+uv run python -m scripts.init_data
+
+# 手动补齐缺失数据（断点续传）
+uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
+
+# 每日数据同步（自动或手动）
+uv run python -m app.data.cli sync-daily
+
+# 更新技术指标
+uv run python -m app.data.cli update-indicators
+```
+
+### 配置项
+
+关键环境变量（.env）：
+- `DATABASE_URL` — PostgreSQL 连接字符串
+- `REDIS_HOST` / `REDIS_PORT` — Redis 连接（可选，不配置则缓存降级）
+- `GEMINI_API_KEY` — Gemini API Key（可选，不配置则跳过 AI 分析）
+- `DATA_INTEGRITY_CHECK_ENABLED` — 启动时是否检查数据完整性（默认 true）
+- `DATA_INTEGRITY_CHECK_DAYS` — 检查最近 N 天（默认 30）
+- `SKIP_INTEGRITY_CHECK` — 环境变量，跳过启动时检查
+
 ## 目录结构（规划）
 
 ```

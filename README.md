@@ -220,6 +220,131 @@ uv run python -m scripts.init_data
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+## 运维管理
+
+### 服务管理
+
+**启动服务：**
+
+```bash
+# 开发模式（自动重载）
+uv run uvicorn app.main:app --reload
+
+# 生产模式（指定主机和端口）
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 跳过启动时数据完整性检查
+SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app
+```
+
+**停止服务：**
+
+服务支持优雅关闭，会等待运行中的任务完成后再关闭（30秒超时）：
+
+```bash
+# 发送 SIGTERM 信号（推荐）
+kill -TERM <pid>
+
+# 或按 Ctrl+C（SIGINT）
+```
+
+**查看日志：**
+
+```bash
+# 服务日志输出到 stdout
+# 可以使用 systemd 或其他工具管理日志
+```
+
+### 数据完整性检查
+
+服务启动时会自动检测最近 N 天（默认 30 天）的数据完整性，如果发现缺失的交易日会自动补齐。
+
+**配置选项：**
+
+```bash
+# .env 配置
+DATA_INTEGRITY_CHECK_ENABLED=true   # 启动时是否检查数据完整性
+DATA_INTEGRITY_CHECK_DAYS=30        # 检查最近 N 天的数据完整性
+```
+
+**跳过启动时检查：**
+
+```bash
+SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app
+```
+
+**手动补齐缺失数据：**
+
+```bash
+# 补齐指定日期范围的缺失数据
+uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
+
+# 限制并发数（避免 API 限流）
+uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07 --rate-limit 5
+```
+
+### 数据初始化
+
+**首次初始化（推荐使用向导）：**
+
+```bash
+uv run python -m scripts.init_data
+```
+
+交互式向导提供三种数据范围选项：
+- **最近 1 年**：约 250 个交易日，适合快速测试
+- **最近 3 年**：约 750 个交易日，推荐日常使用
+- **自定义范围**：指定起止日期，超过 5 年会有警告提示
+
+**手动初始化步骤：**
+
+```bash
+# 1. 同步股票列表
+uv run python -m app.data.cli import-stocks
+
+# 2. 同步交易日历
+uv run python -m app.data.cli import-calendar --start 2024-01-01
+
+# 3. 同步日线数据
+uv run python -m app.data.cli import-daily --start 2024-01-01
+
+# 4. 同步复权因子
+uv run python -m app.data.cli sync-adj-factor
+
+# 5. 计算技术指标
+uv run python -m app.data.cli compute-indicators
+```
+
+### 日常维护
+
+**每日数据同步：**
+
+服务启动后，定时任务会自动执行每日数据同步（默认周一至周五 15:30）。也可以手动触发：
+
+```bash
+uv run python -m app.data.cli sync-daily
+```
+
+**更新技术指标：**
+
+```bash
+# 增量计算最新交易日的技术指标
+uv run python -m app.data.cli update-indicators
+
+# 指定日期
+uv run python -m app.data.cli update-indicators --date 2026-02-07
+```
+
+**数据库备份：**
+
+```bash
+# 使用 PostgreSQL 工具备份
+pg_dump -U postgres stock_selector > backup.sql
+
+# 恢复
+psql -U postgres stock_selector < backup.sql
+```
+
 ## 项目结构
 
 ```

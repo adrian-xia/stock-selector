@@ -84,12 +84,12 @@
 
 ## 8. 文档更新
 
-- [ ] 8.1 更新 `README.md` 添加"部署"章节（打包、传输、解压、配置）
-- [ ] 8.2 更新 `README.md` 添加"服务管理"章节（安装服务、启动、停止、状态查询、卸载）
-- [ ] 8.3 更新 `README.md` 添加"数据初始化"章节（初始化向导、手动补齐命令）
-- [ ] 8.4 更新 `README.md` 添加"数据完整性检查"章节（启动时检查、配置选项）
-- [ ] 8.5 更新 `CLAUDE.md` 补充部署和运维相关说明
-- [ ] 8.6 更新 `.env.example` 确保包含所有新配置项（DATA_INTEGRITY_CHECK_DAYS, DATA_INTEGRITY_CHECK_ENABLED）
+- [x] 8.1 更新 `README.md` 添加"部署"章节（打包、传输、解压、配置）
+- [x] 8.2 更新 `README.md` 添加"服务管理"章节（安装服务、启动、停止、状态查询、卸载）
+- [x] 8.3 更新 `README.md` 添加"数据初始化"章节（初始化向导、手动补齐命令）
+- [x] 8.4 更新 `README.md` 添加"数据完整性检查"章节（启动时检查、配置选项）
+- [x] 8.5 更新 `CLAUDE.md` 补充部署和运维相关说明
+- [x] 8.6 更新 `.env.example` 确保包含所有新配置项（DATA_INTEGRITY_CHECK_DAYS, DATA_INTEGRITY_CHECK_ENABLED）
 
 ## 9. 测试和验证
 
