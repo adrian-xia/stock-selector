@@ -58,5 +58,11 @@ class Settings(BaseSettings):
     gemini_max_retries: int = 2                 # 瞬态错误重试次数
     ai_daily_budget_usd: float = 1.0            # 每日预算上限（V1 仅日志告警）
 
+    # --- Cache (Redis) ---
+    cache_tech_ttl: int = 90000                 # 技术指标缓存 TTL（秒），默认 25 小时
+    cache_pipeline_result_ttl: int = 172800     # 选股结果缓存 TTL（秒），默认 48 小时
+    cache_warmup_on_startup: bool = True        # 应用启动时是否执行缓存预热
+    cache_refresh_batch_size: int = 500         # 全量刷新时 Redis Pipeline 批次大小
+
 
 settings = Settings()

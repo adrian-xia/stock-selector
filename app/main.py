@@ -4,8 +4,10 @@ from fastapi import FastAPI
 
 from app.api.backtest import router as backtest_router
 from app.api.strategy import router as strategy_router
+from app.cache.redis_client import close_redis, get_redis, init_redis
+from app.cache.tech_cache import warmup_cache
 from app.config import settings
-from app.database import engine
+from app.database import async_session_factory, engine
 from app.logger import setup_logging
 from app.scheduler.core import start_scheduler, stop_scheduler
 
@@ -13,9 +15,16 @@ from app.scheduler.core import start_scheduler, stop_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(settings.log_level)
+    await init_redis()
+    # 缓存预热（受配置开关控制）
+    if settings.cache_warmup_on_startup:
+        redis = get_redis()
+        if redis is not None:
+            await warmup_cache(redis, async_session_factory)
     await start_scheduler()
     yield
     await stop_scheduler()
+    await close_redis()
     await engine.dispose()
 
 

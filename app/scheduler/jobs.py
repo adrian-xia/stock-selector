@@ -5,6 +5,8 @@ import time
 import traceback
 from datetime import date
 
+from app.cache.redis_client import get_redis
+from app.cache.tech_cache import refresh_all_tech_cache
 from app.data.akshare import AKShareClient
 from app.data.baostock import BaoStockClient
 from app.data.indicator import compute_incremental
@@ -30,9 +32,9 @@ def _build_manager() -> DataManager:
 
 
 async def run_post_market_chain(target_date: date | None = None) -> None:
-    """盘后链路：交易日校验 → 日线同步 → 技术指标 → 策略管道。
+    """盘后链路：交易日校验 → 日线同步 → 技术指标 → 缓存刷新 → 策略管道。
 
-    任一步骤失败则中断链路，记录日志。
+    任一关键步骤失败则中断链路，缓存刷新失败不阻断。
 
     Args:
         target_date: 目标日期，默认今天
@@ -62,7 +64,10 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         logger.error("盘后链路中断：技术指标计算失败\n%s", traceback.format_exc())
         return
 
-    # 步骤 3：策略管道执行
+    # 步骤 3：缓存刷新（非关键，失败不阻断）
+    await cache_refresh_step(target)
+
+    # 步骤 4：策略管道执行
     try:
         await pipeline_step(target)
     except Exception:
@@ -106,7 +111,26 @@ async def sync_daily_step(
         success_count, fail_count, elapsed,
     )
 
-# PLACEHOLDER_MORE_STEPS
+async def cache_refresh_step(target_date: date) -> None:
+    """刷新技术指标缓存（非关键步骤，失败不阻断链路）。
+
+    Args:
+        target_date: 目标日期
+    """
+    redis = get_redis()
+    if redis is None:
+        logger.warning("[缓存刷新] Redis 不可用，跳过")
+        return
+
+    step_start = time.monotonic()
+    logger.info("[缓存刷新] 开始：%s", target_date)
+
+    try:
+        count = await refresh_all_tech_cache(redis, async_session_factory)
+        elapsed = int(time.monotonic() - step_start)
+        logger.info("[缓存刷新] 完成：%d 只股票，耗时 %ds", count, elapsed)
+    except Exception as e:
+        logger.warning("缓存刷新失败，策略管道将回源数据库：%s", e)
 
 
 async def indicator_step(target_date: date) -> None:

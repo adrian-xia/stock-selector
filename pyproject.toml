@@ -18,6 +18,7 @@ dependencies = [
     "backtrader>=1.9.78",
     "apscheduler>=3.10.0",
     "google-genai>=1.0.0",
+    "redis[hiredis]>=5.0.0",
 ]
 
 [project.optional-dependencies]
