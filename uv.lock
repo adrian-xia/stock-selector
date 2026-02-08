@@ -132,6 +132,14 @@ wheels = [
 ]
 
 [[package]]
+name = "backtrader"
+version = "1.9.78.123"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/ef/328c6ec332435f63b3e18febd263686b8ba07e990676a862cc8522ba38f5/backtrader-1.9.78.123-py2.py3-none-any.whl", hash = "sha256:9a07a516b0de9155539a35c56e9404d8711dd7020b3d37b30495e83e1b9d5dfd", size = 419517, upload-time = "2023-04-19T14:13:18.842Z" },
+]
+
+[[package]]
 name = "baostock"
 version = "0.8.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1197,6 +1205,7 @@ dependencies = [
     { name = "akshare" },
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "backtrader" },
     { name = "baostock" },
     { name = "click" },
     { name = "fastapi" },
@@ -1218,6 +1227,7 @@ requires-dist = [
     { name = "akshare", specifier = ">=1.14.0" },
     { name = "alembic", specifier = ">=1.14.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "backtrader", specifier = ">=1.9.78" },
     { name = "baostock", specifier = ">=0.8.8" },
     { name = "click", specifier = ">=8.1.0" },
     { name = "fastapi", specifier = ">=0.115.0" },

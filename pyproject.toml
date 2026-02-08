@@ -15,6 +15,7 @@ dependencies = [
     "alembic>=1.14.0",
     "click>=8.1.0",
     "pandas>=2.2.0",
+    "backtrader>=1.9.78",
 ]
 
 [project.optional-dependencies]
