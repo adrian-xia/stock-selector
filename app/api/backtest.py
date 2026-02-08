@@ -342,13 +342,15 @@ async def list_backtest_tasks(
         )
         total = count_row.scalar_one()
 
-        # 分页查询，LEFT JOIN 获取年化收益率
+        # 分页查询，LEFT JOIN 获取策略名称和年化收益率
         rows = await session.execute(
             text("""
-                SELECT t.id, t.strategy_name, t.stock_codes, t.start_date,
+                SELECT t.id, COALESCE(s.name, '') AS strategy_name,
+                       t.stock_codes, t.start_date,
                        t.end_date, t.status, t.created_at,
                        r.annual_return
                 FROM backtest_tasks t
+                LEFT JOIN strategies s ON t.strategy_id = s.id
                 LEFT JOIN backtest_results r ON t.id = r.task_id
                 ORDER BY t.created_at DESC
                 LIMIT :limit OFFSET :offset
