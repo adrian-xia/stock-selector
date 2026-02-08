@@ -28,11 +28,20 @@ The logging SHALL include:
 
 #### Scenario: Log fine-grained timing for sync_daily
 - **WHEN** `DataManager.sync_daily()` syncs a single stock
-- **THEN** system SHALL log timing breakdown at DEBUG level: "[sync_daily] 600519.SH: API=2.5s, 清洗=0.01s, 入库=0.3s"
+- **THEN** system SHALL log timing breakdown at DEBUG level: "[sync_daily] 600519.SH: API总计=2.5s, 清洗=0.01s, 入库=0.3s"
+
+#### Scenario: Log fine-grained timing for fetch_daily
+- **WHEN** `BaoStockClient.fetch_daily()` fetches data with connection pool
+- **THEN** system SHALL log timing breakdown at DEBUG level: "[fetch_daily] 600519.SH: 连接池等待=0.36s, API调用=0.08s"
 
 #### Scenario: Identify performance bottleneck in sync_daily
 - **WHEN** analyzing sync_daily logs
-- **THEN** users SHALL be able to determine whether API calls, data cleaning, or database writes are the bottleneck
+- **THEN** users SHALL be able to determine whether connection pool wait, API calls, data cleaning, or database writes are the bottleneck
+
+#### Scenario: Connection pool optimization
+- **WHEN** connection pool queue is empty and pool size limit not reached
+- **THEN** system SHALL immediately create a new session instead of waiting for timeout
+- **AND** connection pool wait time SHALL be reduced from 30s to <1s
 
 ### Requirement: Technical indicator calculation performance logging
 The technical indicator calculation function SHALL log detailed timing for each indicator type.
