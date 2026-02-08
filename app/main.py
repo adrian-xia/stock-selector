@@ -7,12 +7,15 @@ from app.api.strategy import router as strategy_router
 from app.config import settings
 from app.database import engine
 from app.logger import setup_logging
+from app.scheduler.core import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(settings.log_level)
+    await start_scheduler()
     yield
+    await stop_scheduler()
     await engine.dispose()
 
 

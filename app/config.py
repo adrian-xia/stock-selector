@@ -46,5 +46,9 @@ class Settings(BaseSettings):
     etl_batch_size: int = 5000
     etl_commit_interval: int = 10
 
+    # --- Scheduler ---
+    scheduler_post_market_cron: str = "30 15 * * 1-5"  # 周一至周五 15:30
+    scheduler_stock_sync_cron: str = "0 8 * * 6"       # 周六 08:00
+
 
 settings = Settings()

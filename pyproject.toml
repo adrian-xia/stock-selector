@@ -16,6 +16,7 @@ dependencies = [
     "click>=8.1.0",
     "pandas>=2.2.0",
     "backtrader>=1.9.78",
+    "apscheduler>=3.10.0",
 ]
 
 [project.optional-dependencies]
