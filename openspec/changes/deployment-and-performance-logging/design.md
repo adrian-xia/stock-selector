@@ -116,9 +116,21 @@
 
 **实现位置：**
 - `app/data/batch.py`: 批量同步日志（批次进度、慢速股票）
+- `app/data/manager.py`: 单股票同步细粒度日志（API 调用、数据清洗、数据库写入分步计时）
 - `app/data/indicator.py`: 技术指标日志（每个指标耗时）
 - `app/cache/tech_cache.py`: 缓存刷新日志（命中率、耗时）
 - `app/scheduler/jobs.py`: 任务总体日志（开始、完成、总耗时）
+
+**细粒度日志示例：**
+```python
+# app/data/manager.py 中的 sync_daily() 方法
+logger.debug("[sync_daily] %s: API=%.2fs, 清洗=%.2fs, 入库=%.2fs", code, api_time, clean_time, db_time)
+```
+
+这样可以精确定位性能瓶颈：
+- API 调用慢 → 网络问题或 BaoStock 限流
+- 数据清洗慢 → 数据转换逻辑需要优化
+- 数据库写入慢 → 数据库 IO 或索引问题
 
 ### 决策 5：避免重复同步 - 数据库查询检查
 
