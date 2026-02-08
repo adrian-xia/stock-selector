@@ -1,6 +1,7 @@
 """Gemini Flash API 客户端。
 
 封装 google-genai SDK，提供异步聊天调用、JSON 解析、超时和重试。
+支持 API Key 和 ADC (Application Default Credentials) 两种认证方式。
 """
 
 import asyncio
@@ -47,31 +48,53 @@ class GeminiResponseParseError(GeminiError):
 class GeminiClient:
     """Gemini Flash 异步客户端。
 
+    支持两种认证方式（二选一）：
+    - API Key：传入 api_key 参数
+    - ADC：设置 use_adc=True，通过 google.auth.default() 获取凭据
+
+    优先级：api_key 非空时使用 API Key，忽略 use_adc 设置。
+
     Args:
-        api_key: Gemini API 密钥
+        api_key: Gemini API 密钥（可选）
         model_id: 模型标识符，默认 gemini-2.0-flash
         timeout: 请求超时秒数
         max_retries: 瞬态错误重试次数
+        use_adc: 是否使用 Application Default Credentials 认证
     """
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         model_id: str = "gemini-2.0-flash",
         timeout: int = 30,
         max_retries: int = 2,
+        use_adc: bool = False,
     ) -> None:
-        if not api_key:
-            raise ValueError("Gemini API key 不能为空")
         self._model_id = model_id
         self._timeout = timeout
         self._max_retries = max_retries
-        self._client = genai.Client(api_key=api_key)
         self._last_usage: dict[str, int] = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
         }
+
+        # 认证优先级：API Key > ADC > 报错
+        if api_key:
+            self._client = genai.Client(api_key=api_key)
+        elif use_adc:
+            try:
+                import google.auth  # noqa: F811
+                credentials, _ = google.auth.default()
+                self._client = genai.Client(credentials=credentials)
+            except Exception as exc:
+                raise ValueError(
+                    f"ADC 凭据获取失败，请先运行 gcloud auth application-default login：{exc}"
+                ) from exc
+        else:
+            raise ValueError(
+                "必须配置 GEMINI_API_KEY 或设置 GEMINI_USE_ADC=true"
+            )
 
     async def chat(self, prompt: str, max_tokens: int = 2000) -> str:
         """调用 Gemini API，返回文本响应。

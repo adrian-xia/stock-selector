@@ -81,6 +81,28 @@ class EquityCurveEntry(BaseModel):
     value: float
 
 
+class BacktestListItem(BaseModel):
+    """回测任务列表项。"""
+
+    task_id: int
+    strategy_name: str
+    stock_count: int
+    start_date: date | None = None
+    end_date: date | None = None
+    status: str
+    annual_return: float | None = None
+    created_at: str
+
+
+class BacktestListResponse(BaseModel):
+    """回测任务列表响应。"""
+
+    total: int
+    page: int
+    page_size: int
+    items: list[BacktestListItem]
+
+
 class BacktestResultResponse(BaseModel):
     """回测结果详情响应。"""
 
@@ -301,4 +323,61 @@ async def get_backtest_result(task_id: int) -> BacktestResultResponse:
         result=metrics,
         trades=trades,
         equity_curve=equity_curve,
+    )
+
+
+@router.get("/list", response_model=BacktestListResponse)
+async def list_backtest_tasks(
+    page: int = 1,
+    page_size: int = 20,
+) -> BacktestListResponse:
+    """分页查询回测任务列表，按创建时间倒序。"""
+    page_size = min(page_size, 100)
+    offset = (page - 1) * page_size
+
+    async with async_session_factory() as session:
+        # 查询总数
+        count_row = await session.execute(
+            text("SELECT COUNT(*) FROM backtest_tasks")
+        )
+        total = count_row.scalar_one()
+
+        # 分页查询，LEFT JOIN 获取年化收益率
+        rows = await session.execute(
+            text("""
+                SELECT t.id, t.strategy_name, t.stock_codes, t.start_date,
+                       t.end_date, t.status, t.created_at,
+                       r.annual_return
+                FROM backtest_tasks t
+                LEFT JOIN backtest_results r ON t.id = r.task_id
+                ORDER BY t.created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            {"limit": page_size, "offset": offset},
+        )
+        tasks = rows.mappings().all()
+
+    items = []
+    for t in tasks:
+        stock_codes = t["stock_codes"]
+        if isinstance(stock_codes, str):
+            stock_codes = json.loads(stock_codes)
+        stock_count = len(stock_codes) if stock_codes else 0
+
+        items.append(BacktestListItem(
+            task_id=t["id"],
+            strategy_name=t["strategy_name"],
+            stock_count=stock_count,
+            start_date=t["start_date"],
+            end_date=t["end_date"],
+            status=t["status"],
+            annual_return=float(t["annual_return"]) if t["annual_return"] is not None else None,
+            created_at=str(t["created_at"]),
+        ))
+
+    return BacktestListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items,
     )

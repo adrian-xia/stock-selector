@@ -10,10 +10,11 @@ from app.ai.manager import AIManager
 from app.strategy.pipeline import StockPick
 
 
-def _make_settings(api_key: str = "test-key") -> MagicMock:
+def _make_settings(api_key: str = "test-key", use_adc: bool = False) -> MagicMock:
     """构造 mock Settings。"""
     s = MagicMock()
     s.gemini_api_key = api_key
+    s.gemini_use_adc = use_adc
     s.gemini_model_id = "gemini-2.0-flash"
     s.gemini_max_tokens = 4000
     s.gemini_timeout = 30

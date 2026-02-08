@@ -52,6 +52,7 @@ class Settings(BaseSettings):
 
     # --- AI (Gemini) ---
     gemini_api_key: str = ""                    # 为空则 AI 分析不启用
+    gemini_use_adc: bool = False                # 使用 Google ADC 认证（与 API Key 二选一）
     gemini_model_id: str = "gemini-2.0-flash"   # V1 固定用 Flash
     gemini_max_tokens: int = 4000               # 单次请求最大输出 token
     gemini_timeout: int = 30                    # 请求超时（秒）
@@ -63,6 +64,9 @@ class Settings(BaseSettings):
     cache_pipeline_result_ttl: int = 172800     # 选股结果缓存 TTL（秒），默认 48 小时
     cache_warmup_on_startup: bool = True        # 应用启动时是否执行缓存预热
     cache_refresh_batch_size: int = 500         # 全量刷新时 Redis Pipeline 批次大小
+
+    # --- CORS ---
+    cors_origins: list[str] = ["http://localhost:5173"]  # 允许跨域的前端地址
 
 
 settings = Settings()

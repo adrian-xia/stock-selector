@@ -45,7 +45,9 @@
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
 - **AI：** Gemini Flash（V1 单模型）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
-- **包管理：** uv
+- **前端构建：** Vite 6 + pnpm
+- **前端数据层：** TanStack React Query + Axios + Zustand
+- **包管理：** uv（后端）、pnpm（前端）
 - **部署：** 直接运行（uvicorn），不用 Docker/Nginx
 
 ## 编码规范
@@ -119,7 +121,15 @@ stock-selector/
 │       ├── strategy.py       # 策略 API
 │       ├── backtest.py       # 回测 API
 │       └── data.py           # 数据查询 API
-├── web/                      # 前端（React）
+├── web/                      # 前端（React + TypeScript）
+│   ├── src/
+│   │   ├── api/              # API 请求函数（Axios）
+│   │   ├── layouts/          # 布局组件（AppLayout + Sider）
+│   │   ├── pages/
+│   │   │   ├── workbench/    # 选股工作台页面
+│   │   │   └── backtest/     # 回测中心页面
+│   │   └── types/            # TypeScript 类型定义
+│   └── vite.config.ts        # Vite 配置（含 /api 代理）
 ├── tests/
 │   ├── fixtures/             # 测试数据
 │   ├── unit/                 # 单元测试

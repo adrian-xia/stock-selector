@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AIManager:
     """AI 分析编排器。
 
-    延迟初始化 GeminiClient，未配置 API Key 时自动禁用。
+    延迟初始化 GeminiClient，未配置 API Key 且未启用 ADC 时自动禁用。
 
     Args:
         ai_settings: 应用配置（包含 Gemini 相关字段）
@@ -36,10 +36,10 @@ class AIManager:
     def __init__(self, ai_settings: Settings) -> None:
         self._settings = ai_settings
         self._client: GeminiClient | None = None
-        self._enabled = bool(ai_settings.gemini_api_key)
+        self._enabled = bool(ai_settings.gemini_api_key) or bool(ai_settings.gemini_use_adc)
 
         if not self._enabled:
-            logger.warning("AI 分析未启用：GEMINI_API_KEY 未配置")
+            logger.warning("AI 分析未启用：GEMINI_API_KEY 未配置且 ADC 未启用")
 
     @property
     def is_enabled(self) -> bool:
@@ -50,10 +50,11 @@ class AIManager:
         """延迟初始化并返回 GeminiClient。"""
         if self._client is None:
             self._client = GeminiClient(
-                api_key=self._settings.gemini_api_key,
+                api_key=self._settings.gemini_api_key or None,
                 model_id=self._settings.gemini_model_id,
                 timeout=self._settings.gemini_timeout,
                 max_retries=self._settings.gemini_max_retries,
+                use_adc=self._settings.gemini_use_adc,
             )
         return self._client
 

@@ -18,7 +18,7 @@ class TestGeminiClientInit:
     """构造函数测试。"""
 
     def test_empty_api_key_raises(self) -> None:
-        with pytest.raises(ValueError, match="不能为空"):
+        with pytest.raises(ValueError, match="GEMINI_API_KEY"):
             GeminiClient(api_key="")
 
     @patch("app.ai.clients.gemini.genai.Client")

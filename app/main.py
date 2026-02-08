@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.backtest import router as backtest_router
+from app.api.data import router as data_router
 from app.api.strategy import router as strategy_router
 from app.cache.redis_client import close_redis, get_redis, init_redis
 from app.cache.tech_cache import warmup_cache
@@ -33,9 +35,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS 配置（允许前端开发服务器跨域访问）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # 注册路由
 app.include_router(strategy_router)
 app.include_router(backtest_router)
+app.include_router(data_router)
 
 
 @app.get("/health")

@@ -80,6 +80,7 @@ The `.env.example` file SHALL include the following AI-related entries:
 ```
 # --- AI (Gemini) ---
 GEMINI_API_KEY=
+GEMINI_USE_ADC=false                # 使用 Google ADC 认证（与 API Key 二选一）
 GEMINI_MODEL_ID=gemini-2.0-flash
 GEMINI_MAX_TOKENS=4000
 GEMINI_TIMEOUT=30
@@ -102,7 +103,7 @@ CACHE_REFRESH_BATCH_SIZE=500
 
 #### Scenario: AI configuration in .env.example
 - **WHEN** a developer reviews `.env.example`
-- **THEN** they SHALL see all Gemini-related configuration variables with comments explaining their purpose
+- **THEN** they SHALL see all Gemini-related configuration variables including `GEMINI_USE_ADC` with comments explaining its purpose
 
 #### Scenario: Cache configuration in .env.example
 - **WHEN** a developer reviews `.env.example`
@@ -129,6 +130,18 @@ The settings SHALL include Gemini AI configuration parameters:
 #### Scenario: Custom model ID
 - **WHEN** `GEMINI_MODEL_ID=gemini-2.5-flash` is set in `.env`
 - **THEN** `settings.gemini_model_id` SHALL return `"gemini-2.5-flash"`
+
+### Requirement: Gemini ADC configuration
+The settings SHALL include an ADC toggle for Gemini authentication:
+- `GEMINI_USE_ADC` (bool, default: `false`) — 是否使用 Google Application Default Credentials 认证
+
+#### Scenario: Default ADC configuration
+- **WHEN** no `GEMINI_USE_ADC` environment variable is set
+- **THEN** `settings.gemini_use_adc` SHALL return `False`
+
+#### Scenario: Enable ADC
+- **WHEN** `GEMINI_USE_ADC=true` is set in `.env`
+- **THEN** `settings.gemini_use_adc` SHALL return `True`
 
 ### Requirement: Cache configuration
 The settings SHALL include Redis cache behavior parameters:
