@@ -385,3 +385,56 @@ class DataManager:
             records.append(record)
 
         return pd.DataFrame(records)
+
+    async def detect_missing_dates(
+        self, start_date: date, end_date: date
+    ) -> list[date]:
+        """检测指定日期范围内缺失的交易日数据。
+
+        查询交易日历中的交易日，与 stock_daily 表中已有数据的日期对比，
+        返回缺失的交易日列表。
+
+        Args:
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            缺失的交易日列表，按升序排列
+        """
+        # 1. 查询指定日期范围的交易日
+        trading_dates = await self.get_trade_calendar(start_date, end_date)
+
+        if not trading_dates:
+            logger.debug(
+                "[detect_missing_dates] 日期范围 %s ~ %s 无交易日",
+                start_date, end_date,
+            )
+            return []
+
+        # 2. 查询 stock_daily 表中已有数据的日期（去重）
+        async with self._session_factory() as session:
+            stmt = (
+                select(StockDaily.trade_date)
+                .where(
+                    StockDaily.trade_date >= start_date,
+                    StockDaily.trade_date <= end_date,
+                )
+                .distinct()
+                .order_by(StockDaily.trade_date)
+            )
+            result = await session.execute(stmt)
+            existing_dates = [row[0] for row in result.all()]
+
+        # 3. 计算缺失日期：交易日 - 已有日期
+        existing_dates_set = set(existing_dates)
+        missing_dates = [
+            d for d in trading_dates if d not in existing_dates_set
+        ]
+
+        logger.debug(
+            "[detect_missing_dates] 日期范围 %s ~ %s: 交易日 %d 天，已有数据 %d 天，缺失 %d 天",
+            start_date, end_date,
+            len(trading_dates), len(existing_dates), len(missing_dates),
+        )
+
+        return missing_dates

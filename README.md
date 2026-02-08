@@ -6,6 +6,7 @@
 
 - **多源数据采集** — 对接 BaoStock + AKShare，自动同步日线行情、财务指标、资金流向等数据，批量写入自动适配 asyncpg 参数限制
 - **高性能数据同步** — 优化连接池 + 批量并发同步，单股票同步 0.1 秒，8000+ 只股票日线数据同步从 2-3 小时降至 15 分钟（8-12 倍提升），全链路性能日志支持瓶颈分析（数据同步、技术指标、缓存刷新、调度任务）
+- **数据完整性检查** — 启动时自动检测最近 N 天缺失的交易日数据并补齐（断点续传），支持手动补齐指定日期范围
 - **技术指标计算** — 自动计算 MA/MACD/KDJ/RSI/BOLL/ATR 等常用技术指标
 - **12 种选股策略** — 8 种技术面策略 + 4 种基本面策略，支持自由组合
 - **5 层漏斗筛选** — SQL 粗筛 → 技术面 → 基本面 → 排序 → AI 终审
@@ -107,7 +108,23 @@ uv run python -m app.data.cli sync-adj-factor --force
 
 # 计算技术指标
 uv run python -m app.data.cli calc-indicators --start 2024-01-01 --end 2026-02-07
+
+# 手动补齐缺失的交易日数据（断点续传）
+uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
+
+# 限制并发数（避免 API 限流）
+uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07 --rate-limit 5
 ```
+
+**数据完整性检查：** 服务启动时会自动检测最近 30 天（可配置）的数据完整性，如果发现缺失的交易日会自动补齐。可通过以下配置项控制：
+
+```bash
+# .env 配置
+DATA_INTEGRITY_CHECK_ENABLED=true   # 启动时是否检查数据完整性
+DATA_INTEGRITY_CHECK_DAYS=30        # 检查最近 N 天的数据完整性
+```
+
+如需跳过启动时检查，可使用 `--skip-integrity-check` 参数启动服务。
 
 ### 启动服务
 

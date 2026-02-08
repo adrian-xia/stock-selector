@@ -31,6 +31,7 @@
 
 - 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层，批量写入自动适配 asyncpg 参数限制
 - 性能优化：优化连接池获取逻辑 + 批量并发同步，单股票同步 0.1 秒，日线同步性能提升 8-12 倍，全链路性能日志支持瓶颈分析
+- 数据完整性：启动时自动检测最近 N 天缺失的交易日数据并补齐（断点续传），支持手动补齐指定日期范围
 - 策略引擎：10-15 种核心策略，扁平继承，单模式接口
 - AI 分析：仅 Gemini Flash 单模型，无降级链路
 - 回测：Backtrader 同步执行，无 Redis 队列
@@ -101,7 +102,8 @@ stock-selector/
 │   │   ├── batch.py          # 批量日线同步
 │   │   ├── adj_factor.py     # 复权因子批量更新
 │   │   ├── etl.py            # ETL 清洗
-│   │   └── manager.py        # DataManager
+│   │   ├── cli.py            # 数据管理 CLI（含 backfill-daily 断点续传命令）
+│   │   └── manager.py        # DataManager（含 detect_missing_dates 方法）
 │   ├── strategy/             # 策略引擎
 │   │   ├── base.py           # BaseStrategy
 │   │   ├── technical/        # 技术面策略
@@ -121,6 +123,7 @@ stock-selector/
 │   │   ├── tech_cache.py     # 技术指标缓存（Cache-Aside）
 │   │   └── pipeline_cache.py # 选股结果缓存
 │   ├── scheduler/            # 定时任务
+│   │   ├── core.py           # APScheduler 配置（含启动时数据完整性检查）
 │   │   └── jobs.py           # APScheduler 任务
 │   └── api/                  # HTTP API
 │       ├── strategy.py       # 策略 API

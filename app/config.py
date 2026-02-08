@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     daily_sync_batch_size: int = 100        # 批量同步每批股票数
     daily_sync_concurrency: int = 10        # 批量同步并发数
 
+    # --- Data Integrity Check ---
+    data_integrity_check_enabled: bool = True   # 启动时是否检查数据完整性
+    data_integrity_check_days: int = 30         # 检查最近 N 天的数据完整性
+
     # --- Scheduler ---
     scheduler_post_market_cron: str = "30 15 * * 1-5"  # 周一至周五 15:30
     scheduler_stock_sync_cron: str = "0 8 * * 6"       # 周六 08:00

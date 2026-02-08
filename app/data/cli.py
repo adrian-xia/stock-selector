@@ -303,5 +303,106 @@ def sync_adj_factor(force: bool) -> None:
     asyncio.run(_run())
 
 
+@cli.command("backfill-daily")
+@click.option("--start", required=True, help="开始日期 (YYYY-MM-DD)")
+@click.option("--end", required=True, help="结束日期 (YYYY-MM-DD)")
+@click.option("--rate-limit", default=None, type=int, help="并发数限制（默认使用配置值）")
+def backfill_daily(start: str, end: str, rate_limit: int | None) -> None:
+    """手动补齐指定日期范围的日线数据（断点续传）。
+
+    只补齐缺失的交易日数据，跳过已有数据的日期和非交易日。
+    """
+    from app.data.batch import batch_sync_daily
+    from app.data.pool import get_pool
+
+    start_date = date.fromisoformat(start)
+    end_date = date.fromisoformat(end)
+
+    # 构建带连接池的 manager
+    pool = get_pool()
+    clients = {
+        "baostock": BaoStockClient(connection_pool=pool),
+        "akshare": AKShareClient(),
+    }
+    manager = DataManager(
+        session_factory=async_session_factory,
+        clients=clients,
+        primary="baostock",
+    )
+
+    async def _run() -> None:
+        import time
+
+        click.echo(f"开始补齐日期范围：{start_date} ~ {end_date}")
+
+        # 1. 检测缺失日期
+        missing_dates = await manager.detect_missing_dates(start_date, end_date)
+
+        if not missing_dates:
+            click.echo("指定日期范围内数据完整，无需补齐。")
+            return
+
+        click.echo(f"发现 {len(missing_dates)} 个缺失交易日，开始补齐...")
+
+        # 2. 获取所有上市股票
+        stocks = await manager.get_stock_list(status="L")
+        stock_codes = [s["ts_code"] for s in stocks]
+        click.echo(f"共 {len(stock_codes)} 只上市股票")
+
+        # 3. 逐个缺失日期补齐
+        total_success = 0
+        total_failed = 0
+        overall_start = time.monotonic()
+
+        for i, missing_date in enumerate(missing_dates, 1):
+            date_start = time.monotonic()
+            click.echo(f"\n[{i}/{len(missing_dates)}] 补齐日期：{missing_date}")
+
+            try:
+                # 使用批量同步，支持速率限制
+                result = await batch_sync_daily(
+                    session_factory=async_session_factory,
+                    stock_codes=stock_codes,
+                    target_date=missing_date,
+                    connection_pool=pool,
+                    concurrency=rate_limit if rate_limit else settings.daily_sync_concurrency,
+                )
+
+                date_elapsed = time.monotonic() - date_start
+                total_success += result["success"]
+                total_failed += result["failed"]
+
+                click.echo(
+                    f"  完成：成功 {result['success']} 只，失败 {result['failed']} 只，"
+                    f"耗时 {int(date_elapsed)}秒"
+                )
+
+                # 估算剩余时间
+                if i < len(missing_dates):
+                    avg_time = (time.monotonic() - overall_start) / i
+                    remaining_time = int(avg_time * (len(missing_dates) - i))
+                    remaining_minutes = remaining_time // 60
+                    remaining_seconds = remaining_time % 60
+                    click.echo(
+                        f"  预计剩余时间：{remaining_minutes}分{remaining_seconds}秒"
+                    )
+
+            except Exception as e:
+                logger.error("补齐日期 %s 失败：%s", missing_date, e)
+                click.echo(f"  失败：{e}")
+
+        overall_elapsed = int(time.monotonic() - overall_start)
+        overall_minutes = overall_elapsed // 60
+        overall_seconds = overall_elapsed % 60
+
+        click.echo(
+            f"\n补齐完成：共 {len(missing_dates)} 个交易日，"
+            f"成功 {total_success} 只次，失败 {total_failed} 只次，"
+            f"总耗时 {overall_minutes}分{overall_seconds}秒"
+        )
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     cli()
