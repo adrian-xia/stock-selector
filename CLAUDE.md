@@ -42,7 +42,7 @@
 - **后端：** Python 3.12 + FastAPI + SQLAlchemy + Pydantic
 - **回测：** Backtrader
 - **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
-- **缓存：** Redis（仅缓存技术指标）
+- **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
 - **AI：** Gemini Flash（V1 单模型）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
 - **包管理：** uv
@@ -107,7 +107,9 @@ stock-selector/
 │   │   ├── clients/          # Gemini 客户端
 │   │   └── manager.py        # AIManager
 │   ├── cache/                # Redis 缓存
-│   │   └── tech_cache.py     # 技术指标缓存
+│   │   ├── redis_client.py   # 连接管理（init/get/close）
+│   │   ├── tech_cache.py     # 技术指标缓存（Cache-Aside）
+│   │   └── pipeline_cache.py # 选股结果缓存
 │   ├── scheduler/            # 定时任务
 │   │   └── jobs.py           # APScheduler 任务
 │   └── api/                  # HTTP API

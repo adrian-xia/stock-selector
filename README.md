@@ -10,7 +10,8 @@
 - **5 层漏斗筛选** — SQL 粗筛 → 技术面 → 基本面 → 排序 → AI 终审
 - **AI 智能分析** — 接入 Gemini Flash，对候选股票进行综合评分和投资建议
 - **历史回测** — 基于 Backtrader，支持 A 股佣金、印花税、涨跌停限制
-- **定时任务** — 盘后自动执行数据同步、指标计算、策略筛选全链路
+- **定时任务** — 盘后自动执行数据同步、指标计算、缓存刷新、策略筛选全链路
+- **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
 
 ## 技术栈
@@ -20,6 +21,7 @@
 | 后端框架 | Python 3.12 + FastAPI + SQLAlchemy (async) |
 | 数据校验 | Pydantic v2 |
 | 数据库 | PostgreSQL + asyncpg |
+| 缓存 | Redis + hiredis |
 | 回测引擎 | Backtrader |
 | AI 分析 | Google Gemini Flash (`google-genai`) |
 | 定时任务 | APScheduler |
@@ -31,6 +33,7 @@
 
 - Python 3.12+
 - PostgreSQL 14+
+- Redis 6+
 - uv 包管理器
 
 ### 安装
@@ -58,6 +61,10 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selecto
 
 # AI 分析（可选，不填则跳过 AI 评分）
 GEMINI_API_KEY=your-gemini-api-key
+
+# Redis（可选，不配置则缓存功能自动降级）
+REDIS_HOST=localhost
+REDIS_PORT=6379
 ```
 
 完整配置项见 [.env.example](.env.example)。
@@ -124,11 +131,15 @@ stock-selector/
 │   │   └── writer.py           #   结果写入
 │   ├── scheduler/              # 定时任务
 │   │   ├── core.py             #   APScheduler 配置
-│   │   └── jobs.py             #   任务定义
+│   │   └── jobs.py             #   任务定义（含缓存刷新步骤）
+│   ├── cache/                  # Redis 缓存
+│   │   ├── redis_client.py     #   连接管理（init/get/close）
+│   │   ├── tech_cache.py       #   技术指标缓存（Cache-Aside）
+│   │   └── pipeline_cache.py   #   选股结果缓存
 │   └── api/                    # HTTP API
 │       ├── strategy.py         #   策略执行 API
 │       └── backtest.py         #   回测 API
-├── tests/                      # 测试（224 个用例）
+├── tests/                      # 测试（253 个用例）
 │   ├── unit/                   #   单元测试
 │   └── integration/            #   集成测试
 ├── alembic/                    # 数据库迁移
