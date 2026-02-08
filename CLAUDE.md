@@ -29,7 +29,7 @@
 
 ## V1 范围（当前阶段）
 
-- 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层
+- 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层，批量写入自动适配 asyncpg 参数限制
 - 策略引擎：10-15 种核心策略，扁平继承，单模式接口
 - AI 分析：仅 Gemini Flash 单模型，无降级链路
 - 回测：Backtrader 同步执行，无 Redis 队列

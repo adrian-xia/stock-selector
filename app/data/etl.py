@@ -175,10 +175,17 @@ async def batch_insert(
 ) -> int:
     """Batch insert rows using INSERT ... ON CONFLICT DO NOTHING.
 
+    自动根据列数调整 batch_size，确保不超过 asyncpg 32767 参数限制。
+
     Returns the total number of rows processed.
     """
     if not rows:
         return 0
+
+    # asyncpg 参数上限 32767，根据列数动态调整 batch_size
+    num_columns = len(rows[0])
+    max_batch = 32000 // num_columns  # 留一点余量
+    batch_size = min(batch_size, max_batch)
 
     total = 0
     for i in range(0, len(rows), batch_size):
