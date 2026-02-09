@@ -1,36 +1,47 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Daily data sync step
-The system SHALL provide a `sync_daily_step(target_date)` async function that syncs daily bar data for all listed stocks.
+### Requirement: Startup data integrity check
+The scheduler SHALL check data integrity on startup and automatically backfill missing data before starting scheduled jobs.
 
-The function SHALL:
-- Query all stocks with status "L" (listed) from the database
-- Use batch synchronization with connection pooling for improved performance
-- Process stocks in configurable batches with concurrent execution
-- Log the count of successfully synced stocks and failed stocks
-- NOT raise an exception if individual stocks fail (continue with remaining stocks)
-- Log progress at regular intervals during batch processing
+The check SHALL:
+- Run automatically when the scheduler starts (unless `--skip-integrity-check` is specified)
+- Check the most recent N days (configurable via `DATA_INTEGRITY_CHECK_DAYS`, default 30)
+- Detect missing trading dates by comparing trade calendar with existing data
+- Automatically backfill missing dates using batch synchronization
+- Log the check results and backfill progress
+- Continue with normal scheduler operation after check completes
 
-#### Scenario: Successful sync
-- **WHEN** `sync_daily_step()` is called with a valid trading date
-- **THEN** it SHALL sync daily data for all listed stocks using batch processing and log "日线同步完成：成功 N 只，失败 M 只，耗时 Xs"
+#### Scenario: Startup with complete data
+- **WHEN** the scheduler starts and all recent data is complete
+- **THEN** it SHALL log "数据完整性检查：最近 30 天数据完整" and start scheduled jobs
 
-#### Scenario: Partial failure
-- **WHEN** some stocks fail to sync (e.g., API timeout)
-- **THEN** the step SHALL continue syncing remaining stocks and log each failure
+#### Scenario: Startup with missing data
+- **WHEN** the scheduler starts and some recent trading dates are missing
+- **THEN** it SHALL log "数据完整性检查：发现 N 个缺失交易日，开始自动补齐" and backfill before starting jobs
 
-#### Scenario: Batch sync with connection pool
-- **WHEN** `sync_daily_step()` processes 8000+ stocks
-- **THEN** it SHALL use the BaoStock connection pool to reuse login sessions across multiple stocks
+#### Scenario: Skip integrity check via flag
+- **WHEN** the scheduler starts with `--skip-integrity-check` flag
+- **THEN** it SHALL skip the data integrity check and start scheduled jobs immediately
 
-#### Scenario: Concurrent batch processing
-- **WHEN** `sync_daily_step()` is called with `DAILY_SYNC_CONCURRENCY=10`
-- **THEN** it SHALL process up to 10 stocks concurrently at any given time
+#### Scenario: Skip integrity check via config
+- **WHEN** `DATA_INTEGRITY_CHECK_ENABLED=false` is configured
+- **THEN** the scheduler SHALL skip the data integrity check on startup
 
-#### Scenario: Progress logging during sync
-- **WHEN** `sync_daily_step()` is processing stocks in batches
-- **THEN** it SHALL log progress after each batch completes (e.g., "Batch 5/80 complete: 98/100 success")
+#### Scenario: Backfill failure on startup
+- **WHEN** automatic backfill fails for some dates during startup check
+- **THEN** the scheduler SHALL log the failure details but continue starting scheduled jobs
 
-#### Scenario: Backward compatibility with single-stock sync
-- **WHEN** `DataManager.sync_daily(code, target_date, target_date)` is called directly
-- **THEN** it SHALL continue to work using the existing single-stock implementation
+### Requirement: Startup command-line arguments
+The scheduler SHALL support command-line arguments to control startup behavior.
+
+Supported arguments:
+- `--skip-integrity-check`: Skip data integrity check on startup
+- `--foreground`: Run in foreground mode (log to stdout instead of file)
+
+#### Scenario: Foreground mode
+- **WHEN** the scheduler starts with `--foreground` flag
+- **THEN** it SHALL log all output to stdout instead of log files
+
+#### Scenario: Combined flags
+- **WHEN** the scheduler starts with `--skip-integrity-check --foreground`
+- **THEN** it SHALL skip integrity check and run in foreground mode
