@@ -41,26 +41,30 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     Args:
         scheduler: APScheduler 实例
     """
-    from app.scheduler.jobs import run_post_market_chain, sync_stock_list_job
+    from app.scheduler.auto_update import auto_update_job
+    from app.scheduler.jobs import sync_stock_list_job
 
-    # 盘后链路：默认周一至周五 15:30
-    post_market_cron = settings.scheduler_post_market_cron
-    parts = post_market_cron.split()
-    scheduler.add_job(
-        func=run_post_market_chain,
-        trigger=CronTrigger(
-            minute=parts[0],
-            hour=parts[1],
-            day=parts[2],
-            month=parts[3],
-            day_of_week=parts[4],
-            timezone="Asia/Shanghai",
-        ),
-        id="post_market_chain",
-        name="盘后链路",
-        replace_existing=True,
-    )
-    logger.info("注册任务：盘后链路 [%s]", post_market_cron)
+    # 自动数据更新任务：默认周一至周五 15:30（替换原有盘后链路任务）
+    if settings.auto_update_enabled:
+        auto_update_cron = settings.scheduler_auto_update_cron
+        parts = auto_update_cron.split()
+        scheduler.add_job(
+            func=auto_update_job,
+            trigger=CronTrigger(
+                minute=parts[0],
+                hour=parts[1],
+                day=parts[2],
+                month=parts[3],
+                day_of_week=parts[4],
+                timezone="Asia/Shanghai",
+            ),
+            id="auto_data_update",
+            name="自动数据更新",
+            replace_existing=True,
+        )
+        logger.info("注册任务：自动数据更新 [%s]", auto_update_cron)
+    else:
+        logger.info("自动数据更新已禁用（AUTO_UPDATE_ENABLED=false）")
 
     # 周末股票列表同步：默认周六 08:00
     stock_sync_cron = settings.scheduler_stock_sync_cron

@@ -31,6 +31,7 @@
 
 - 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层，批量写入自动适配 asyncpg 参数限制
 - 性能优化：优化连接池获取逻辑 + 批量并发同步，单股票同步 0.1 秒，日线同步性能提升 8-12 倍，全链路性能日志支持瓶颈分析
+- 自动数据更新：每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警（V1 记录日志，V2 接入企业微信/钉钉），基于 Redis 的任务状态管理
 - 数据完整性：启动时自动检测最近 N 天缺失的交易日数据并补齐（断点续传），支持手动补齐指定日期范围，支持 SKIP_INTEGRITY_CHECK 环境变量跳过检查
 - 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → 日线数据 → 技术指标）
 - 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），完整的关闭日志记录
@@ -49,6 +50,7 @@
 - **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
 - **性能优化：** 优化连接池获取逻辑（立即创建会话）+ 批量并发同步（asyncio.Semaphore）+ 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
+- **自动更新：** 数据嗅探 + 智能重试 + 任务状态管理（Redis）+ 通知报警（V1 日志，V2 企业微信/钉钉）
 - **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
 - **前端构建：** Vite 6 + pnpm
@@ -147,6 +149,9 @@ uv run python -m app.data.cli update-indicators
 - `DATA_INTEGRITY_CHECK_ENABLED` — 启动时是否检查数据完整性（默认 true）
 - `DATA_INTEGRITY_CHECK_DAYS` — 检查最近 N 天（默认 30）
 - `SKIP_INTEGRITY_CHECK` — 环境变量，跳过启动时检查
+- `AUTO_UPDATE_ENABLED` — 是否启用自动数据更新（默认 true）
+- `AUTO_UPDATE_PROBE_INTERVAL` — 嗅探间隔（默认 15 分钟）
+- `AUTO_UPDATE_PROBE_TIMEOUT` — 嗅探超时时间（默认 18:00）
 
 ## 目录结构（规划）
 
@@ -165,6 +170,7 @@ stock-selector/
 │   │   ├── pool.py           # BaoStock 连接池
 │   │   ├── batch.py          # 批量日线同步
 │   │   ├── adj_factor.py     # 复权因子批量更新
+│   │   ├── probe.py          # 数据嗅探（检测数据是否就绪）
 │   │   ├── etl.py            # ETL 清洗
 │   │   ├── cli.py            # 数据管理 CLI（含 backfill-daily 断点续传命令）
 │   │   └── manager.py        # DataManager（含 detect_missing_dates 方法）
@@ -188,7 +194,11 @@ stock-selector/
 │   │   └── pipeline_cache.py # 选股结果缓存
 │   ├── scheduler/            # 定时任务
 │   │   ├── core.py           # APScheduler 配置（含启动时数据完整性检查）
+│   │   ├── state.py          # 任务状态管理（基于 Redis）
+│   │   ├── auto_update.py    # 自动数据更新任务
 │   │   └── jobs.py           # APScheduler 任务
+│   ├── notification/         # 通知报警模块
+│   │   └── __init__.py       # NotificationManager（V1 日志，V2 企业微信/钉钉）
 │   └── api/                  # HTTP API
 │       ├── strategy.py       # 策略 API（未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
