@@ -6,9 +6,11 @@ set -e
 # 切换到项目目录
 cd /Users/adrian/Developer/Codes/stock-selector
 
-# 加载生产环境变量
+# 加载生产环境变量（过滤注释和空行）
 if [ -f .env.prod ]; then
-    export $(cat .env.prod | grep -v '^#' | xargs)
+    set -a
+    source <(cat .env.prod | grep -v '^#' | grep -v '^$' | sed 's/#.*$//')
+    set +a
 fi
 
 # 启动服务
