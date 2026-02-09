@@ -190,7 +190,7 @@ stock-selector/
 │   │   ├── core.py           # APScheduler 配置（含启动时数据完整性检查）
 │   │   └── jobs.py           # APScheduler 任务
 │   └── api/                  # HTTP API
-│       ├── strategy.py       # 策略 API
+│       ├── strategy.py       # 策略 API（未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
 │       └── data.py           # 数据查询 API
 ├── web/                      # 前端（React + TypeScript）

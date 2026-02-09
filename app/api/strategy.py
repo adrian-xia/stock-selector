@@ -7,6 +7,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from app.database import async_session_factory
 from app.strategy.factory import StrategyFactory
@@ -99,8 +100,19 @@ async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
             detail=f"未知策略：{invalid}，可用策略：{sorted(available)}",
         )
 
-    # 默认使用今天作为目标日期
-    target = req.target_date or date.today()
+    # 确定目标日期：优先使用用户指定日期，否则查询最近有数据的交易日
+    target = req.target_date
+    if target is None:
+        async with async_session_factory() as session:
+            latest = await session.execute(
+                text("SELECT MAX(trade_date) FROM stock_daily WHERE vol > 0")
+            )
+            target = latest.scalar()
+        if target is None:
+            raise HTTPException(
+                status_code=400,
+                detail="数据库中无日线数据，请先执行数据同步",
+            )
 
     result = await execute_pipeline(
         session_factory=async_session_factory,

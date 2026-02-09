@@ -158,7 +158,7 @@ SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app --reload
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/strategy/run` | 执行选股策略管道 |
+| POST | `/api/v1/strategy/run` | 执行选股策略管道（未指定日期时自动使用最近有数据的交易日） |
 | GET | `/api/v1/strategy/list` | 获取可用策略列表（支持按分类过滤） |
 | GET | `/api/v1/strategy/schema/{name}` | 获取策略参数元数据 |
 | POST | `/api/v1/backtest/run` | 执行回测并返回结果 |
