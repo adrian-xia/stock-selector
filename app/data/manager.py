@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 from sqlalchemy import select, text
@@ -65,17 +65,51 @@ class DataManager:
         if start_date is None:
             start_date = date(1990, 1, 1)
         if end_date is None:
-            end_date = date.today()
+            end_date = date.today() + timedelta(days=90)
 
         async with self._session_factory() as session:
             raw_rows = await self._primary_client.fetch_trade_calendar(
                 start_date, end_date
             )
             cleaned = clean_baostock_trade_calendar(raw_rows)
-            count = await batch_insert(
-                session, TradeCalendar.__table__, cleaned
-            )
-            logger.info("Trade calendar synced: %d records", count)
+
+            # 使用 ON CONFLICT DO UPDATE 确保数据更新，分批插入避免参数超限
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            count = 0
+            if cleaned:
+                # 每批最多 1000 条（3 列 * 1000 = 3000 参数）
+                batch_size = 1000
+                for i in range(0, len(cleaned), batch_size):
+                    batch = cleaned[i : i + batch_size]
+                    stmt = pg_insert(TradeCalendar.__table__).values(batch)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["cal_date", "exchange"],
+                        set_={"is_open": stmt.excluded.is_open}
+                    )
+                    await session.execute(stmt)
+                    count += len(batch)
+                await session.commit()
+
+            # 计算日期范围
+            if cleaned:
+                dates = [row["cal_date"] for row in cleaned]
+                min_date = min(dates)
+                max_date = max(dates)
+                logger.info(
+                    "Trade calendar synced: %d records (%s to %s)",
+                    count, min_date, max_date
+                )
+
+                # 检查未来覆盖是否充足
+                days_ahead = (max_date - date.today()).days
+                if days_ahead < 30:
+                    logger.warning(
+                        "Trade calendar coverage insufficient: max_date %s is only %d days ahead",
+                        max_date, days_ahead
+                    )
+            else:
+                logger.info("Trade calendar synced: %d records", count)
+
             return {"inserted": count}
 
     async def sync_daily(

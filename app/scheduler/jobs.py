@@ -35,7 +35,7 @@ def _build_manager() -> DataManager:
 
 
 async def run_post_market_chain(target_date: date | None = None) -> None:
-    """盘后链路：交易日校验 → 日线同步 → 技术指标 → 缓存刷新 → 策略管道。
+    """盘后链路：交易日历更新 → 交易日校验 → 日线同步 → 技术指标 → 缓存刷新 → 策略管道。
 
     任一关键步骤失败则中断链路，缓存刷新失败不阻断。
 
@@ -46,8 +46,24 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     chain_start = time.monotonic()
     logger.info("===== [盘后链路] 开始：%s =====", target)
 
-    # 交易日校验
+    # 步骤 0：交易日历更新（非关键，失败不阻断）
     manager = _build_manager()
+    calendar_start = time.monotonic()
+    try:
+        calendar_result = await manager.sync_trade_calendar()
+        calendar_elapsed = time.monotonic() - calendar_start
+        logger.info(
+            "[交易日历更新] 完成：%s，耗时 %.2fs",
+            calendar_result, calendar_elapsed
+        )
+    except Exception:
+        calendar_elapsed = time.monotonic() - calendar_start
+        logger.warning(
+            "[交易日历更新] 失败（继续执行后续步骤），耗时 %.2fs\n%s",
+            calendar_elapsed, traceback.format_exc()
+        )
+
+    # 交易日校验
     is_trading = await manager.is_trade_day(target)
     if not is_trading:
         logger.info("[盘后链路] 非交易日，跳过：%s", target)
@@ -193,7 +209,17 @@ async def pipeline_step(target_date: date) -> None:
 
 async def sync_stock_list_job() -> None:
     """周末股票列表全量同步。"""
-    logger.info("[股票列表同步] 开始")
     manager = _build_manager()
+
+    # 步骤 1：更新交易日历
+    logger.info("[交易日历更新] 开始")
+    try:
+        calendar_result = await manager.sync_trade_calendar()
+        logger.info("[交易日历更新] 完成：%s", calendar_result)
+    except Exception:
+        logger.error("[交易日历更新] 失败，继续执行股票列表同步\n%s", traceback.format_exc())
+
+    # 步骤 2：同步股票列表
+    logger.info("[股票列表同步] 开始")
     result = await manager.sync_stock_list()
     logger.info("[股票列表同步] 完成：%s", result)

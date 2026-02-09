@@ -159,10 +159,12 @@ def clean_baostock_trade_calendar(raw_rows: list[dict]) -> list[dict]:
         cal_date = parse_date(raw.get("cal_date"))
         if cal_date is None:
             continue
+        # BaoStockClient 已经将 is_open 转换为布尔值
+        is_open = raw.get("is_open", False)
         cleaned.append({
             "cal_date": cal_date,
             "exchange": "SSE",
-            "is_open": bool(raw.get("is_open", False)),
+            "is_open": is_open if isinstance(is_open, bool) else is_open == "1",
         })
     return cleaned
 
