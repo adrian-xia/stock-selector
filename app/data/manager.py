@@ -879,11 +879,13 @@ class DataManager:
             batch_end = min(current_start + timedelta(days=batch_days - 1), end_date)
             try:
                 result = await self.sync_daily(code, current_start, batch_end)
-                # 在同一事务中更新 data_date
-                await self.update_data_progress(code, batch_end)
+                inserted = result.get("inserted", 0)
+                # 仅在实际写入数据时推进 data_date
+                if inserted > 0:
+                    await self.update_data_progress(code, batch_end)
                 logger.debug(
                     "[batch_sync] %s: %s ~ %s 完成，写入 %d 条",
-                    code, current_start, batch_end, result.get("inserted", 0),
+                    code, current_start, batch_end, inserted,
                 )
             except Exception as e:
                 logger.warning(
@@ -945,8 +947,7 @@ class DataManager:
                     rows = result.scalars().all()
 
                 if not rows:
-                    logger.debug("[batch_indicator] %s: %s ~ %s 无数据", code, current_start, batch_end)
-                    await self.update_indicator_progress(code, batch_end)
+                    logger.debug("[batch_indicator] %s: %s ~ %s 无日线数据，跳过指标计算", code, current_start, batch_end)
                     current_start = batch_end + timedelta(days=1)
                     continue
 
@@ -982,7 +983,11 @@ class DataManager:
                         await self.update_indicator_progress(code, batch_end, session=session)
                         await session.commit()
                 else:
-                    await self.update_indicator_progress(code, batch_end)
+                    # target_rows 为空说明该批次无需计算指标，不推进 indicator_date
+                    logger.debug(
+                        "[batch_indicator] %s: %s ~ %s 无目标行，跳过",
+                        code, current_start, batch_end,
+                    )
 
                 logger.debug(
                     "[batch_indicator] %s: %s ~ %s 完成，写入 %d 条指标",

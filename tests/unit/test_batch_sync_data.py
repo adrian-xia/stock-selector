@@ -47,7 +47,21 @@ class TestSyncStockDataInBatches:
 
         # 2025-01-01 ~ 2025-12-31 (365天), 2026-01-01 ~ 2026-02-13
         assert mgr.sync_daily.call_count == 2
+        # 两批都有数据（inserted=5），所以都推进 data_date
         assert mgr.update_data_progress.call_count == 2
+
+    async def test_zero_inserted_skips_progress(self) -> None:
+        """写入 0 条时不推进 data_date（防止虚标）。"""
+        mgr = _make_manager()
+        mgr.sync_daily = AsyncMock(return_value={"inserted": 0})
+        mgr.update_data_progress = AsyncMock()
+        mgr.update_stock_status = AsyncMock()
+
+        await mgr.sync_stock_data_in_batches(
+            "600519.SH", date(2026, 1, 1), date(2026, 1, 30)
+        )
+
+        mgr.update_data_progress.assert_not_called()
 
     async def test_failure_marks_failed(self) -> None:
         """单批失败时标记 status='failed' 并抛出异常。"""

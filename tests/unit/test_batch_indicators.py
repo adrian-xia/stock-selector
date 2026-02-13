@@ -21,8 +21,8 @@ def _make_manager_with_session(mock_session):
 class TestComputeIndicatorsInBatches:
     """测试 compute_indicators_in_batches()。"""
 
-    async def test_no_data_updates_progress(self) -> None:
-        """无数据时仍更新 indicator_date。"""
+    async def test_no_data_skips_progress(self) -> None:
+        """无日线数据时不推进 indicator_date（防止虚标）。"""
         mock_session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
@@ -36,7 +36,7 @@ class TestComputeIndicatorsInBatches:
             "600519.SH", date(2026, 1, 1), date(2026, 1, 30)
         )
 
-        mgr.update_indicator_progress.assert_called_once_with("600519.SH", date(2026, 1, 30))
+        mgr.update_indicator_progress.assert_not_called()
 
     async def test_failure_marks_failed(self) -> None:
         """计算失败时标记 status='failed'。"""
