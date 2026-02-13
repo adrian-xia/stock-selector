@@ -1,6 +1,7 @@
 """调度器核心：创建、配置、启动和停止 APScheduler。"""
 
 import logging
+import time
 from datetime import date, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -42,7 +43,7 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         scheduler: APScheduler 实例
     """
     from app.scheduler.auto_update import auto_update_job
-    from app.scheduler.jobs import sync_stock_list_job
+    from app.scheduler.jobs import retry_failed_stocks_job, sync_stock_list_job
 
     # 自动数据更新任务：默认周一至周五 15:30（替换原有盘后链路任务）
     if settings.auto_update_enabled:
@@ -66,6 +67,25 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     else:
         logger.info("自动数据更新已禁用（AUTO_UPDATE_ENABLED=false）")
 
+    # 失败重试任务：默认周一至周五 20:00
+    retry_cron = settings.sync_failure_retry_cron
+    parts = retry_cron.split()
+    scheduler.add_job(
+        func=retry_failed_stocks_job,
+        trigger=CronTrigger(
+            minute=parts[0],
+            hour=parts[1],
+            day=parts[2],
+            month=parts[3],
+            day_of_week=parts[4],
+            timezone="Asia/Shanghai",
+        ),
+        id="retry_failed_stocks",
+        name="失败股票重试",
+        replace_existing=True,
+    )
+    logger.info("注册任务：失败股票重试 [%s]", retry_cron)
+
     # 周末股票列表同步：默认周六 08:00
     stock_sync_cron = settings.scheduler_stock_sync_cron
     parts = stock_sync_cron.split()
@@ -86,35 +106,64 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("注册任务：股票列表同步 [%s]", stock_sync_cron)
 
 
-async def check_data_integrity(skip_check: bool = False) -> None:
-    """启动时数据完整性检查，自动补齐缺失的交易日数据。
-
-    检查最近 N 天（由 DATA_INTEGRITY_CHECK_DAYS 配置）的数据完整性，
-    如果发现缺失的交易日，自动调用批量同步补齐。
-
-    Args:
-        skip_check: 是否跳过检查（通过 --skip-integrity-check 参数传入）
-    """
-    # 检查是否启用
-    if not settings.data_integrity_check_enabled or skip_check:
-        if skip_check:
-            logger.info("[数据完整性检查] 已跳过（--skip-integrity-check）")
-        else:
-            logger.info("[数据完整性检查] 已禁用（DATA_INTEGRITY_CHECK_ENABLED=false）")
+async def sync_stock_list_on_startup() -> None:
+    """启动时更新股票列表（可配置跳过）。"""
+    if not settings.sync_stock_list_on_startup:
+        logger.info("[启动] 跳过股票列表更新（SYNC_STOCK_LIST_ON_STARTUP=false）")
         return
 
-    logger.info("[数据完整性检查] 开始检查最近 %d 天数据", settings.data_integrity_check_days)
-
+    start = time.monotonic()
     try:
-        # 导入依赖（延迟导入避免循环依赖）
         from app.data.akshare import AKShareClient
         from app.data.baostock import BaoStockClient
-        from app.data.batch import batch_sync_daily
         from app.data.manager import DataManager
         from app.data.pool import get_pool
         from app.database import async_session_factory
 
-        # 构建 DataManager
+        pool = get_pool()
+        clients = {
+            "baostock": BaoStockClient(connection_pool=pool),
+            "akshare": AKShareClient(),
+        }
+        manager = DataManager(
+            session_factory=async_session_factory,
+            clients=clients,
+            primary="baostock",
+        )
+        result = await manager.sync_stock_list()
+        elapsed = time.monotonic() - start
+        logger.info("[启动] 股票列表更新完成：%s，耗时 %.1fs", result, elapsed)
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        logger.warning("[启动] 股票列表更新失败（耗时 %.1fs）: %s", elapsed, e)
+
+
+async def sync_from_progress(skip_check: bool = False) -> None:
+    """启动时基于进度表恢复同步（替代旧的 check_data_integrity）。
+
+    流程：获取同步锁 → reset_stale_status → 初始化进度表 →
+    同步退市状态 → 查询待处理股票 → 批量处理 → 完成率日志 → 释放锁
+
+    Args:
+        skip_check: 是否跳过检查
+    """
+    if not settings.data_integrity_check_enabled or skip_check:
+        if skip_check:
+            logger.info("[启动同步] 已跳过（--skip-integrity-check）")
+        else:
+            logger.info("[启动同步] 已禁用（DATA_INTEGRITY_CHECK_ENABLED=false）")
+        return
+
+    start = time.monotonic()
+    logger.info("[启动同步] 开始基于进度表恢复同步")
+
+    try:
+        from app.data.akshare import AKShareClient
+        from app.data.baostock import BaoStockClient
+        from app.data.manager import DataManager
+        from app.data.pool import get_pool
+        from app.database import async_session_factory
+
         pool = get_pool()
         clients = {
             "baostock": BaoStockClient(connection_pool=pool),
@@ -126,53 +175,59 @@ async def check_data_integrity(skip_check: bool = False) -> None:
             primary="baostock",
         )
 
-        # 计算检查日期范围：最近 N 天
-        end_date = date.today()
-        start_date = end_date - timedelta(days=settings.data_integrity_check_days)
-
-        # 检测缺失日期
-        missing_dates = await manager.detect_missing_dates(start_date, end_date)
-
-        if not missing_dates:
-            logger.info("[数据完整性检查] 最近 %d 天数据完整", settings.data_integrity_check_days)
+        # 获取同步锁
+        if not await manager.acquire_sync_lock():
+            logger.warning("[启动同步] 同步锁被占用，跳过")
             return
 
-        logger.warning(
-            "[数据完整性检查] 发现 %d 个缺失交易日，开始自动补齐：%s",
-            len(missing_dates),
-            [d.isoformat() for d in missing_dates[:5]] + (["..."] if len(missing_dates) > 5 else []),
-        )
+        try:
+            # 重置 stale 状态
+            stale_count = await manager.reset_stale_status()
 
-        # 获取所有上市股票
-        stocks = await manager.get_stock_list(status="L")
-        stock_codes = [s["ts_code"] for s in stocks]
+            # 初始化进度表
+            init_result = await manager.init_sync_progress()
 
-        # 逐个缺失日期补齐
-        for missing_date in missing_dates:
-            logger.info("[数据完整性检查] 补齐日期：%s", missing_date)
-            try:
-                result = await batch_sync_daily(
-                    session_factory=async_session_factory,
-                    stock_codes=stock_codes,
-                    target_date=missing_date,
-                    connection_pool=pool,
-                )
+            # 同步退市状态
+            delisted_result = await manager.sync_delisted_status()
+
+            # 查询待处理股票
+            target_date = date.today()
+            needing_sync = await manager.get_stocks_needing_sync(target_date)
+
+            if not needing_sync:
+                summary = await manager.get_sync_summary(target_date)
+                elapsed = time.monotonic() - start
                 logger.info(
-                    "[数据完整性检查] 日期 %s 补齐完成：成功 %d 只，失败 %d 只",
-                    missing_date, result["success"], result["failed"],
+                    "[启动同步] 无需同步，完成率 %.1f%%，耗时 %.1fs",
+                    summary["completion_rate"] * 100, elapsed,
                 )
-            except Exception as e:
-                logger.error(
-                    "[数据完整性检查] 日期 %s 补齐失败：%s",
-                    missing_date, e,
-                )
-                # 继续补齐其他日期，不中断
+                return
 
-        logger.info("[数据完整性检查] 完成，共补齐 %d 个交易日", len(missing_dates))
+            logger.info("[启动同步] 待同步股票 %d 只", len(needing_sync))
+
+            # 批量处理
+            await manager.process_stocks_batch(
+                needing_sync,
+                target_date,
+                concurrency=settings.daily_sync_concurrency,
+                timeout=settings.sync_batch_timeout,
+            )
+
+            # 完成率日志
+            summary = await manager.get_sync_summary(target_date)
+            elapsed = time.monotonic() - start
+            logger.info(
+                "[启动同步] 完成：完成率 %.1f%%（%d/%d），失败 %d，耗时 %.1fs",
+                summary["completion_rate"] * 100,
+                summary["data_done"], summary["total"],
+                summary["failed"], elapsed,
+            )
+        finally:
+            await manager.release_sync_lock()
 
     except Exception as e:
-        logger.error("[数据完整性检查] 检查失败：%s", e, exc_info=True)
-        # 检查失败不阻断调度器启动
+        elapsed = time.monotonic() - start
+        logger.error("[启动同步] 失败（耗时 %.1fs）: %s", elapsed, e, exc_info=True)
 
 
 async def start_scheduler(skip_integrity_check: bool = False) -> None:
@@ -183,8 +238,11 @@ async def start_scheduler(skip_integrity_check: bool = False) -> None:
     """
     global _scheduler
 
-    # 启动前数据完整性检查
-    await check_data_integrity(skip_check=skip_integrity_check)
+    # 启动时更新股票列表
+    await sync_stock_list_on_startup()
+
+    # 基于进度表恢复同步
+    await sync_from_progress(skip_check=skip_integrity_check)
 
     # 创建并启动调度器
     _scheduler = create_scheduler()

@@ -6,12 +6,18 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
+from app.config import settings
 from app.models import Base
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# 从 app.config.settings 读取数据库 URL，确保与应用使用同一配置源
+# 将 asyncpg 驱动替换为同步驱动（alembic 使用同步连接）
+sync_database_url = settings.database_url.replace("+asyncpg", "")
+config.set_main_option("sqlalchemy.url", sync_database_url)
 
 target_metadata = Base.metadata
 

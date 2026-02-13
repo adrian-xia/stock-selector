@@ -5,8 +5,10 @@ from sqlalchemy import (
     Date,
     DateTime,
     Index,
+    Integer,
     Numeric,
     String,
+    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -35,6 +37,7 @@ class Stock(Base):
     industry: Mapped[str | None] = mapped_column(String(50), nullable=True)
     market: Mapped[str | None] = mapped_column(String(16), nullable=True)
     list_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    delist_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     list_status: Mapped[str] = mapped_column(String(4), default="L")
     is_hs: Mapped[str | None] = mapped_column(String(4), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
@@ -86,3 +89,36 @@ class StockMin(Base):
     amount: Mapped[float] = mapped_column(Numeric(20, 2), default=0)
     data_source: Mapped[str] = mapped_column(String(16), default="baostock")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class StockSyncProgress(Base):
+    """股票同步进度表（累积模型）。
+
+    每只股票一条记录，追踪数据和指标分别同步到哪一天。
+    status 支持 idle/syncing/computing/failed/delisted 五种状态。
+    """
+
+    __tablename__ = "stock_sync_progress"
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    # 数据同步进度：已同步到的最新日期，1900-01-01 表示从未同步
+    data_date: Mapped[date] = mapped_column(
+        Date, nullable=False, server_default="1900-01-01"
+    )
+    # 指标计算进度：已计算到的最新日期，1900-01-01 表示从未计算
+    indicator_date: Mapped[date] = mapped_column(
+        Date, nullable=False, server_default="1900-01-01"
+    )
+    # 当前状态：idle/syncing/computing/failed/delisted
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="idle"
+    )
+    # 失败重试次数
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    # 最近一次错误信息
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

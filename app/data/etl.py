@@ -139,6 +139,7 @@ def clean_baostock_stock_list(raw_rows: list[dict]) -> list[dict]:
         if not ts_code:
             continue
         list_date = parse_date(raw.get("list_date"))
+        delist_date = parse_date(raw.get("delist_date"))
         cleaned.append({
             "ts_code": ts_code,
             "symbol": raw.get("symbol", ts_code.split(".")[0]),
@@ -147,6 +148,7 @@ def clean_baostock_stock_list(raw_rows: list[dict]) -> list[dict]:
             "industry": raw.get("industry", ""),
             "market": raw.get("market", ""),
             "list_date": list_date,
+            "delist_date": delist_date,
             "list_status": raw.get("list_status", "L"),
         })
     return cleaned

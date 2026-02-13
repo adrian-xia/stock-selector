@@ -54,49 +54,59 @@ class TestPostMarketChainWithCache:
 
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.indicator_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.sync_daily_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
-    async def test_cache_refresh_called_between_indicator_and_pipeline(
+    async def test_cache_refresh_called_before_pipeline(
         self,
         mock_build: AsyncMock,
-        mock_sync: AsyncMock,
-        mock_indicator: AsyncMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
     ) -> None:
-        """缓存刷新应在技术指标和策略管道之间执行。"""
+        """缓存刷新应在策略管道之前执行。"""
         mock_mgr = AsyncMock()
         mock_mgr.is_trade_day.return_value = True
+        mock_mgr.acquire_sync_lock.return_value = True
+        mock_mgr.sync_stock_list.return_value = {"inserted": 0, "updated": 0}
+        mock_mgr.reset_stale_status.return_value = 0
+        mock_mgr.init_sync_progress.return_value = {"inserted": 0}
+        mock_mgr.sync_delisted_status.return_value = {"updated": 0}
+        mock_mgr.get_stocks_needing_sync.return_value = []
+        mock_mgr.get_sync_summary.return_value = {
+            "total": 100, "data_done": 100, "indicator_done": 100,
+            "failed": 0, "completion_rate": 1.0,
+        }
         mock_build.return_value = mock_mgr
 
         target = date(2026, 2, 7)
         await run_post_market_chain(target)
 
-        mock_indicator.assert_called_once_with(target)
         mock_cache.assert_called_once_with(target)
         mock_pipeline.assert_called_once_with(target)
 
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.indicator_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.sync_daily_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
     async def test_pipeline_runs_even_if_cache_refresh_fails(
         self,
         mock_build: AsyncMock,
-        mock_sync: AsyncMock,
-        mock_indicator: AsyncMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
     ) -> None:
         """缓存刷新失败不应阻断策略管道。"""
         mock_mgr = AsyncMock()
         mock_mgr.is_trade_day.return_value = True
+        mock_mgr.acquire_sync_lock.return_value = True
+        mock_mgr.sync_stock_list.return_value = {"inserted": 0, "updated": 0}
+        mock_mgr.reset_stale_status.return_value = 0
+        mock_mgr.init_sync_progress.return_value = {"inserted": 0}
+        mock_mgr.sync_delisted_status.return_value = {"updated": 0}
+        mock_mgr.get_stocks_needing_sync.return_value = []
+        mock_mgr.get_sync_summary.return_value = {
+            "total": 100, "data_done": 100, "indicator_done": 100,
+            "failed": 0, "completion_rate": 1.0,
+        }
         mock_build.return_value = mock_mgr
 
         # cache_refresh_step 内部已捕获异常，不会向外抛出
-        # 这里模拟它正常返回（因为内部已处理异常）
         mock_cache.return_value = None
 
         target = date(2026, 2, 7)

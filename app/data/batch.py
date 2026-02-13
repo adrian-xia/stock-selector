@@ -46,6 +46,7 @@ async def batch_sync_daily(
     connection_pool: BaoStockConnectionPool | None = None,
     batch_size: int | None = None,
     concurrency: int | None = None,
+    manager: DataManager | None = None,
 ) -> dict[str, Any]:
     """批量同步多只股票的日线数据。
 
@@ -56,6 +57,7 @@ async def batch_sync_daily(
         connection_pool: BaoStock 连接池（可选）
         batch_size: 每批股票数（默认从配置读取）
         concurrency: 并发数（默认从配置读取）
+        manager: DataManager 实例（可选，传入则复用，避免重复创建）
 
     Returns:
         dict 包含同步结果统计：
@@ -78,13 +80,14 @@ async def batch_sync_daily(
         target_date, total, batch_size, concurrency,
     )
 
-    # 创建 DataManager（使用连接池）
-    client = BaoStockClient(connection_pool=connection_pool)
-    manager = DataManager(
-        session_factory=session_factory,
-        clients={"baostock": client},
-        primary="baostock",
-    )
+    # 复用传入的 manager 或创建新的
+    if manager is None:
+        client = BaoStockClient(connection_pool=connection_pool)
+        manager = DataManager(
+            session_factory=session_factory,
+            clients={"baostock": client},
+            primary="baostock",
+        )
 
     # 分批处理
     batches = [

@@ -13,8 +13,6 @@ async def test_trade_calendar_update_success():
     target = date(2026, 2, 10)
 
     with patch("app.scheduler.jobs._build_manager") as mock_build_manager, \
-         patch("app.scheduler.jobs.sync_daily_step") as mock_sync_daily, \
-         patch("app.scheduler.jobs.indicator_step") as mock_indicator, \
          patch("app.scheduler.jobs.cache_refresh_step") as mock_cache, \
          patch("app.scheduler.jobs.pipeline_step") as mock_pipeline:
 
@@ -22,22 +20,26 @@ async def test_trade_calendar_update_success():
         mock_manager = AsyncMock()
         mock_manager.sync_trade_calendar.return_value = {"inserted": 100}
         mock_manager.is_trade_day.return_value = True
+        mock_manager.acquire_sync_lock.return_value = True
+        mock_manager.sync_stock_list.return_value = {"inserted": 0, "updated": 0}
+        mock_manager.reset_stale_status.return_value = 0
+        mock_manager.init_sync_progress.return_value = {"inserted": 0}
+        mock_manager.sync_delisted_status.return_value = {"updated": 0}
+        mock_manager.get_stocks_needing_sync.return_value = []
+        mock_manager.get_sync_summary.return_value = {
+            "total": 100, "data_done": 100, "indicator_done": 100,
+            "failed": 0, "completion_rate": 1.0,
+        }
         mock_build_manager.return_value = mock_manager
 
-        # 模拟其他步骤
-        mock_sync_daily.return_value = None
-        mock_indicator.return_value = None
         mock_cache.return_value = None
         mock_pipeline.return_value = None
 
-        # 执行盘后链路
         await run_post_market_chain(target)
 
         # 验证交易日历更新被调用
         mock_manager.sync_trade_calendar.assert_called_once()
-        # 验证后续步骤正常执行
         mock_manager.is_trade_day.assert_called_once_with(target)
-        mock_sync_daily.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -46,32 +48,34 @@ async def test_trade_calendar_update_failure_not_blocking():
     target = date(2026, 2, 10)
 
     with patch("app.scheduler.jobs._build_manager") as mock_build_manager, \
-         patch("app.scheduler.jobs.sync_daily_step") as mock_sync_daily, \
-         patch("app.scheduler.jobs.indicator_step") as mock_indicator, \
          patch("app.scheduler.jobs.cache_refresh_step") as mock_cache, \
          patch("app.scheduler.jobs.pipeline_step") as mock_pipeline:
 
-        # 模拟 DataManager
         mock_manager = AsyncMock()
         mock_manager.sync_trade_calendar.side_effect = Exception("BaoStock API error")
         mock_manager.is_trade_day.return_value = True
+        mock_manager.acquire_sync_lock.return_value = True
+        mock_manager.sync_stock_list.return_value = {"inserted": 0, "updated": 0}
+        mock_manager.reset_stale_status.return_value = 0
+        mock_manager.init_sync_progress.return_value = {"inserted": 0}
+        mock_manager.sync_delisted_status.return_value = {"updated": 0}
+        mock_manager.get_stocks_needing_sync.return_value = []
+        mock_manager.get_sync_summary.return_value = {
+            "total": 100, "data_done": 100, "indicator_done": 100,
+            "failed": 0, "completion_rate": 1.0,
+        }
         mock_build_manager.return_value = mock_manager
 
-        # 模拟其他步骤
-        mock_sync_daily.return_value = None
-        mock_indicator.return_value = None
         mock_cache.return_value = None
         mock_pipeline.return_value = None
 
-        # 执行盘后链路（不应抛出异常）
+        # 不应抛出异常
         await run_post_market_chain(target)
 
         # 验证交易日历更新被调用
         mock_manager.sync_trade_calendar.assert_called_once()
-        # 验证后续步骤仍然执行
-        mock_manager.is_trade_day.assert_called_once_with(target)
-        mock_sync_daily.assert_called_once()
-        mock_indicator.assert_called_once()
+        # 验证后续步骤仍然执行（获取锁、初始化进度等）
+        mock_manager.acquire_sync_lock.assert_called_once()
         mock_pipeline.assert_called_once()
 
 
@@ -82,7 +86,6 @@ async def test_trade_calendar_update_before_trade_day_check():
     call_order = []
 
     with patch("app.scheduler.jobs._build_manager") as mock_build_manager:
-        # 模拟 DataManager
         mock_manager = AsyncMock()
 
         async def sync_calendar_side_effect():
@@ -97,7 +100,6 @@ async def test_trade_calendar_update_before_trade_day_check():
         mock_manager.is_trade_day.side_effect = is_trade_day_side_effect
         mock_build_manager.return_value = mock_manager
 
-        # 执行盘后链路
         await run_post_market_chain(target)
 
         # 验证调用顺序

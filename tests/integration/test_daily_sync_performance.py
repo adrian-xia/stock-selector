@@ -23,7 +23,6 @@ import pytest
 from app.data.batch import batch_sync_daily
 from app.data.pool import BaoStockConnectionPool, close_pool, get_pool
 from app.database import async_session_factory
-from app.scheduler.jobs import sync_daily_step
 
 # 默认跳过集成测试，除非显式启用
 pytestmark = pytest.mark.skipif(

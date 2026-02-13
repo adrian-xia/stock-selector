@@ -18,7 +18,7 @@ from app.data.manager import DataManager
 from app.data.pool import get_pool
 from app.database import async_session_factory
 from app.logger import setup_logging
-from app.scheduler.core import check_data_integrity
+from app.scheduler.core import sync_from_progress
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +74,11 @@ async def test_startup_integrity_check():
     print(f"  - DATA_INTEGRITY_CHECK_DAYS: {settings.data_integrity_check_days}")
 
     print("\n执行启动时检查（不跳过）...")
-    await check_data_integrity(skip_check=False)
+    await sync_from_progress(skip_check=False)
     print("✓ 启动时检查完成")
 
     print("\n执行启动时检查（跳过）...")
-    await check_data_integrity(skip_check=True)
+    await sync_from_progress(skip_check=True)
     print("✓ 跳过检查完成")
 
 
