@@ -69,7 +69,9 @@ def upgrade() -> None:
                existing_type=postgresql.TIMESTAMP(),
                nullable=False,
                existing_server_default=sa.text('now()'))
+    op.drop_index(op.f('idx_stock_daily_code_date'), table_name='stock_daily')
     op.create_index('idx_stock_daily_code_date', 'stock_daily', ['ts_code', 'trade_date'], unique=False, postgresql_ops={'trade_date': 'DESC'})
+    op.drop_index(op.f('idx_stock_daily_trade_date'), table_name='stock_daily')
     op.create_index('idx_stock_daily_trade_date', 'stock_daily', ['trade_date'], unique=False)
     op.alter_column('stock_min', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
