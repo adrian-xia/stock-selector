@@ -238,6 +238,17 @@ async def start_scheduler(skip_integrity_check: bool = False) -> None:
     """
     global _scheduler
 
+    # 启动时清除旧的同步锁（避免上次异常退出残留的锁阻塞同步）
+    from app.cache.redis_client import get_redis
+
+    try:
+        redis = await get_redis()
+        if redis:
+            await redis.delete("stock_selector:sync_lock")
+            logger.info("[启动] 已清除旧的同步锁")
+    except Exception as e:
+        logger.warning("[启动] 清除同步锁失败（可忽略）: %s", e)
+
     # 启动时更新股票列表
     await sync_stock_list_on_startup()
 
