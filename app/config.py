@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -7,7 +8,10 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parent.parent / ".env"),
+        env_file=os.environ.get(
+            "APP_ENV_FILE",
+            str(Path(__file__).resolve().parent.parent / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -75,6 +79,16 @@ class Settings(BaseSettings):
     ]
     auto_update_probe_threshold: float = 0.8            # 嗅探成功阈值（80%样本有数据）
     scheduler_auto_update_cron: str = "30 15 * * 1-5"  # 自动更新任务触发时间（周一至周五 15:30）
+
+    # --- Sync Progress (累积进度追踪) ---
+    data_start_date: str = "2024-01-01"               # 历史数据起始日期（新股首次同步从此日期开始）
+    sync_stock_list_on_startup: bool = True            # 启动时是否自动更新股票列表
+    batch_sync_max_retries: int = 3                    # 失败股票最大重试次数
+    data_completeness_threshold: float = 0.95          # 数据完成率阈值（低于此值跳过策略计算）
+    sync_batch_days: int = 365                         # 批量同步每批天数
+    sync_batch_timeout: int = 14400                    # 批量同步整体超时（秒，默认 4 小时）
+    sync_failure_retry_cron: str = "0 20 * * 1-5"     # 失败重试定时任务（周一至周五 20:00）
+    pipeline_completeness_deadline: str = "18:00"      # 完整性告警截止时间
 
     # --- AI (Gemini) ---
     gemini_api_key: str = ""                    # 为空则 AI 分析不启用

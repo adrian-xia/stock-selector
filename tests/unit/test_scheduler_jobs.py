@@ -5,15 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.scheduler.jobs import run_post_market_chain, sync_daily_step
-
-
-# Mock batch_sync_daily 避免真实连接池和数据库操作
-@pytest.fixture(autouse=True)
-def mock_batch_sync():
-    with patch("app.scheduler.jobs.batch_sync_daily") as mock:
-        mock.return_value = {"success": 0, "failed": 0, "failed_codes": [], "elapsed_seconds": 0.1}
-        yield mock
+from app.scheduler.jobs import run_post_market_chain, retry_failed_stocks_job
 
 
 class TestRunPostMarketChain:
@@ -31,84 +23,86 @@ class TestRunPostMarketChain:
         await run_post_market_chain(date(2024, 1, 6))  # 周六
 
         mock_mgr.is_trade_day.assert_called_once_with(date(2024, 1, 6))
-        # 不应调用任何同步方法
-        mock_mgr.get_stock_list.assert_not_called()
+        # 不应获取同步锁
+        mock_mgr.acquire_sync_lock.assert_not_called()
 
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.indicator_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.sync_daily_step", new_callable=AsyncMock)
+    @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
     async def test_full_chain_on_trading_day(
         self,
         mock_build: MagicMock,
-        mock_sync: AsyncMock,
-        mock_indicator: AsyncMock,
+        mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
     ) -> None:
-        """交易日应按顺序执行全部步骤。"""
+        """交易日应按顺序执行全部步骤（含完整性门控通过）。"""
         mock_mgr = AsyncMock()
         mock_mgr.is_trade_day.return_value = True
+        mock_mgr.acquire_sync_lock.return_value = True
+        mock_mgr.sync_stock_list.return_value = {"inserted": 0, "updated": 0}
+        mock_mgr.reset_stale_status.return_value = 0
+        mock_mgr.init_sync_progress.return_value = {"inserted": 0}
+        mock_mgr.sync_delisted_status.return_value = {"updated": 0}
+        mock_mgr.get_stocks_needing_sync.return_value = ["600519.SH"]
+        mock_mgr.get_sync_summary.return_value = {
+            "total": 100, "data_done": 98, "indicator_done": 98,
+            "failed": 0, "completion_rate": 0.98,
+        }
         mock_build.return_value = mock_mgr
 
-        target = date(2024, 1, 8)  # 周一
+        target = date(2024, 1, 8)
         await run_post_market_chain(target)
 
-        mock_sync.assert_called_once()
-        mock_indicator.assert_called_once_with(target)
+        mock_mgr.acquire_sync_lock.assert_called_once()
+        mock_mgr.reset_stale_status.assert_called_once()
+        mock_mgr.init_sync_progress.assert_called_once()
+        mock_mgr.sync_delisted_status.assert_called_once()
+        mock_mgr.process_stocks_batch.assert_called_once()
         mock_pipeline.assert_called_once_with(target)
+        mock_mgr.release_sync_lock.assert_called_once()
 
-    @patch("app.scheduler.jobs.indicator_step", new_callable=AsyncMock)
-    @patch("app.scheduler.jobs.sync_daily_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
-    async def test_chain_stops_on_sync_failure(
-        self,
-        mock_build: MagicMock,
-        mock_sync: AsyncMock,
-        mock_indicator: AsyncMock,
+    async def test_skip_when_lock_occupied(
+        self, mock_build: MagicMock
     ) -> None:
-        """日线同步失败时应中断链路，不执行后续步骤。"""
+        """同步锁被占用时应跳过。"""
         mock_mgr = AsyncMock()
         mock_mgr.is_trade_day.return_value = True
+        mock_mgr.acquire_sync_lock.return_value = False
         mock_build.return_value = mock_mgr
-
-        mock_sync.side_effect = RuntimeError("sync failed")
 
         await run_post_market_chain(date(2024, 1, 8))
 
-        mock_sync.assert_called_once()
-        # indicator_step 不应被调用
-        mock_indicator.assert_not_called()
+        mock_mgr.acquire_sync_lock.assert_called_once()
+        # 不应执行后续步骤
+        mock_mgr.reset_stale_status.assert_not_called()
 
-
-class TestSyncDailyStep:
-    """测试日线同步步骤。"""
-
-    async def test_sync_all_stocks(self, mock_batch_sync: MagicMock) -> None:
-        """应批量同步所有上市股票。"""
+    @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
+    @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
+    @patch("app.scheduler.jobs._build_manager")
+    async def test_skip_strategy_when_below_threshold(
+        self,
+        mock_build: MagicMock,
+        mock_cache: AsyncMock,
+        mock_pipeline: AsyncMock,
+    ) -> None:
+        """完成率低于阈值时应跳过策略执行。"""
         mock_mgr = AsyncMock()
-        mock_mgr.get_stock_list.return_value = [
-            {"ts_code": "600519.SH", "name": "贵州茅台"},
-            {"ts_code": "000858.SZ", "name": "五粮液"},
-        ]
+        mock_mgr.is_trade_day.return_value = True
+        mock_mgr.acquire_sync_lock.return_value = True
+        mock_mgr.sync_stock_list.return_value = {"inserted": 0, "updated": 0}
+        mock_mgr.reset_stale_status.return_value = 0
+        mock_mgr.init_sync_progress.return_value = {"inserted": 0}
+        mock_mgr.sync_delisted_status.return_value = {"updated": 0}
+        mock_mgr.get_stocks_needing_sync.return_value = []
+        mock_mgr.get_sync_summary.return_value = {
+            "total": 100, "data_done": 80, "indicator_done": 80,
+            "failed": 20, "completion_rate": 0.80,
+        }
+        mock_build.return_value = mock_mgr
 
-        mock_batch_sync.return_value = {"success": 2, "failed": 0, "failed_codes": [], "elapsed_seconds": 1.5}
+        await run_post_market_chain(date(2024, 1, 8))
 
-        await sync_daily_step(date(2024, 1, 8), manager=mock_mgr)
-
-        mock_batch_sync.assert_called_once()
-        assert len(mock_batch_sync.call_args.kwargs["stock_codes"]) == 2
-
-    async def test_partial_failure_continues(self, mock_batch_sync: MagicMock) -> None:
-        """部分股票同步失败不应中断整体。"""
-        mock_mgr = AsyncMock()
-        mock_mgr.get_stock_list.return_value = [
-            {"ts_code": "600519.SH", "name": "贵州茅台"},
-            {"ts_code": "000858.SZ", "name": "五粮液"},
-            {"ts_code": "300750.SZ", "name": "宁德时代"},
-        ]
-
-        mock_batch_sync.return_value = {"success": 2, "failed": 1, "failed_codes": ["000858.SZ"], "elapsed_seconds": 1.5}
-
-        await sync_daily_step(date(2024, 1, 8), manager=mock_mgr)
-
-        mock_batch_sync.assert_called_once()
+        # 策略不应执行
+        mock_pipeline.assert_not_called()
+        mock_mgr.release_sync_lock.assert_called_once()

@@ -272,6 +272,7 @@ class BaoStockClient:
             field_names = rs.fields
             raw = dict(zip(field_names, row))
             ts_code = self._to_standard_code(raw.get("code", ""))
+            delist_date = raw.get("outDate", "")
             rows.append({
                 "ts_code": ts_code,
                 "symbol": ts_code.split(".")[0] if "." in ts_code else ts_code,
@@ -280,7 +281,8 @@ class BaoStockClient:
                 "area": "",
                 "market": "",
                 "list_date": raw.get("ipoDate", ""),
-                "list_status": "D" if raw.get("outDate", "") else "L",
+                "delist_date": delist_date if delist_date else None,
+                "list_status": "D" if delist_date else "L",
             })
         return rows
 

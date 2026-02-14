@@ -1,16 +1,15 @@
-"""定时任务定义：盘后链路、周末维护等。"""
+"""定时任务定义：盘后链路、周末维护、失败重试等。"""
 
 import logging
 import time
 import traceback
-from datetime import date
+from datetime import date, datetime
 
 from app.cache.redis_client import get_redis
 from app.cache.tech_cache import refresh_all_tech_cache
+from app.config import settings
 from app.data.akshare import AKShareClient
 from app.data.baostock import BaoStockClient
-from app.data.batch import batch_sync_daily
-from app.data.indicator import compute_incremental
 from app.data.manager import DataManager
 from app.data.pool import get_pool
 from app.database import async_session_factory
@@ -35,9 +34,9 @@ def _build_manager() -> DataManager:
 
 
 async def run_post_market_chain(target_date: date | None = None) -> None:
-    """盘后链路：交易日历更新 → 交易日校验 → 日线同步 → 技术指标 → 缓存刷新 → 策略管道。
+    """盘后链路：同步锁 → 股票列表 → 进度初始化 → 批量处理 → 完整性门控 → 策略 → 释放锁。
 
-    任一关键步骤失败则中断链路，缓存刷新失败不阻断。
+    使用进度表驱动，支持断点续传。任一关键步骤失败则中断链路。
 
     Args:
         target_date: 目标日期，默认今天
@@ -46,22 +45,15 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     chain_start = time.monotonic()
     logger.info("===== [盘后链路] 开始：%s =====", target)
 
-    # 步骤 0：交易日历更新（非关键，失败不阻断）
     manager = _build_manager()
+
+    # 步骤 0：交易日历更新（非关键，失败不阻断）
     calendar_start = time.monotonic()
     try:
         calendar_result = await manager.sync_trade_calendar()
-        calendar_elapsed = time.monotonic() - calendar_start
-        logger.info(
-            "[交易日历更新] 完成：%s，耗时 %.2fs",
-            calendar_result, calendar_elapsed
-        )
+        logger.info("[交易日历更新] 完成：%s，耗时 %.2fs", calendar_result, time.monotonic() - calendar_start)
     except Exception:
-        calendar_elapsed = time.monotonic() - calendar_start
-        logger.warning(
-            "[交易日历更新] 失败（继续执行后续步骤），耗时 %.2fs\n%s",
-            calendar_elapsed, traceback.format_exc()
-        )
+        logger.warning("[交易日历更新] 失败（继续执行），耗时 %.2fs\n%s", time.monotonic() - calendar_start, traceback.format_exc())
 
     # 交易日校验
     is_trading = await manager.is_trade_day(target)
@@ -69,29 +61,71 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         logger.info("[盘后链路] 非交易日，跳过：%s", target)
         return
 
-    # 步骤 1：日线同步
-    try:
-        await sync_daily_step(target, manager)
-    except Exception:
-        logger.error("[盘后链路] 中断：日线同步失败\n%s", traceback.format_exc())
+    # 获取同步锁
+    if not await manager.acquire_sync_lock():
+        logger.warning("[盘后链路] 同步锁被占用，跳过：%s", target)
         return
 
-    # 步骤 2：技术指标计算
     try:
-        await indicator_step(target)
-    except Exception:
-        logger.error("[盘后链路] 中断：技术指标计算失败\n%s", traceback.format_exc())
-        return
+        # 步骤 1：更新股票列表
+        stock_list_start = time.monotonic()
+        try:
+            stock_result = await manager.sync_stock_list()
+            logger.info("[股票列表更新] 完成：%s，耗时 %.1fs", stock_result, time.monotonic() - stock_list_start)
+        except Exception:
+            logger.warning("[股票列表更新] 失败（继续执行），耗时 %.1fs\n%s", time.monotonic() - stock_list_start, traceback.format_exc())
 
-    # 步骤 3：缓存刷新（非关键，失败不阻断）
-    await cache_refresh_step(target)
+        # 步骤 2：重置 stale 状态 + 初始化进度表 + 同步退市状态
+        stale_count = await manager.reset_stale_status()
+        if stale_count > 0:
+            logger.info("[盘后链路] 重置 stale 状态：%d 条", stale_count)
 
-    # 步骤 4：策略管道执行
-    try:
-        await pipeline_step(target)
-    except Exception:
-        logger.error("[盘后链路] 中断：策略管道执行失败\n%s", traceback.format_exc())
-        return
+        init_result = await manager.init_sync_progress()
+        logger.info("[盘后链路] 进度表初始化：%s", init_result)
+
+        delisted_result = await manager.sync_delisted_status()
+        logger.info("[盘后链路] 退市状态同步：%s", delisted_result)
+
+        # 步骤 3：批量数据拉取 + 指标计算
+        needing_sync = await manager.get_stocks_needing_sync(target)
+        if needing_sync:
+            logger.info("[盘后链路] 待同步股票 %d 只", len(needing_sync))
+            await manager.process_stocks_batch(
+                needing_sync,
+                target,
+                concurrency=settings.daily_sync_concurrency,
+                timeout=settings.sync_batch_timeout,
+            )
+
+        # 步骤 4：缓存刷新（非关键，失败不阻断）
+        await cache_refresh_step(target)
+
+        # 步骤 5：完整性门控 → 策略执行/跳过
+        summary = await manager.get_sync_summary(target)
+        completion_rate = summary["completion_rate"]
+        threshold = settings.data_completeness_threshold
+
+        if completion_rate >= threshold:
+            logger.info(
+                "[完整性门控] 通过：完成率 %.1f%% >= 阈值 %.1f%%，执行策略",
+                completion_rate * 100, threshold * 100,
+            )
+            try:
+                await pipeline_step(target)
+            except Exception:
+                logger.error("[盘后链路] 策略管道执行失败\n%s", traceback.format_exc())
+        else:
+            logger.warning(
+                "[完整性门控] 未通过：完成率 %.1f%% < 阈值 %.1f%%，跳过策略（总 %d，完成 %d，失败 %d）",
+                completion_rate * 100, threshold * 100,
+                summary["total"], summary["data_done"], summary["failed"],
+            )
+
+        # 步骤 6：完整性告警（超过截止时间且有失败记录）
+        _check_completeness_deadline(summary, target)
+
+    finally:
+        await manager.release_sync_lock()
 
     elapsed = time.monotonic() - chain_start
     elapsed_minutes = int(elapsed / 60)
@@ -102,40 +136,27 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     )
 
 
-async def sync_daily_step(
-    target_date: date,
-    manager: DataManager | None = None,
-) -> None:
-    """日线增量同步：使用批量并发同步所有上市股票。
+def _check_completeness_deadline(summary: dict, target_date: date) -> None:
+    """检查完整性告警：超过截止时间且有失败记录时发出告警。
 
     Args:
+        summary: get_sync_summary() 返回的摘要
         target_date: 目标日期
-        manager: DataManager 实例（可选，默认自动构建）
     """
-    mgr = manager or _build_manager()
-    step_start = time.monotonic()
-    logger.info("[日线同步] 开始：%s", target_date)
+    if summary["failed"] == 0:
+        return
 
-    # 获取所有上市股票
-    stocks = await mgr.get_stock_list(status="L")
-    stock_codes = [s["ts_code"] for s in stocks]
-    logger.info("[日线同步] 待同步股票数：%d", len(stock_codes))
+    deadline_str = settings.pipeline_completeness_deadline
+    deadline_time = datetime.strptime(deadline_str, "%H:%M").time()
+    current_time = datetime.now().time()
 
-    # 使用批量同步
-    pool = get_pool()
-    result = await batch_sync_daily(
-        session_factory=async_session_factory,
-        stock_codes=stock_codes,
-        target_date=target_date,
-        connection_pool=pool,
-    )
+    if current_time >= deadline_time:
+        logger.warning(
+            "[完整性告警] %s 超过截止时间 %s，仍有 %d 只股票失败（完成率 %.1f%%）",
+            target_date, deadline_str, summary["failed"],
+            summary["completion_rate"] * 100,
+        )
 
-    elapsed = time.monotonic() - step_start
-    avg_time = elapsed / len(stock_codes) if stock_codes else 0
-    logger.info(
-        "[日线同步] 完成：成功 %d 只，失败 %d 只，总耗时 %.1fs，平均 %.3fs/只",
-        result["success"], result["failed"], elapsed, avg_time,
-    )
 
 async def cache_refresh_step(target_date: date) -> None:
     """刷新技术指标缓存（非关键步骤，失败不阻断链路）。
@@ -158,26 +179,6 @@ async def cache_refresh_step(target_date: date) -> None:
     except Exception as e:
         elapsed = time.monotonic() - step_start
         logger.warning("[缓存刷新] 失败（耗时 %.1fs），策略管道将回源数据库：%s", elapsed, e)
-
-
-async def indicator_step(target_date: date) -> None:
-    """增量计算技术指标。
-
-    Args:
-        target_date: 目标日期
-    """
-    step_start = time.monotonic()
-    logger.info("[技术指标] 开始：%s", target_date)
-
-    result = await compute_incremental(
-        async_session_factory, target_date=target_date
-    )
-
-    elapsed = time.monotonic() - step_start
-    logger.info(
-        "[技术指标] 完成：成功 %d 只，失败 %d 只，总耗时 %.1fs",
-        result["success"], result["failed"], elapsed,
-    )
 
 
 async def pipeline_step(target_date: date) -> None:
@@ -223,3 +224,96 @@ async def sync_stock_list_job() -> None:
     logger.info("[股票列表同步] 开始")
     result = await manager.sync_stock_list()
     logger.info("[股票列表同步] 完成：%s", result)
+
+
+async def retry_failed_stocks_job() -> None:
+    """定时重试失败股票：获取同步锁 → 查询失败股票 → 逐只重试 → 检查完整性 → 释放锁。
+
+    每次重试 retry_count+1，超过 max_retries 的股票记录 WARNING 不再重试。
+    重试完成后检查完整性，达到阈值则补跑策略。
+    """
+    target = date.today()
+    start = time.monotonic()
+    logger.info("[失败重试] 开始：%s", target)
+
+    manager = _build_manager()
+    max_retries = settings.batch_sync_max_retries
+
+    # 获取同步锁
+    if not await manager.acquire_sync_lock():
+        logger.warning("[失败重试] 同步锁被占用，跳过")
+        return
+
+    try:
+        # 查询可重试的失败股票
+        failed_stocks = await manager.get_failed_stocks(max_retries)
+        if not failed_stocks:
+            logger.info("[失败重试] 无需重试的失败股票")
+            return
+
+        logger.info("[失败重试] 待重试股票 %d 只", len(failed_stocks))
+
+        # 检查超过重试上限的股票
+        all_failed = await manager.get_failed_stocks(max_retries=999999)
+        exceeded = [s for s in all_failed if s["retry_count"] >= max_retries]
+        if exceeded:
+            codes = [s["ts_code"] for s in exceeded[:10]]
+            logger.warning(
+                "[失败重试] %d 只股票超过最大重试次数 %d，不再自动重试：%s%s",
+                len(exceeded), max_retries, codes,
+                "..." if len(exceeded) > 10 else "",
+            )
+
+        # 递增 retry_count 并重置状态为 idle，然后重新处理
+        from sqlalchemy import update as sa_update
+        from app.models.market import StockSyncProgress
+
+        success_count = 0
+        fail_count = 0
+        for stock in failed_stocks:
+            ts_code = stock["ts_code"]
+            try:
+                # 递增 retry_count
+                async with manager.session_factory() as session:
+                    await session.execute(
+                        sa_update(StockSyncProgress)
+                        .where(StockSyncProgress.ts_code == ts_code)
+                        .values(retry_count=StockSyncProgress.retry_count + 1, status="idle")
+                    )
+                    await session.commit()
+
+                # 从 data_date 恢复同步
+                await manager.process_single_stock(ts_code, target)
+                success_count += 1
+            except Exception as e:
+                fail_count += 1
+                logger.error("[失败重试] %s 重试失败：%s", ts_code, e)
+
+        elapsed = time.monotonic() - start
+        logger.info(
+            "[失败重试] 完成：成功 %d，失败 %d，耗时 %.1fs",
+            success_count, fail_count, elapsed,
+        )
+
+        # 重试后检查完整性，达到阈值则补跑策略
+        summary = await manager.get_sync_summary(target)
+        completion_rate = summary["completion_rate"]
+        threshold = settings.data_completeness_threshold
+
+        if completion_rate >= threshold:
+            logger.info(
+                "[失败重试] 完成率 %.1f%% >= 阈值 %.1f%%，补跑策略",
+                completion_rate * 100, threshold * 100,
+            )
+            try:
+                await pipeline_step(target)
+            except Exception:
+                logger.error("[失败重试] 补跑策略失败\n%s", traceback.format_exc())
+        else:
+            logger.info(
+                "[失败重试] 完成率 %.1f%% < 阈值 %.1f%%，跳过策略",
+                completion_rate * 100, threshold * 100,
+            )
+
+    finally:
+        await manager.release_sync_lock()

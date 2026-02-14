@@ -70,6 +70,7 @@ class BaoStockConnectionPool:
         self._session_ttl = session_ttl
         self._queue: asyncio.Queue[BaoStockSession] = asyncio.Queue(maxsize=size)
         self._created_count = 0
+        self._create_lock = asyncio.Lock()
         self._closed = False
         logger.info(
             "BaoStock 连接池初始化：size=%d, timeout=%.1fs, ttl=%.1fs",
@@ -98,11 +99,15 @@ class BaoStockConnectionPool:
         try:
             session = self._queue.get_nowait()
         except asyncio.QueueEmpty:
-            # 队列为空，检查是否可以创建新连接
-            if self._created_count < self._size:
-                # 立即创建新会话，不等待
-                session = await self._create_session()
-            else:
+            # 队列为空，使用锁保护 _created_count 的检查和递增
+            async with self._create_lock:
+                if self._created_count < self._size:
+                    # 立即创建新会话，不等待
+                    session = await self._create_session()
+                else:
+                    session = None
+
+            if session is None:
                 # 已达上限，阻塞等待其他会话释放
                 try:
                     session = await asyncio.wait_for(

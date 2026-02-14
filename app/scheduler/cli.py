@@ -18,10 +18,9 @@ logger = logging.getLogger(__name__)
 
 # 可用的单步任务映射
 JOB_MAP = {
-    "sync-daily": "sync_daily_step",
-    "indicators": "indicator_step",
     "pipeline": "pipeline_step",
     "sync-stocks": "sync_stock_list_job",
+    "retry-failed": "retry_failed_stocks_job",
 }
 
 
@@ -54,7 +53,7 @@ def run_chain(target_date: str | None) -> None:
 def run_job(job_name: str, target_date: str | None) -> None:
     """手动触发单个任务步骤。
 
-    可用任务：sync-daily, indicators, pipeline, sync-stocks
+    可用任务：pipeline, sync-stocks, retry-failed
     """
     if job_name not in JOB_MAP:
         available = ", ".join(JOB_MAP.keys())
@@ -69,8 +68,8 @@ def run_job(job_name: str, target_date: str | None) -> None:
     target = date.fromisoformat(target_date) if target_date else date.today()
     click.echo(f"触发任务 {job_name}：{target}")
 
-    # sync_stock_list_job 不接受 target_date 参数
-    if job_name == "sync-stocks":
+    # sync_stock_list_job 和 retry_failed_stocks_job 不接受 target_date 参数
+    if job_name in ("sync-stocks", "retry-failed"):
         asyncio.run(func())
     else:
         asyncio.run(func(target))

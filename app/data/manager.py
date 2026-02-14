@@ -2,7 +2,8 @@ import logging
 from datetime import date, timedelta
 
 import pandas as pd
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.data.client_base import DataSourceClient
@@ -14,7 +15,7 @@ from app.data.etl import (
     clean_baostock_trade_calendar,
 )
 from app.exceptions import DataSyncError
-from app.models.market import Stock, StockDaily, TradeCalendar
+from app.models.market import Stock, StockDaily, StockSyncProgress, TradeCalendar
 from app.models.technical import TechnicalDaily
 
 logger = logging.getLogger(__name__)
@@ -52,9 +53,32 @@ class DataManager:
         async with self._session_factory() as session:
             raw_rows = await self._primary_client.fetch_stock_list()
             cleaned = clean_baostock_stock_list(raw_rows)
-            count = await batch_insert(
-                session, Stock.__table__, cleaned
-            )
+
+            # 使用 ON CONFLICT DO UPDATE 确保数据更新
+            count = 0
+            if cleaned:
+                # 每批最多 1000 条，避免参数超限
+                batch_size = 1000
+                for i in range(0, len(cleaned), batch_size):
+                    batch = cleaned[i : i + batch_size]
+                    stmt = pg_insert(Stock.__table__).values(batch)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["ts_code"],
+                        set_={
+                            "symbol": stmt.excluded.symbol,
+                            "name": stmt.excluded.name,
+                            "area": stmt.excluded.area,
+                            "industry": stmt.excluded.industry,
+                            "market": stmt.excluded.market,
+                            "list_date": stmt.excluded.list_date,
+                            "delist_date": stmt.excluded.delist_date,
+                            "list_status": stmt.excluded.list_status,
+                        }
+                    )
+                    await session.execute(stmt)
+                    count += len(batch)
+                await session.commit()
+
             logger.info("Stock list synced: %d records", count)
             return {"inserted": count}
 
@@ -74,7 +98,6 @@ class DataManager:
             cleaned = clean_baostock_trade_calendar(raw_rows)
 
             # 使用 ON CONFLICT DO UPDATE 确保数据更新，分批插入避免参数超限
-            from sqlalchemy.dialects.postgresql import insert as pg_insert
             count = 0
             if cleaned:
                 # 每批最多 1000 条（3 列 * 1000 = 3000 参数）
@@ -374,7 +397,6 @@ class DataManager:
                 )
             else:
                 # 查询每只股票的最新记录：使用子查询获取最新 trade_date
-                from sqlalchemy import func
                 subq = (
                     select(
                         TechnicalDaily.ts_code,
@@ -472,3 +494,644 @@ class DataManager:
         )
 
         return missing_dates
+
+    # --- Sync Progress operations ---
+
+    async def reset_stale_status(self) -> int:
+        """将 syncing/computing 状态重置为 idle（进程崩溃恢复）。
+
+        重启时不可能还有正在处理的任务，这些状态说明上次进程异常退出。
+
+        Returns:
+            重置的记录数
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                update(StockSyncProgress)
+                .where(StockSyncProgress.status.in_(["syncing", "computing"]))
+                .values(status="idle")
+            )
+            await session.commit()
+            count = result.rowcount
+            if count > 0:
+                logger.info("重置 %d 条 stale 状态记录（syncing/computing → idle）", count)
+            return count
+
+    async def init_sync_progress(self) -> dict:
+        """为所有未退市股票创建进度记录（INSERT ... ON CONFLICT DO NOTHING）。
+
+        Returns:
+            {"total_stocks": int, "new_records": int}
+        """
+        async with self._session_factory() as session:
+            # 查询所有未退市股票的 ts_code
+            result = await session.execute(
+                select(Stock.ts_code).where(Stock.list_status != "D")
+            )
+            all_codes = [row[0] for row in result.all()]
+
+            if not all_codes:
+                return {"total_stocks": 0, "new_records": 0}
+
+            # 批量 INSERT ... ON CONFLICT DO NOTHING
+            new_count = 0
+            batch_size = 1000
+            for i in range(0, len(all_codes), batch_size):
+                batch = all_codes[i : i + batch_size]
+                values = [{"ts_code": code} for code in batch]
+                stmt = pg_insert(StockSyncProgress.__table__).values(values)
+                stmt = stmt.on_conflict_do_nothing(index_elements=["ts_code"])
+                result = await session.execute(stmt)
+                new_count += result.rowcount
+            await session.commit()
+
+        logger.info(
+            "进度表初始化完成：总股票 %d，新增记录 %d",
+            len(all_codes), new_count,
+        )
+        return {"total_stocks": len(all_codes), "new_records": new_count}
+
+    async def get_stocks_needing_sync(self, target_date: date) -> list[str]:
+        """查询需要同步数据的股票（排除 delisted 和 failed）。
+
+        failed 由 retry job 单独处理，不在常规流程中重试。
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(StockSyncProgress.ts_code).where(
+                    StockSyncProgress.status.not_in(["delisted", "failed"]),
+                    StockSyncProgress.data_date < target_date,
+                )
+            )
+            return [row[0] for row in result.all()]
+
+    async def get_stocks_needing_indicators(self, target_date: date) -> list[str]:
+        """查询需要计算指标的股票（数据已同步但指标未计算）。"""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(StockSyncProgress.ts_code).where(
+                    StockSyncProgress.status.not_in(["delisted", "failed"]),
+                    StockSyncProgress.data_date >= target_date,
+                    StockSyncProgress.indicator_date < target_date,
+                )
+            )
+            return [row[0] for row in result.all()]
+
+    async def update_data_progress(
+        self, ts_code: str, new_data_date: date, session: AsyncSession | None = None
+    ) -> None:
+        """更新某只股票的 data_date 进度。
+
+        支持传入外部 session 以便在同一事务中操作。
+        """
+        async def _do(s: AsyncSession) -> None:
+            await s.execute(
+                update(StockSyncProgress)
+                .where(StockSyncProgress.ts_code == ts_code)
+                .values(data_date=new_data_date)
+            )
+
+        if session is not None:
+            await _do(session)
+        else:
+            async with self._session_factory() as s:
+                await _do(s)
+                await s.commit()
+
+    async def update_indicator_progress(
+        self, ts_code: str, new_indicator_date: date, session: AsyncSession | None = None
+    ) -> None:
+        """更新某只股票的 indicator_date 进度。"""
+        async def _do(s: AsyncSession) -> None:
+            await s.execute(
+                update(StockSyncProgress)
+                .where(StockSyncProgress.ts_code == ts_code)
+                .values(indicator_date=new_indicator_date)
+            )
+
+        if session is not None:
+            await _do(session)
+        else:
+            async with self._session_factory() as s:
+                await _do(s)
+                await s.commit()
+
+    async def update_stock_status(
+        self, ts_code: str, status: str, error_message: str | None = None
+    ) -> None:
+        """更新某只股票的同步状态。"""
+        values: dict = {"status": status}
+        if error_message is not None:
+            values["error_message"] = error_message
+        async with self._session_factory() as session:
+            await session.execute(
+                update(StockSyncProgress)
+                .where(StockSyncProgress.ts_code == ts_code)
+                .values(**values)
+            )
+            await session.commit()
+
+    async def get_sync_summary(self, target_date: date) -> dict:
+        """获取同步进度摘要（排除 delisted 股票）。
+
+        Returns:
+            {total, data_done, indicator_done, failed, completion_rate}
+        """
+        async with self._session_factory() as session:
+            # 排除 delisted 的总数
+            total_result = await session.execute(
+                select(func.count()).select_from(StockSyncProgress).where(
+                    StockSyncProgress.status != "delisted"
+                )
+            )
+            total = total_result.scalar() or 0
+
+            if total == 0:
+                return {
+                    "total": 0, "data_done": 0, "indicator_done": 0,
+                    "failed": 0, "completion_rate": 0.0,
+                }
+
+            # data_date >= target_date 的数量
+            data_done_result = await session.execute(
+                select(func.count()).select_from(StockSyncProgress).where(
+                    StockSyncProgress.status != "delisted",
+                    StockSyncProgress.data_date >= target_date,
+                )
+            )
+            data_done = data_done_result.scalar() or 0
+
+            # indicator_date >= target_date 的数量
+            indicator_done_result = await session.execute(
+                select(func.count()).select_from(StockSyncProgress).where(
+                    StockSyncProgress.status != "delisted",
+                    StockSyncProgress.indicator_date >= target_date,
+                )
+            )
+            indicator_done = indicator_done_result.scalar() or 0
+
+            # failed 数量
+            failed_result = await session.execute(
+                select(func.count()).select_from(StockSyncProgress).where(
+                    StockSyncProgress.status == "failed"
+                )
+            )
+            failed = failed_result.scalar() or 0
+
+            # 完成率 = 数据和指标都完成的股票数 / 总数
+            both_done_result = await session.execute(
+                select(func.count()).select_from(StockSyncProgress).where(
+                    StockSyncProgress.status != "delisted",
+                    StockSyncProgress.data_date >= target_date,
+                    StockSyncProgress.indicator_date >= target_date,
+                )
+            )
+            both_done = both_done_result.scalar() or 0
+            completion_rate = both_done / total
+
+        return {
+            "total": total,
+            "data_done": data_done,
+            "indicator_done": indicator_done,
+            "failed": failed,
+            "completion_rate": completion_rate,
+        }
+
+    async def get_failed_stocks(self, max_retries: int) -> list[dict]:
+        """查询可重试的失败股票（retry_count < max_retries）。
+
+        Returns:
+            [{"ts_code": str, "data_date": date, "retry_count": int}, ...]
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(
+                    StockSyncProgress.ts_code,
+                    StockSyncProgress.data_date,
+                    StockSyncProgress.retry_count,
+                ).where(
+                    StockSyncProgress.status == "failed",
+                    StockSyncProgress.retry_count < max_retries,
+                )
+            )
+            return [
+                {"ts_code": row[0], "data_date": row[1], "retry_count": row[2]}
+                for row in result.all()
+            ]
+
+    # --- Sync lock (Redis distributed lock) ---
+
+    SYNC_LOCK_KEY = "stock_selector:sync_lock"
+    SYNC_LOCK_TTL = 4 * 3600  # 4 小时
+
+    async def acquire_sync_lock(self) -> bool:
+        """获取同步锁（Redis SETNX），防止并发执行。
+
+        Redis 不可用时降级为无锁模式（返回 True）。
+
+        Returns:
+            True 表示获取成功（或降级无锁），False 表示锁已被占用
+        """
+        from app.cache.redis_client import get_redis
+
+        redis = get_redis()
+        if redis is None:
+            logger.warning("[sync_lock] Redis 不可用，降级为无锁模式")
+            return True
+
+        try:
+            acquired = await redis.set(
+                self.SYNC_LOCK_KEY, "1", nx=True, ex=self.SYNC_LOCK_TTL
+            )
+            if acquired:
+                logger.info("[sync_lock] 获取同步锁成功")
+                return True
+            else:
+                logger.warning("[sync_lock] 同步锁已被占用，跳过本次执行")
+                return False
+        except Exception as e:
+            logger.warning("[sync_lock] 获取锁失败（降级无锁模式）: %s", e)
+            return True
+
+    async def release_sync_lock(self) -> None:
+        """释放同步锁。"""
+        from app.cache.redis_client import get_redis
+
+        redis = get_redis()
+        if redis is None:
+            return
+
+        try:
+            await redis.delete(self.SYNC_LOCK_KEY)
+            logger.info("[sync_lock] 释放同步锁成功")
+        except Exception as e:
+            logger.warning("[sync_lock] 释放锁失败: %s", e)
+
+    # --- Delisted stock management ---
+
+    async def mark_stock_delisted(self, ts_code: str, delist_date: date) -> None:
+        """标记股票退市：事务中同时更新 stocks 表和 progress 表。"""
+        async with self._session_factory() as session:
+            # 更新 stocks 表
+            await session.execute(
+                update(Stock)
+                .where(Stock.ts_code == ts_code)
+                .values(delist_date=delist_date, list_status="D")
+            )
+            # 更新 progress 表
+            await session.execute(
+                update(StockSyncProgress)
+                .where(StockSyncProgress.ts_code == ts_code)
+                .values(status="delisted")
+            )
+            await session.commit()
+
+    async def sync_delisted_status(self) -> dict:
+        """双向同步退市状态。
+
+        正向：stocks 表中 list_status='D' 但 progress 表中 status!='delisted' → 标记为 delisted
+        反向：stocks 表中 list_status!='D' 但 progress 表中 status='delisted' → 恢复为 idle
+
+        Returns:
+            {"newly_delisted": int, "restored": int}
+        """
+        async with self._session_factory() as session:
+            # 正向：标记新退市
+            result_forward = await session.execute(
+                text("""
+                    UPDATE stock_sync_progress p
+                    SET status = 'delisted'
+                    FROM stocks s
+                    WHERE p.ts_code = s.ts_code
+                      AND s.list_status = 'D'
+                      AND p.status != 'delisted'
+                """)
+            )
+            newly_delisted = result_forward.rowcount
+
+            # 反向：恢复取消退市
+            result_reverse = await session.execute(
+                text("""
+                    UPDATE stock_sync_progress p
+                    SET status = 'idle'
+                    FROM stocks s
+                    WHERE p.ts_code = s.ts_code
+                      AND s.list_status != 'D'
+                      AND p.status = 'delisted'
+                """)
+            )
+            restored = result_reverse.rowcount
+
+            await session.commit()
+
+        if newly_delisted > 0 or restored > 0:
+            logger.info(
+                "[sync_delisted] 新退市 %d，恢复 %d",
+                newly_delisted, restored,
+            )
+        return {"newly_delisted": newly_delisted, "restored": restored}
+
+    @staticmethod
+    def should_have_data(stock: dict, trade_date: date) -> bool:
+        """判断股票在指定交易日是否应该有数据。
+
+        基于上市日期和退市日期判断，用于 init_sync_progress 初始过滤。
+
+        Args:
+            stock: 股票信息字典，需包含 list_date 和可选的 delist_date
+            trade_date: 交易日期
+
+        Returns:
+            True 如果该股票在 trade_date 应该有数据
+        """
+        list_date = stock.get("list_date")
+        if list_date and trade_date < list_date:
+            return False
+
+        delist_date = stock.get("delist_date")
+        if delist_date and trade_date >= delist_date:
+            return False
+
+        return True
+
+    # --- Batch sync operations ---
+
+    async def sync_stock_data_in_batches(
+        self,
+        code: str,
+        start_date: date,
+        end_date: date,
+        batch_days: int = 365,
+    ) -> None:
+        """按批次拉取单只股票的日线数据。
+
+        每批在事务中完成「批量写入日线数据 + 更新 data_date」，保证原子性。
+        单批失败时事务回滚，标记 status='failed'。
+
+        Args:
+            code: 股票代码
+            start_date: 起始日期
+            end_date: 目标结束日期
+            batch_days: 每批天数（默认 365）
+        """
+        current_start = start_date
+        while current_start <= end_date:
+            batch_end = min(current_start + timedelta(days=batch_days - 1), end_date)
+            try:
+                result = await self.sync_daily(code, current_start, batch_end)
+                inserted = result.get("inserted", 0)
+                # 仅在实际写入数据时推进 data_date
+                if inserted > 0:
+                    await self.update_data_progress(code, batch_end)
+                logger.debug(
+                    "[batch_sync] %s: %s ~ %s 完成，写入 %d 条",
+                    code, current_start, batch_end, inserted,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[batch_sync] %s: %s ~ %s 失败: %s",
+                    code, current_start, batch_end, e,
+                )
+                await self.update_stock_status(
+                    code, "failed", error_message=str(e)[:500]
+                )
+                raise
+            current_start = batch_end + timedelta(days=1)
+
+    async def compute_indicators_in_batches(
+        self,
+        code: str,
+        start_date: date,
+        end_date: date,
+        batch_days: int = 365,
+        lookback_days: int = 300,
+    ) -> None:
+        """按批次计算单只股票的技术指标。
+
+        每批加载 batch_start - lookback_days 到 batch_end 的数据，
+        计算指标后仅写入 batch_start ~ batch_end 范围的结果。
+        每批完成后更新 indicator_date。
+
+        Args:
+            code: 股票代码
+            start_date: 起始日期
+            end_date: 目标结束日期
+            batch_days: 每批天数（默认 365）
+            lookback_days: 指标计算回看窗口（默认 300）
+        """
+        from app.data.indicator import (
+            INDICATOR_COLUMNS,
+            _build_indicator_row,
+            _upsert_technical_rows,
+            compute_single_stock_indicators,
+        )
+
+        current_start = start_date
+        while current_start <= end_date:
+            batch_end = min(current_start + timedelta(days=batch_days - 1), end_date)
+            # 加载含 lookback 窗口的数据
+            load_start = current_start - timedelta(days=lookback_days)
+
+            try:
+                async with self._session_factory() as session:
+                    stmt = (
+                        select(StockDaily)
+                        .where(
+                            StockDaily.ts_code == code,
+                            StockDaily.trade_date >= load_start,
+                            StockDaily.trade_date <= batch_end,
+                        )
+                        .order_by(StockDaily.trade_date.asc())
+                    )
+                    result = await session.execute(stmt)
+                    rows = result.scalars().all()
+
+                if not rows:
+                    logger.debug("[batch_indicator] %s: %s ~ %s 无日线数据，跳过指标计算", code, current_start, batch_end)
+                    current_start = batch_end + timedelta(days=1)
+                    continue
+
+                # 转换为 DataFrame
+                records = [{
+                    "trade_date": r.trade_date,
+                    "open": float(r.open) if r.open else 0.0,
+                    "high": float(r.high) if r.high else 0.0,
+                    "low": float(r.low) if r.low else 0.0,
+                    "close": float(r.close) if r.close else 0.0,
+                    "vol": float(r.vol) if r.vol else 0.0,
+                } for r in rows]
+                df = pd.DataFrame(records)
+
+                # 计算指标
+                df_with_indicators = compute_single_stock_indicators(df)
+
+                # 仅取 current_start ~ batch_end 范围的结果
+                mask = (
+                    (df_with_indicators["trade_date"] >= current_start)
+                    & (df_with_indicators["trade_date"] <= batch_end)
+                )
+                target_rows = df_with_indicators[mask]
+
+                if not target_rows.empty:
+                    db_rows = [
+                        _build_indicator_row(code, row["trade_date"], row)
+                        for _, row in target_rows.iterrows()
+                    ]
+                    # 写入指标 + 更新 indicator_date 在同一事务中
+                    async with self._session_factory() as session:
+                        await _upsert_technical_rows(session, db_rows)
+                        await self.update_indicator_progress(code, batch_end, session=session)
+                        await session.commit()
+                else:
+                    # target_rows 为空说明该批次无需计算指标，不推进 indicator_date
+                    logger.debug(
+                        "[batch_indicator] %s: %s ~ %s 无目标行，跳过",
+                        code, current_start, batch_end,
+                    )
+
+                logger.debug(
+                    "[batch_indicator] %s: %s ~ %s 完成，写入 %d 条指标",
+                    code, current_start, batch_end, len(target_rows),
+                )
+            except Exception as e:
+                logger.warning(
+                    "[batch_indicator] %s: %s ~ %s 失败: %s",
+                    code, current_start, batch_end, e,
+                )
+                await self.update_stock_status(
+                    code, "failed", error_message=str(e)[:500]
+                )
+                raise
+
+            current_start = batch_end + timedelta(days=1)
+
+    # --- Single stock processing ---
+
+    async def process_single_stock(
+        self,
+        ts_code: str,
+        target_date: date,
+        data_start_date: date | None = None,
+        batch_days: int = 365,
+    ) -> None:
+        """处理单只股票的完整流程：数据拉取 → 指标计算。
+
+        Args:
+            ts_code: 股票代码
+            target_date: 目标日期
+            data_start_date: 历史数据起始日期（新股首次同步用）
+            batch_days: 每批天数
+        """
+        from app.config import settings
+
+        if data_start_date is None:
+            data_start_date = date.fromisoformat(settings.data_start_date)
+
+        # 查询当前进度
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(StockSyncProgress.data_date, StockSyncProgress.indicator_date)
+                .where(StockSyncProgress.ts_code == ts_code)
+            )
+            row = result.one_or_none()
+            if row is None:
+                logger.warning("[process_stock] %s 无进度记录，跳过", ts_code)
+                return
+            current_data_date, current_indicator_date = row
+
+        # 确定数据拉取起始日期
+        never_synced = date(1900, 1, 1)
+        if current_data_date == never_synced:
+            sync_start = data_start_date
+        else:
+            sync_start = current_data_date + timedelta(days=1)
+
+        # 1. 数据拉取
+        if sync_start <= target_date:
+            await self.update_stock_status(ts_code, "syncing")
+            await self.sync_stock_data_in_batches(
+                ts_code, sync_start, target_date, batch_days=batch_days
+            )
+
+        # 2. 指标计算
+        if current_indicator_date == never_synced:
+            indicator_start = data_start_date
+        else:
+            indicator_start = current_indicator_date + timedelta(days=1)
+
+        if indicator_start <= target_date:
+            await self.update_stock_status(ts_code, "computing")
+            await self.compute_indicators_in_batches(
+                ts_code, indicator_start, target_date, batch_days=batch_days
+            )
+
+        # 3. 完成
+        await self.update_stock_status(ts_code, "idle")
+
+    async def process_stocks_batch(
+        self,
+        stocks: list[str],
+        target_date: date,
+        concurrency: int = 10,
+        timeout: int | None = None,
+    ) -> dict:
+        """批量处理多只股票，带并发控制和超时。
+
+        Args:
+            stocks: 股票代码列表
+            target_date: 目标日期
+            concurrency: 最大并发数
+            timeout: 整体超时（秒），None 表示不限
+
+        Returns:
+            {"success": int, "failed": int, "timeout": bool}
+        """
+        import asyncio
+
+        semaphore = asyncio.Semaphore(concurrency)
+        success_count = 0
+        failed_count = 0
+        timed_out = False
+
+        async def _process_one(code: str) -> bool:
+            async with semaphore:
+                try:
+                    await self.process_single_stock(code, target_date)
+                    return True
+                except Exception as e:
+                    logger.warning("[batch_process] %s 处理失败: %s", code, e)
+                    return False
+
+        try:
+            if timeout:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*[_process_one(c) for c in stocks], return_exceptions=True),
+                    timeout=timeout,
+                )
+            else:
+                results = await asyncio.gather(
+                    *[_process_one(c) for c in stocks], return_exceptions=True
+                )
+
+            for r in results:
+                if r is True:
+                    success_count += 1
+                else:
+                    failed_count += 1
+
+        except asyncio.TimeoutError:
+            timed_out = True
+            logger.warning(
+                "[batch_process] 超时（%ds），已处理 %d/%d",
+                timeout, success_count + failed_count, len(stocks),
+            )
+
+        logger.info(
+            "[batch_process] 完成：成功 %d，失败 %d，超时=%s",
+            success_count, failed_count, timed_out,
+        )
+        return {
+            "success": success_count,
+            "failed": failed_count,
+            "timeout": timed_out,
+        }
