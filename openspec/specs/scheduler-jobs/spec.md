@@ -1,55 +1,19 @@
 ## MODIFIED Requirements
 
-### Requirement: 系统应在每日同步前更新股票列表
+### Requirement: _build_manager 使用 TushareClient
+_build_manager() SHALL 创建 TushareClient 实例替代 BaoStockClient + AKShareClient，不再需要 BaoStock 连接池。
 
-系统 SHALL 在每日盘后链路执行前，自动更新股票列表，确保新上市的股票当天就会被同步。
+#### Scenario: 构建 DataManager
+- **WHEN** 调用 _build_manager()
+- **THEN** 返回使用 TushareClient 的 DataManager 实例，primary="tushare"
 
-#### Scenario: 每日盘后链路前更新股票列表
-- **WHEN** 系统执行每日盘后链路
-- **THEN** 系统在初始化进度表之前，先更新股票列表
+### Requirement: 盘后链路适配按日期同步
+run_post_market_chain SHALL 使用按日期全市场同步模式：sync_raw_daily(target) → etl_daily(target)，替代原有的逐只股票 process_stocks_batch。
 
-#### Scenario: 新上市的股票当天被同步
-- **WHEN** 某股票今天上市，盘后链路执行时更新了股票列表
-- **THEN** 系统在 init_sync_progress() 中为该新股创建进度记录（data_date=1900-01-01），随后从 data_start_date 开始同步
+#### Scenario: 盘后链路执行
+- **WHEN** 盘后链路触发（交易日 15:30）
+- **THEN** 执行：交易日历 → 股票列表 → sync_raw_daily → etl_daily → 指标计算 → 缓存刷新 → 完整性门控 → 策略
 
-#### Scenario: 更新股票列表失败不阻断盘后链路
-- **WHEN** 更新股票列表失败（BaoStock API 不可用）
-- **THEN** 系统记录警告日志，使用数据库中的旧数据继续执行盘后链路
-
-### Requirement: 系统应在批量同步前过滤不应该有数据的股票
-
-系统 SHALL 在初始化进度表时，只为未退市的股票创建记录，跳过已退市和未上市的股票。
-
-#### Scenario: 过滤未上市的股票
-- **WHEN** 初始化进度表，有 10 只股票尚未上市
-- **THEN** 系统不为这 10 只股票创建进度记录
-
-#### Scenario: 过滤已退市的股票
-- **WHEN** 初始化进度表，有 5 只股票已退市
-- **THEN** 系统不为这 5 只股票创建进度记录
-
-#### Scenario: 记录过滤统计信息
-- **WHEN** 初始化进度表后
-- **THEN** 系统记录日志：总股票数、创建进度记录数、跳过数
-
-## MODIFIED Requirements
-
-### Requirement: 盘后链路使用进度表驱动的批量处理
-
-系统 SHALL 在盘后链路中使用进度表驱动的批量处理流程，替代原有的单日同步模式。
-
-#### Scenario: 盘后链路正常执行
-- **WHEN** 系统执行盘后链路，target_date 为今天
-- **THEN** 系统执行：更新股票列表 → 初始化进度 → 查询 data_date < today 的股票 → 批量处理 → 完整性门控 → 策略执行
-
-#### Scenario: 完成率达标执行策略
-- **WHEN** 批量处理完成后，完成率 97%（高于 95% 阈值）
-- **THEN** 系统执行缓存刷新和策略计算
-
-#### Scenario: 完成率不达标跳过策略
-- **WHEN** 批量处理完成后，完成率 92%（低于 95% 阈值）
-- **THEN** 系统跳过策略计算，记录 WARNING 日志
-
-#### Scenario: 18:00 完整性告警
-- **WHEN** 盘后链路完成，当前时间 >= 18:00，仍有 failed 状态的股票
-- **THEN** 系统发送告警通知
+#### Scenario: 同步性能提升
+- **WHEN** 盘后链路执行全市场日线同步
+- **THEN** 仅需 3-4 次 API 调用（vs 旧方案 ~5000 次），耗时从数十分钟降至数秒
