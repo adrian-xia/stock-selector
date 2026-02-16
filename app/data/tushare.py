@@ -230,6 +230,161 @@ class TushareClient:
         return df.to_dict("records")
 
     # ------------------------------------------------------------------
+    # P1 财务数据 fetch_raw_* 方法 — 按季度获取全市场财务数据
+    # ------------------------------------------------------------------
+
+    async def fetch_raw_fina_indicator(self, period: str) -> list[dict]:
+        """按季度获取全市场财务指标原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD，如 20231231 表示 2023 年报
+
+        Returns:
+            财务指标原始数据列表
+        """
+        try:
+            # 优先使用 VIP 接口按季度获取全部公司
+            df = await self._call("fina_indicator_vip", period=period)
+        except Exception as e:
+            logger.warning(f"fina_indicator_vip 调用失败，降级到标准接口: {e}")
+            # 降级到标准接口（需要逐只股票获取，这里暂不实现）
+            raise DataSourceError(f"fina_indicator_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_income(self, period: str) -> list[dict]:
+        """按季度获取全市场利润表原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            利润表原始数据列表
+        """
+        try:
+            df = await self._call("income_vip", period=period)
+        except Exception as e:
+            logger.warning(f"income_vip 调用失败，降级到标准接口: {e}")
+            raise DataSourceError(f"income_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_balancesheet(self, period: str) -> list[dict]:
+        """按季度获取全市场资产负债表原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            资产负债表原始数据列表
+        """
+        try:
+            df = await self._call("balancesheet_vip", period=period)
+        except Exception as e:
+            logger.warning(f"balancesheet_vip 调用失败，降级到标准接口: {e}")
+            raise DataSourceError(f"balancesheet_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_cashflow(self, period: str) -> list[dict]:
+        """按季度获取全市场现金流量表原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            现金流量表原始数据列表
+        """
+        try:
+            df = await self._call("cashflow_vip", period=period)
+        except Exception as e:
+            logger.warning(f"cashflow_vip 调用失败，降级到标准接口: {e}")
+            raise DataSourceError(f"cashflow_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_dividend(self, ann_date: str) -> list[dict]:
+        """按公告日期获取分红送股原始数据。
+
+        Args:
+            ann_date: 公告日期，格式 YYYYMMDD
+
+        Returns:
+            分红送股原始数据列表
+        """
+        df = await self._call("dividend", ann_date=ann_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_forecast(self, period: str) -> list[dict]:
+        """按季度获取全市场业绩预告原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            业绩预告原始数据列表
+        """
+        try:
+            df = await self._call("forecast_vip", period=period)
+        except Exception as e:
+            logger.warning(f"forecast_vip 调用失败，降级到标准接口: {e}")
+            raise DataSourceError(f"forecast_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_express(self, period: str) -> list[dict]:
+        """按季度获取全市场业绩快报原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            业绩快报原始数据列表
+        """
+        try:
+            df = await self._call("express_vip", period=period)
+        except Exception as e:
+            logger.warning(f"express_vip 调用失败，降级到标准接口: {e}")
+            raise DataSourceError(f"express_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_fina_audit(self, period: str) -> list[dict]:
+        """按季度获取财务审计意见原始数据。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            财务审计意见原始数据列表
+        """
+        df = await self._call("fina_audit", period=period)
+        return df.to_dict("records")
+
+    async def fetch_raw_fina_mainbz(self, period: str) -> list[dict]:
+        """按季度获取全市场主营业务构成原始数据（优先使用 VIP 接口）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            主营业务构成原始数据列表
+        """
+        try:
+            df = await self._call("fina_mainbz_vip", period=period)
+        except Exception as e:
+            logger.warning(f"fina_mainbz_vip 调用失败，降级到标准接口: {e}")
+            raise DataSourceError(f"fina_mainbz_vip 不可用，标准接口需逐只股票获取: {e}")
+        return df.to_dict("records")
+
+    async def fetch_raw_disclosure_date(self, end_date: str) -> list[dict]:
+        """按报告期获取财报披露计划原始数据。
+
+        Args:
+            end_date: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            财报披露计划原始数据列表
+        """
+        df = await self._call("disclosure_date", end_date=end_date)
+        return df.to_dict("records")
+
+
+    # ------------------------------------------------------------------
     # 内部方法
     # ------------------------------------------------------------------
 

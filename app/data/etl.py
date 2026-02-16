@@ -208,3 +208,59 @@ async def batch_insert(
 
     await session.commit()
     return total
+
+
+def transform_tushare_fina_indicator(raw_rows: list[dict]) -> list[dict]:
+    """将 Tushare fina_indicator 原始数据转换为 finance_indicator 业务表格式。
+
+    从 raw_tushare_fina_indicator 的 100+ 字段中提取核心财务指标。
+
+    Args:
+        raw_rows: raw_tushare_fina_indicator 表的原始数据
+
+    Returns:
+        finance_indicator 表格式的清洗数据
+    """
+    cleaned: list[dict] = []
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+
+        end_date = parse_date(raw.get("end_date"))
+        ann_date = parse_date(raw.get("ann_date"))
+        if end_date is None or ann_date is None:
+            continue
+
+        # 从 raw 表的 100+ 字段中提取核心指标
+        cleaned.append({
+            "ts_code": ts_code,
+            "end_date": end_date,
+            "ann_date": ann_date,
+            "report_type": _safe_str(raw.get("update_flag", "")),  # 更新标志作为报告类型
+            # 每股指标
+            "eps": parse_decimal(raw.get("eps")),
+            "ocf_per_share": parse_decimal(raw.get("ocfps")),
+            # 盈利能力
+            "roe": parse_decimal(raw.get("roe")),
+            "roe_diluted": parse_decimal(raw.get("roe_dt")),
+            "gross_margin": parse_decimal(raw.get("grossprofit_margin")),
+            "net_margin": parse_decimal(raw.get("netprofit_margin")),
+            # 同比增长率
+            "revenue_yoy": parse_decimal(raw.get("or_yoy")),
+            "profit_yoy": parse_decimal(raw.get("netprofit_yoy")),
+            # 估值指标（从 raw_tushare_daily_basic 获取，这里暂时为 None）
+            "pe_ttm": None,
+            "pb": None,
+            "ps_ttm": None,
+            "total_mv": None,
+            "circ_mv": None,
+            # 偿债能力
+            "current_ratio": parse_decimal(raw.get("current_ratio")),
+            "quick_ratio": parse_decimal(raw.get("quick_ratio")),
+            "debt_ratio": parse_decimal(raw.get("debt_to_assets")),
+            # 数据源
+            "data_source": "tushare",
+        })
+    return cleaned
+

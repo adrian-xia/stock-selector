@@ -10,15 +10,17 @@ from app.data.client_base import DataSourceClient
 from app.data.etl import (
     batch_insert,
     transform_tushare_daily,
+    transform_tushare_fina_indicator,
     transform_tushare_stock_basic,
     transform_tushare_trade_cal,
 )
 from app.exceptions import DataSyncError
-from app.models.market import Stock, StockDaily, StockSyncProgress, TradeCalendar
+from app.models.market import FinanceIndicator, Stock, StockDaily, StockSyncProgress, TradeCalendar
 from app.models.raw import (
     RawTushareAdjFactor,
     RawTushareDaily,
     RawTushareDailyBasic,
+    RawTushareFinaIndicator,
 )
 from app.models.technical import TechnicalDaily
 
@@ -1239,3 +1241,98 @@ class DataManager:
             "failed": failed_count,
             "timeout": timed_out,
         }
+
+    # ------------------------------------------------------------------
+    # P1 财务数据同步和 ETL
+    # ------------------------------------------------------------------
+
+    async def sync_raw_fina(self, period: str) -> dict:
+        """按季度同步财务数据到 raw 表（仅 fina_indicator，其他财务表待实现）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD，如 20231231 表示 2023 年报
+
+        Returns:
+            {"fina_indicator": int} - 各表写入的记录数
+        """
+        logger.info(f"[sync_raw_fina] 开始同步 {period} 财务数据到 raw 表")
+
+        async with self._session_factory() as session:
+            # 1. 同步财务指标（fina_indicator_vip）
+            logger.info(f"  - 获取 fina_indicator 数据（period={period}）")
+            raw_fina = await self._primary_client.fetch_raw_fina_indicator(period)
+            logger.info(f"  - 获取到 {len(raw_fina)} 条 fina_indicator 数据")
+
+            # 批量写入 raw_tushare_fina_indicator
+            fina_count = 0
+            if raw_fina:
+                fina_count = await batch_insert(
+                    session, RawTushareFinaIndicator.__table__, raw_fina
+                )
+                logger.info(f"  - 写入 raw_tushare_fina_indicator: {fina_count} 条")
+
+        logger.info(f"[sync_raw_fina] 完成 {period} 财务数据同步")
+        return {"fina_indicator": fina_count}
+
+    async def etl_fina(self, period: str) -> dict:
+        """从 raw 表 ETL 清洗财务数据到业务表（仅 finance_indicator，其他财务表待实现）。
+
+        Args:
+            period: 报告期（季度最后一天），格式 YYYYMMDD
+
+        Returns:
+            {"inserted": int} - 写入的记录数
+        """
+        logger.info(f"[etl_fina] 开始 ETL 清洗 {period} 财务数据")
+
+        async with self._session_factory() as session:
+            # 1. 从 raw_tushare_fina_indicator 读取数据
+            result = await session.execute(
+                select(RawTushareFinaIndicator).where(
+                    RawTushareFinaIndicator.end_date == period
+                )
+            )
+            raw_rows = result.scalars().all()
+            logger.info(f"  - 从 raw_tushare_fina_indicator 读取 {len(raw_rows)} 条")
+
+            if not raw_rows:
+                logger.warning(f"  - {period} 没有财务指标数据，跳过 ETL")
+                return {"inserted": 0}
+
+            # 2. 转换为 dict 格式
+            raw_dicts = [
+                {
+                    "ts_code": r.ts_code,
+                    "ann_date": r.ann_date,
+                    "end_date": r.end_date,
+                    "eps": r.eps,
+                    "roe": r.roe,
+                    "roe_dt": r.roe_dt,
+                    "grossprofit_margin": r.grossprofit_margin,
+                    "netprofit_margin": r.netprofit_margin,
+                    "or_yoy": r.or_yoy,
+                    "netprofit_yoy": r.netprofit_yoy,
+                    "current_ratio": r.current_ratio,
+                    "quick_ratio": r.quick_ratio,
+                    "debt_to_assets": r.debt_to_assets,
+                    "ocfps": r.ocfps,
+                    "update_flag": r.update_flag,
+                }
+                for r in raw_rows
+            ]
+
+            # 3. ETL 转换
+            cleaned = transform_tushare_fina_indicator(raw_dicts)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 批量写入 finance_indicator
+            inserted = 0
+            if cleaned:
+                inserted = await batch_insert(
+                    session, FinanceIndicator.__table__, cleaned
+                )
+                logger.info(f"  - 写入 finance_indicator: {inserted} 条")
+
+        logger.info(f"[etl_fina] 完成 {period} 财务数据 ETL")
+        return {"inserted": inserted}
+
