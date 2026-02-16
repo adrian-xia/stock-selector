@@ -831,3 +831,91 @@ class TushareClient:
             end_date=end_date,
         )
         return df.to_dict("records")
+
+    # =====================================================================
+    # P4 板块数据 fetch_raw_* 方法（8 个）
+    # =====================================================================
+
+    async def fetch_raw_ths_index(self) -> list[dict]:
+        """获取同花顺板块指数（对应 ths_index 接口）。"""
+        df = await self._call("ths_index", api_name="ths_index")
+        return df.to_dict("records")
+
+    async def fetch_raw_ths_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取同花顺板块日线行情（对应 ths_daily 接口）。"""
+        df = await self._call(
+            "ths_daily",
+            api_name="ths_daily",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_ths_member(self, ts_code: str) -> list[dict]:
+        """获取同花顺板块成分股（对应 ths_member 接口）。
+
+        Args:
+            ts_code: 板块代码（如 885720.TI）
+
+        Returns:
+            板块成分股列表
+        """
+        df = await self._call("ths_member", api_name="ths_member", ts_code=ts_code)
+        return df.to_dict("records")
+
+    async def fetch_raw_dc_index(self, src: str = "") -> list[dict]:
+        """获取东方财富板块指数（对应 dc_index 接口）。
+
+        Args:
+            src: 数据源（如 DC 表示东方财富概念板块）
+
+        Returns:
+            板块指数列表
+        """
+        df = await self._call("dc_index", api_name="dc_index", src=src)
+        return df.to_dict("records")
+
+    async def fetch_raw_dc_member(self, ts_code: str) -> list[dict]:
+        """获取东方财富板块成分股（对应 dc_member 接口）。
+
+        Args:
+            ts_code: 板块代码
+
+        Returns:
+            板块成分股列表
+        """
+        df = await self._call("dc_member", api_name="dc_member", ts_code=ts_code)
+        return df.to_dict("records")
+
+    async def fetch_raw_dc_hot_new(self, trade_date: str) -> list[dict]:
+        """获取东方财富热门板块（对应 dc_hot_new 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD）
+
+        Returns:
+            热门板块列表
+        """
+        df = await self._call("dc_hot_new", api_name="dc_hot_new", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_tdx_index(self) -> list[dict]:
+        """获取通达信板块指数（对应 tdx_index 接口）。"""
+        df = await self._call("tdx_index", api_name="tdx_index")
+        return df.to_dict("records")
+
+    async def fetch_raw_tdx_member(self, ts_code: str) -> list[dict]:
+        """获取通达信板块成分股（对应 tdx_member 接口）。
+
+        Args:
+            ts_code: 板块代码
+
+        Returns:
+            板块成分股列表
+        """
+        df = await self._call("tdx_member", api_name="tdx_member", ts_code=ts_code)
+        return df.to_dict("records")
