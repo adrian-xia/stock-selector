@@ -122,3 +122,49 @@ class StockSyncProgress(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class RawSyncProgress(Base):
+    """原始数据同步进度表。
+
+    追踪各个 raw 表的数据拉取进度，支持断点续传。
+    每个 (table_name, sync_key) 组合一条记录。
+
+    sync_key 的含义取决于表的特性：
+    - 日线数据表（如 raw_tushare_daily）：sync_key = trade_date (YYYYMMDD)
+    - 财务数据表（如 raw_tushare_fina_indicator）：sync_key = end_date (YYYYMMDD，季度末日期)
+    - 基础信息表（如 raw_tushare_stock_basic）：sync_key = "full" (全量同步)
+    """
+
+    __tablename__ = "raw_sync_progress"
+
+    # 表名（如 raw_tushare_daily, raw_tushare_fina_indicator）
+    table_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # 同步键（日期 YYYYMMDD 或 "full"）
+    sync_key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    # 同步状态：pending/syncing/completed/failed
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="pending"
+    )
+    # 同步的记录数
+    record_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    # 同步完成时间
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 失败重试次数
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    # 最后重试时间
+    last_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 错误信息
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 创建时间
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    # 更新时间
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
