@@ -1589,3 +1589,116 @@ class RawTushareStkListHis(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
+
+
+# 11b. 行情补充（5 张）
+
+
+class RawTushareWeekly(Base):
+    """周线行情原始表（对应 weekly 接口）。"""
+
+    __tablename__ = "raw_tushare_weekly"
+    __table_args__ = (
+        Index("idx_raw_weekly_code_date", "ts_code", "trade_date"),
+        Index("idx_raw_weekly_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    open: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    high: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    low: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    pre_close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    change: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    pct_chg: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    vol: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    amount: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareMonthly(Base):
+    """月线行情原始表（对应 monthly 接口）。"""
+
+    __tablename__ = "raw_tushare_monthly"
+    __table_args__ = (
+        Index("idx_raw_monthly_code_date", "ts_code", "trade_date"),
+        Index("idx_raw_monthly_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    open: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    high: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    low: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    pre_close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    change: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    pct_chg: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    vol: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    amount: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareSuspendD(Base):
+    """停复牌信息原始表（对应 suspend_d 接口）。"""
+
+    __tablename__ = "raw_tushare_suspend_d"
+    __table_args__ = (
+        Index("idx_raw_suspend_d_ts_code", "ts_code"),
+        Index("idx_raw_suspend_d_suspend_date", "suspend_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    suspend_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    resume_date: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    ann_date: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    suspend_reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    reason_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareHsgtTop10(Base):
+    """沪深港通十大成交股原始表（对应 hsgt_top10 接口）。"""
+
+    __tablename__ = "raw_tushare_hsgt_top10"
+    __table_args__ = (
+        Index("idx_raw_hsgt_top10_trade_date", "trade_date"),
+        Index("idx_raw_hsgt_top10_ts_code", "ts_code"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    market_type: Mapped[str] = mapped_column(String(8), primary_key=True)
+    rank: Mapped[int | None] = mapped_column(nullable=True)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    change: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    net_amount: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    buy: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    sell: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareGgtDaily(Base):
+    """港股通每日成交统计原始表（对应 ggt_daily 接口）。"""
+
+    __tablename__ = "raw_tushare_ggt_daily"
+    __table_args__ = (Index("idx_raw_ggt_daily_trade_date", "trade_date"),)
+
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    buy_amount: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    buy_volume: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    sell_amount: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    sell_volume: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )

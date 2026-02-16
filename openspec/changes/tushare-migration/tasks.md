@@ -132,7 +132,7 @@
 
 ### 11a. 基础数据补充（7 张 raw 表）
 - [x] 11.1 `app/models/raw.py` 添加基础数据补充原始表（raw_tushare_namechange, raw_tushare_stock_company, raw_tushare_stk_managers, raw_tushare_stk_rewards, raw_tushare_new_share, raw_tushare_daily_share, raw_tushare_stk_list_his）
-- [ ] 11.2 TushareClient 添加对应 fetch_raw_* 方法
+- [x] 11.2 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11b. 行情补充（5 张 raw 表）
 - [ ] 11.3 `app/models/raw.py` 添加行情补充原始表（raw_tushare_weekly, raw_tushare_monthly, raw_tushare_suspend_d, raw_tushare_hsgt_top10, raw_tushare_ggt_daily）
