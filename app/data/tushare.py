@@ -1098,3 +1098,50 @@ class TushareClient:
         """
         df = await self._call("ggt_daily", api_name="ggt_daily", trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
+
+    # 11c. 市场参考数据（9 个）
+
+    async def fetch_raw_top10_holders(self, ts_code: str = "", period: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取前十大股东（对应 top10_holders 接口）。"""
+        df = await self._call("top10_holders", api_name="top10_holders", ts_code=ts_code, period=period, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_top10_floatholders(self, ts_code: str = "", period: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取前十大流通股东（对应 top10_floatholders 接口）。"""
+        df = await self._call("top10_floatholders", api_name="top10_floatholders", ts_code=ts_code, period=period, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_pledge_stat(self, ts_code: str = "", end_date: str = "") -> list[dict]:
+        """获取股权质押统计（对应 pledge_stat 接口）。"""
+        df = await self._call("pledge_stat", api_name="pledge_stat", ts_code=ts_code, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_pledge_detail(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取股权质押明细（对应 pledge_detail 接口）。"""
+        df = await self._call("pledge_detail", api_name="pledge_detail", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_repurchase(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取股票回购（对应 repurchase 接口）。"""
+        df = await self._call("repurchase", api_name="repurchase", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_share_float(self, ts_code: str = "", ann_date: str = "", float_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取限售股解禁（对应 share_float 接口）。"""
+        df = await self._call("share_float", api_name="share_float", ts_code=ts_code, ann_date=ann_date, float_date=float_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_block_trade(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取大宗交易（对应 block_trade 接口）。"""
+        df = await self._call("block_trade", api_name="block_trade", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_holdernumber(self, ts_code: str = "", enddate: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取股东人数（对应 stk_holdernumber 接口）。"""
+        df = await self._call("stk_holdernumber", api_name="stk_holdernumber", ts_code=ts_code, enddate=enddate, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_holdertrade(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取股东增减持（对应 stk_holdertrade 接口）。"""
+        df = await self._call("stk_holdertrade", api_name="stk_holdertrade", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
