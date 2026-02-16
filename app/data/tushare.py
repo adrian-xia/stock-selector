@@ -919,3 +919,106 @@ class TushareClient:
         """
         df = await self._call("tdx_member", api_name="tdx_member", ts_code=ts_code)
         return df.to_dict("records")
+
+    # =====================================================================
+    # P5 扩展数据 fetch_raw_* 方法（48 个）
+    # =====================================================================
+
+    # 11a. 基础数据补充（7 个）
+
+    async def fetch_raw_namechange(self, ts_code: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取股票曾用名（对应 namechange 接口）。
+
+        Args:
+            ts_code: 股票代码
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            股票曾用名列表
+        """
+        df = await self._call("namechange", api_name="namechange", ts_code=ts_code, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stock_company(self, ts_code: str = "", exchange: str = "") -> list[dict]:
+        """获取上市公司基本信息（对应 stock_company 接口）。
+
+        Args:
+            ts_code: 股票代码
+            exchange: 交易所（SSE/SZSE）
+
+        Returns:
+            上市公司基本信息列表
+        """
+        df = await self._call("stock_company", api_name="stock_company", ts_code=ts_code, exchange=exchange)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_managers(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取上市公司管理层（对应 stk_managers 接口）。
+
+        Args:
+            ts_code: 股票代码
+            ann_date: 公告日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            上市公司管理层列表
+        """
+        df = await self._call("stk_managers", api_name="stk_managers", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_rewards(self, ts_code: str = "", end_date: str = "") -> list[dict]:
+        """获取管理层薪酬和持股（对应 stk_rewards 接口）。
+
+        Args:
+            ts_code: 股票代码
+            end_date: 报告期（YYYYMMDD）
+
+        Returns:
+            管理层薪酬和持股列表
+        """
+        df = await self._call("stk_rewards", api_name="stk_rewards", ts_code=ts_code, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_new_share(self, start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取 IPO 新股列表（对应 new_share 接口）。
+
+        Args:
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            IPO 新股列表
+        """
+        df = await self._call("new_share", api_name="new_share", start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_daily_share(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取每日股本变动（对应 daily_share 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            每日股本变动列表
+        """
+        df = await self._call("daily_share", api_name="daily_share", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_list_his(self, ts_code: str = "", list_date: str = "", delist_date: str = "") -> list[dict]:
+        """获取股票上市历史（对应 stk_list_his 接口）。
+
+        Args:
+            ts_code: 股票代码
+            list_date: 上市日期（YYYYMMDD）
+            delist_date: 退市日期（YYYYMMDD）
+
+        Returns:
+            股票上市历史列表
+        """
+        df = await self._call("stk_list_his", api_name="stk_list_his", ts_code=ts_code, list_date=list_date, delist_date=delist_date)
+        return df.to_dict("records")
