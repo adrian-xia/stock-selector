@@ -270,5 +270,119 @@ def backfill_daily(start: str, end: str) -> None:
     asyncio.run(_run())
 
 
+@cli.command("init-tushare")
+@click.option("--start", default=None, help="开始日期 (YYYY-MM-DD)，默认为 settings.data_start_date")
+@click.option("--end", default=None, help="结束日期 (YYYY-MM-DD)，默认为今天")
+@click.option("--skip-fina", is_flag=True, help="跳过财务数据同步")
+@click.option("--skip-index", is_flag=True, help="跳过指数数据同步")
+@click.option("--skip-concept", is_flag=True, help="跳过板块数据同步")
+def init_tushare(start: str | None, end: str | None, skip_fina: bool, skip_index: bool, skip_concept: bool) -> None:
+    """全量初始化 Tushare 数据：stock_basic → trade_cal → 逐日 daily → fina → 指数/板块 → 技术指标。
+
+    这是一个综合命令，按顺序执行以下步骤：
+    1. 同步股票列表 (stock_basic)
+    2. 同步交易日历 (trade_cal)
+    3. 逐日同步日线数据 (daily + adj_factor + daily_basic)
+    4. 同步财务数据 (fina_indicator，可选)
+    5. 同步指数数据 (index_basic + index_daily，可选)
+    6. 同步板块数据 (concept_index + concept_daily，可选)
+    7. 计算技术指标 (technical_daily + index_technical_daily + concept_technical_daily)
+
+    注意：此命令适用于首次初始化或全量重建数据。
+    对于日常增量更新，请使用 sync-daily 命令。
+    """
+    import time
+    from app.data.batch import batch_sync_daily
+
+    manager = _build_manager()
+    start_date = date.fromisoformat(start) if start else date.fromisoformat(settings.data_start_date)
+    end_date = date.fromisoformat(end) if end else date.today()
+
+    async def _run() -> None:
+        overall_start = time.monotonic()
+
+        click.echo("=" * 60)
+        click.echo("Tushare 数据全量初始化")
+        click.echo("=" * 60)
+        click.echo(f"日期范围：{start_date} ~ {end_date}")
+        click.echo()
+
+        # 步骤 1: 同步股票列表
+        click.echo("步骤 1/7: 同步股票列表...")
+        stock_result = await manager.sync_stock_list()
+        click.echo(f"✓ 股票列表同步完成：{stock_result.get('inserted', 0)} 只股票")
+        click.echo()
+
+        # 步骤 2: 同步交易日历
+        click.echo("步骤 2/7: 同步交易日历...")
+        calendar_result = await manager.sync_trade_calendar(start_date, end_date)
+        click.echo(f"✓ 交易日历同步完成：{calendar_result.get('inserted', 0)} 个交易日")
+        click.echo()
+
+        # 步骤 3: 逐日同步日线数据
+        click.echo("步骤 3/7: 逐日同步日线数据...")
+        trading_dates = await manager.get_trade_calendar(start_date, end_date)
+        click.echo(f"共需同步 {len(trading_dates)} 个交易日")
+
+        daily_result = await batch_sync_daily(
+            session_factory=async_session_factory,
+            trade_dates=trading_dates,
+            manager=manager,
+        )
+        click.echo(f"✓ 日线数据同步完成：成功 {daily_result['success']} 天，失败 {daily_result['failed']} 天")
+        click.echo()
+
+        # 步骤 4: 同步财务数据（可选）
+        if not skip_fina:
+            click.echo("步骤 4/7: 同步财务数据...")
+            click.echo("⚠️  财务数据同步功能待实现（V2）")
+            click.echo()
+        else:
+            click.echo("步骤 4/7: 跳过财务数据同步")
+            click.echo()
+
+        # 步骤 5: 同步指数数据（可选）
+        if not skip_index:
+            click.echo("步骤 5/7: 同步指数数据...")
+            click.echo("⚠️  指数数据同步功能待实现（V2）")
+            click.echo()
+        else:
+            click.echo("步骤 5/7: 跳过指数数据同步")
+            click.echo()
+
+        # 步骤 6: 同步板块数据（可选）
+        if not skip_concept:
+            click.echo("步骤 6/7: 同步板块数据...")
+            click.echo("⚠️  板块数据同步功能待实现（V2）")
+            click.echo()
+        else:
+            click.echo("步骤 6/7: 跳过板块数据同步")
+            click.echo()
+
+        # 步骤 7: 计算技术指标
+        click.echo("步骤 7/7: 计算技术指标...")
+        from app.data.indicator import compute_all_stocks
+
+        indicator_result = await compute_all_stocks(
+            async_session_factory,
+            progress_callback=lambda p, t: click.echo(f"[{p}/{t}] 正在计算技术指标...") if p % 500 == 0 else None,
+        )
+        click.echo(f"✓ 技术指标计算完成：成功 {indicator_result['success']} 只，失败 {indicator_result['failed']} 只")
+        click.echo()
+
+        # 总结
+        overall_elapsed = int(time.monotonic() - overall_start)
+        overall_minutes = overall_elapsed // 60
+        overall_seconds = overall_elapsed % 60
+
+        click.echo("=" * 60)
+        click.echo("初始化完成")
+        click.echo("=" * 60)
+        click.echo(f"总耗时：{overall_minutes}分{overall_seconds}秒")
+        click.echo()
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     cli()
