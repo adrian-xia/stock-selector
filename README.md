@@ -370,7 +370,7 @@ stock-selector/
 │   ├── main.py                 # FastAPI 入口
 │   ├── config.py               # 配置管理（pydantic-settings）
 │   ├── database.py             # SQLAlchemy 异步引擎
-│   ├── models/                 # ORM 模型（12 张表）
+│   ├── models/                 # ORM 模型（12 张业务表 + 16 张 raw 层表）
 │   ├── data/                   # 数据采集模块
 │   │   ├── baostock.py         #   BaoStock 客户端
 │   │   ├── akshare.py          #   AKShare 客户端
