@@ -1898,3 +1898,205 @@ class RawTushareStkHoldertrade(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
+
+
+# 11d. 特色数据（9 张）
+
+
+class RawTushareReportRc(Base):
+    """券商月度金股原始表（对应 report_rc 接口）。"""
+
+    __tablename__ = "raw_tushare_report_rc"
+    __table_args__ = (
+        Index("idx_raw_report_rc_ts_code", "ts_code"),
+        Index("idx_raw_report_rc_date", "date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    broker: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    author: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_date: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareCyqPerf(Base):
+    """筹码分布原始表（对应 cyq_perf 接口）。"""
+
+    __tablename__ = "raw_tushare_cyq_perf"
+    __table_args__ = (
+        Index("idx_raw_cyq_perf_ts_code", "ts_code"),
+        Index("idx_raw_cyq_perf_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    his_low: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    his_high: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    cost_5pct: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    cost_15pct: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    cost_50pct: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    cost_85pct: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    cost_95pct: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    weight_avg: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    winner_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareCyqChips(Base):
+    """筹码集中度原始表（对应 cyq_chips 接口）。"""
+
+    __tablename__ = "raw_tushare_cyq_chips"
+    __table_args__ = (
+        Index("idx_raw_cyq_chips_ts_code", "ts_code"),
+        Index("idx_raw_cyq_chips_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    chip_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    chip_price: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    chip_vol: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareStkFactor(Base):
+    """技术因子（日频）原始表（对应 stk_factor 接口）。"""
+
+    __tablename__ = "raw_tushare_stk_factor"
+    __table_args__ = (
+        Index("idx_raw_stk_factor_ts_code", "ts_code"),
+        Index("idx_raw_stk_factor_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    open: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    high: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    low: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    pre_close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    change: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    pct_chg: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    vol: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    amount: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareStkFactorPro(Base):
+    """技术因子（日频增强版）原始表（对应 stk_factor_pro 接口）。"""
+
+    __tablename__ = "raw_tushare_stk_factor_pro"
+    __table_args__ = (
+        Index("idx_raw_stk_factor_pro_ts_code", "ts_code"),
+        Index("idx_raw_stk_factor_pro_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    # 技术指标
+    macd_dif: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    macd_dea: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    macd: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    kdj_k: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    kdj_d: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    kdj_j: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    rsi_6: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    rsi_12: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    rsi_24: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    boll_upper: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    boll_mid: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    boll_lower: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareCcassHold(Base):
+    """港股通持股汇总原始表（对应 ccass_hold 接口）。"""
+
+    __tablename__ = "raw_tushare_ccass_hold"
+    __table_args__ = (
+        Index("idx_raw_ccass_hold_ts_code", "ts_code"),
+        Index("idx_raw_ccass_hold_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    hk_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    col_participant: Mapped[int | None] = mapped_column(nullable=True)
+    col_holding: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    col_percent: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareCcassHoldDetail(Base):
+    """港股通持股明细原始表（对应 ccass_hold_detail 接口）。"""
+
+    __tablename__ = "raw_tushare_ccass_hold_detail"
+    __table_args__ = (
+        Index("idx_raw_ccass_hold_detail_ts_code", "ts_code"),
+        Index("idx_raw_ccass_hold_detail_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    participant_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    participant_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    shareholding: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    shareholding_percent: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareHkHold(Base):
+    """沪深港通持股明细原始表（对应 hk_hold 接口）。"""
+
+    __tablename__ = "raw_tushare_hk_hold"
+    __table_args__ = (
+        Index("idx_raw_hk_hold_ts_code", "ts_code"),
+        Index("idx_raw_hk_hold_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vol: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    exchange: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareStkSurv(Base):
+    """股票调查问卷原始表（对应 stk_surv 接口）。"""
+
+    __tablename__ = "raw_tushare_stk_surv"
+    __table_args__ = (
+        Index("idx_raw_stk_surv_ts_code", "ts_code"),
+        Index("idx_raw_stk_surv_end_date", "end_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    end_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    survey_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    survey_org: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    survey_person: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    survey_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
