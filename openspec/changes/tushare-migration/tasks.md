@@ -100,14 +100,14 @@
 - [x] 9.8 `app/data/indicator.py` 泛化计算函数，支持传入不同的行情表和技术指标表（index_daily → index_technical_daily）
 - [x] 9.9 DataManager 添加 update_index_indicators(trade_date) 方法
 
-## 9a. P3 数据校验测试
+## 9a. P3 数据校验测试（V2 再实施）
 
-- [ ] 9a.1 创建 `tests/integration/test_p3_data_validation.py` — P3 指数数据校验测试
-- [ ] 9a.2 测试 raw_tushare_index_basic 数据完整性（主要指数如沪深300、上证50、创业板指等必须存在）
-- [ ] 9a.3 测试 raw_tushare_index_daily 数据完整性（每个交易日主要指数记录数 >= 100）
-- [ ] 9a.4 测试指数技术指标计算正确性（index_technical_daily 的 MA5/MA10 与手工计算对比，误差 <= 0.01%）
-- [ ] 9a.5 测试申万行业分类完整性（raw_tushare_index_classify 包含全部一级行业）
-- [ ] 9a.6 测试指数成分股权重合理性（raw_tushare_index_weight 权重总和 = 100%，误差 <= 1%）
+- [ ] 9a.1 创建 `tests/integration/test_p3_data_validation.py` — P3 指数数据校验测试（V2 再实施）
+- [ ] 9a.2 测试 raw_tushare_index_basic 数据完整性（主要指数如沪深300、上证50、创业板指等必须存在）（V2 再实施）
+- [ ] 9a.3 测试 raw_tushare_index_daily 数据完整性（每个交易日主要指数记录数 >= 100）（V2 再实施）
+- [ ] 9a.4 测试指数技术指标计算正确性（index_technical_daily 的 MA5/MA10 与手工计算对比，误差 <= 0.01%）（V2 再实施）
+- [ ] 9a.5 测试申万行业分类完整性（raw_tushare_index_classify 包含全部一级行业）（V2 再实施）
+- [ ] 9a.6 测试指数成分股权重合理性（raw_tushare_index_weight 权重总和 = 100%，误差 <= 1%）（V2 再实施）
 
 ## 10. P4 板块数据（Phase 5）
 
@@ -119,14 +119,14 @@
 - [x] 10.6 DataManager 添加板块同步方法（sync_concept_index, sync_concept_daily, sync_concept_member）
 - [x] 10.7 DataManager 添加 update_concept_indicators(trade_date) 方法
 
-## 10a. P4 数据校验测试
+## 10a. P4 数据校验测试（V2 再实施）
 
-- [ ] 10a.1 创建 `tests/integration/test_p4_data_validation.py` — P4 板块数据校验测试
-- [ ] 10a.2 测试三数据源板块数量（同花顺 >= 300，东方财富 >= 200，通达信 >= 100）
-- [ ] 10a.3 测试板块成分股数量合理性（每个板块成分股数 >= 5 且 <= 500）
-- [ ] 10a.4 测试板块行情数据完整性（concept_daily 每个交易日记录数 >= 活跃板块数 × 0.90）
-- [ ] 10a.5 测试板块技术指标计算正确性（concept_technical_daily 的 MA5/MA10 与手工计算对比）
-- [ ] 10a.6 测试热门板块数据时效性（dc_hot_new 最新数据日期 <= 今天）
+- [ ] 10a.1 创建 `tests/integration/test_p4_data_validation.py` — P4 板块数据校验测试（V2 再实施）
+- [ ] 10a.2 测试三数据源板块数量（同花顺 >= 300，东方财富 >= 200，通达信 >= 100）（V2 再实施）
+- [ ] 10a.3 测试板块成分股数量合理性（每个板块成分股数 >= 5 且 <= 500）（V2 再实施）
+- [ ] 10a.4 测试板块行情数据完整性（concept_daily 每个交易日记录数 >= 活跃板块数 × 0.90）（V2 再实施）
+- [ ] 10a.5 测试板块技术指标计算正确性（concept_technical_daily 的 MA5/MA10 与手工计算对比）（V2 再实施）
+- [ ] 10a.6 测试热门板块数据时效性（dc_hot_new 最新数据日期 <= 今天）（V2 再实施）
 
 ## 11. P5 扩展数据（Phase 6）
 
@@ -158,14 +158,14 @@
 - [x] 11.13 创建 Alembic 迁移脚本 — P5 全部扩展原始表建表（48 张）
 - [ ] 11.14 按需添加 ETL 清洗函数和 DataManager 同步方法（V2 再实施）
 
-## 11a. P5 数据校验测试
+## 11a. P5 数据校验测试（V2 再实施）
 
-- [ ] 11a.1 创建 `tests/integration/test_p5_data_validation.py` — P5 扩展数据校验测试
-- [ ] 11a.2 测试股本数据完整性（raw_tushare_daily_share 每个交易日记录数 >= 上市股票数 × 0.95）
-- [ ] 11a.3 测试停复牌数据合理性（raw_tushare_suspend_d 停牌股票数 <= 上市股票数 × 0.10）
-- [ ] 11a.4 测试两融数据质量（raw_tushare_margin 融资余额 > 0 且 <= 市值 × 0.50）
-- [ ] 11a.5 测试涨跌停数据一致性（raw_tushare_limit_list_d vs raw_tushare_ths_limit 数据对比）
-- [ ] 11a.6 测试大宗交易数据合理性（raw_tushare_block_trade 成交价格在涨跌停范围内）
+- [ ] 11a.1 创建 `tests/integration/test_p5_data_validation.py` — P5 扩展数据校验测试（V2 再实施）
+- [ ] 11a.2 测试股本数据完整性（raw_tushare_daily_share 每个交易日记录数 >= 上市股票数 × 0.95）（V2 再实施）
+- [ ] 11a.3 测试停复牌数据合理性（raw_tushare_suspend_d 停牌股票数 <= 上市股票数 × 0.10）（V2 再实施）
+- [ ] 11a.4 测试两融数据质量（raw_tushare_margin 融资余额 > 0 且 <= 市值 × 0.50）（V2 再实施）
+- [ ] 11a.5 测试涨跌停数据一致性（raw_tushare_limit_list_d vs raw_tushare_ths_limit 数据对比）（V2 再实施）
+- [ ] 11a.6 测试大宗交易数据合理性（raw_tushare_block_trade 成交价格在涨跌停范围内）（V2 再实施）
 
 ## 12. 数据初始化 CLI（Phase 7）
 
@@ -174,16 +174,16 @@
 - [x] 12.3 更新 `scripts/init_data.py` — 初始化向导改用 Tushare
 - [x] 12.4 盘后链路增量更新集成测试（sync_raw_daily → etl_daily → 指标计算 → 策略执行）
 
-## 12a. 综合数据校验测试（Phase 7a）
+## 12a. 综合数据校验测试（V2 再实施）
 
-- [ ] 12a.1 创建 `tests/integration/test_data_validation_comprehensive.py` — 综合数据校验测试
-- [ ] 12a.2 测试 raw 表总数（98 张 raw_tushare_* 表全部存在）
-- [ ] 12a.3 测试数据时效性（所有 raw 表最新数据日期 <= 今天 + 1 天）
-- [ ] 12a.4 测试数据完整性门控（最近 30 天数据完成率 >= 95%）
-- [ ] 12a.5 测试 API 限流正确性（TushareClient 实际 QPS <= 8 次/秒）
-- [ ] 12a.6 测试断点续传功能（中断后重启能从上次位置继续）
-- [ ] 12a.7 测试数据溯源能力（raw 表 fetched_at 时间戳正确记录）
-- [ ] 12a.8 性能基准测试（单日全市场数据同步 <= 5 分钟，1 年数据初始化 <= 2 小时）
+- [ ] 12a.1 创建 `tests/integration/test_data_validation_comprehensive.py` — 综合数据校验测试（V2 再实施）
+- [ ] 12a.2 测试 raw 表总数（98 张 raw_tushare_* 表全部存在）（V2 再实施）
+- [ ] 12a.3 测试数据时效性（所有 raw 表最新数据日期 <= 今天 + 1 天）（V2 再实施）
+- [ ] 12a.4 测试数据完整性门控（最近 30 天数据完成率 >= 95%）（V2 再实施）
+- [ ] 12a.5 测试 API 限流正确性（TushareClient 实际 QPS <= 8 次/秒）（V2 再实施）
+- [ ] 12a.6 测试断点续传功能（中断后重启能从上次位置继续）（V2 再实施）
+- [ ] 12a.7 测试数据溯源能力（raw 表 fetched_at 时间戳正确记录）（V2 再实施）
+- [ ] 12a.8 性能基准测试（单日全市场数据同步 <= 5 分钟，1 年数据初始化 <= 2 小时）（V2 再实施）
 
 ## 13. 文档和清理（Phase 8）
 
