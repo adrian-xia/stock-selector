@@ -1778,3 +1778,38 @@ class DataManager:
 
         return result
 
+    # --- 板块技术指标计算 ---
+
+    async def update_concept_indicators(self, trade_date: date | None = None) -> dict:
+        """计算指定交易日的板块技术指标。
+
+        使用泛化的指标计算引擎，从 concept_daily 读取数据，
+        计算技术指标后写入 concept_technical_daily 表。
+
+        Args:
+            trade_date: 目标交易日，None 表示自动检测最新交易日
+
+        Returns:
+            计算结果统计：{"trade_date": "YYYY-MM-DD", "total": N, "success": M, "failed": F}
+        """
+        from app.data.indicator import compute_incremental_generic
+        from app.models.concept import ConceptDaily, ConceptTechnicalDaily
+
+        logger.info("[update_concept_indicators] 开始计算板块技术指标")
+
+        result = await compute_incremental_generic(
+            session_factory=self._session_factory,
+            source_table=ConceptDaily,
+            target_table=ConceptTechnicalDaily,
+            target_date=trade_date,
+        )
+
+        logger.info(
+            "[update_concept_indicators] 完成：日期 %s，成功 %d 个，失败 %d 个",
+            result.get("trade_date"),
+            result.get("success", 0),
+            result.get("failed", 0),
+        )
+
+        return result
+
