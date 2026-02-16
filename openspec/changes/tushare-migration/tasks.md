@@ -135,8 +135,8 @@
 - [x] 11.2 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11b. 行情补充（5 张 raw 表）
-- [ ] 11.3 `app/models/raw.py` 添加行情补充原始表（raw_tushare_weekly, raw_tushare_monthly, raw_tushare_suspend_d, raw_tushare_hsgt_top10, raw_tushare_ggt_daily）
-- [ ] 11.4 TushareClient 添加对应 fetch_raw_* 方法
+- [x] 11.3 `app/models/raw.py` 添加行情补充原始表（raw_tushare_weekly, raw_tushare_monthly, raw_tushare_suspend_d, raw_tushare_hsgt_top10, raw_tushare_ggt_daily）
+- [x] 11.4 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11c. 市场参考数据（9 张 raw 表）
 - [ ] 11.5 `app/models/raw.py` 添加市场参考数据原始表（raw_tushare_top10_holders, raw_tushare_top10_floatholders, raw_tushare_pledge_stat, raw_tushare_pledge_detail, raw_tushare_repurchase, raw_tushare_share_float, raw_tushare_block_trade, raw_tushare_stk_holdernumber, raw_tushare_stk_holdertrade）
