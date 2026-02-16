@@ -1743,3 +1743,38 @@ class DataManager:
         logger.info(f"[sync_concept_member] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
 
+    # --- 指数技术指标计算 ---
+
+    async def update_index_indicators(self, trade_date: date | None = None) -> dict:
+        """计算指定交易日的指数技术指标。
+
+        使用泛化的指标计算引擎，从 index_daily 读取数据，
+        计算技术指标后写入 index_technical_daily 表。
+
+        Args:
+            trade_date: 目标交易日，None 表示自动检测最新交易日
+
+        Returns:
+            计算结果统计：{"trade_date": "YYYY-MM-DD", "total": N, "success": M, "failed": F}
+        """
+        from app.data.indicator import compute_incremental_generic
+        from app.models.index import IndexDaily, IndexTechnicalDaily
+
+        logger.info("[update_index_indicators] 开始计算指数技术指标")
+
+        result = await compute_incremental_generic(
+            session_factory=self._session_factory,
+            source_table=IndexDaily,
+            target_table=IndexTechnicalDaily,
+            target_date=trade_date,
+        )
+
+        logger.info(
+            "[update_index_indicators] 完成：日期 %s，成功 %d 个，失败 %d 个",
+            result.get("trade_date"),
+            result.get("success", 0),
+            result.get("failed", 0),
+        )
+
+        return result
+
