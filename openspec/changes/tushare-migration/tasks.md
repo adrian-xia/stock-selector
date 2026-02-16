@@ -42,7 +42,7 @@
 - [x] 6.2 手动验证：stock_basic → raw → stocks 链路
 - [x] 6.3 手动验证：trade_cal → raw → trade_calendar 链路
 - [x] 6.4 手动验证：daily + adj_factor + daily_basic → raw → stock_daily 链路
-- [x] 6.5 手动验证：策略引擎和回测引擎正常工作
+- [x] 6.5 手动验证：策略引擎和回测引擎正常工作（1 年数据范围）
 
 ## 7. P1 财务数据（Phase 2）
 
