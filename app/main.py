@@ -11,7 +11,6 @@ from app.api.strategy import router as strategy_router
 from app.cache.redis_client import close_redis, get_redis, init_redis
 from app.cache.tech_cache import warmup_cache
 from app.config import settings
-from app.data.pool import close_pool, get_pool
 from app.database import async_session_factory, engine
 from app.logger import setup_logging
 from app.scheduler.core import start_scheduler, stop_scheduler
@@ -45,8 +44,7 @@ async def _graceful_shutdown() -> None:
         await stop_scheduler()
 
     # 关闭其他资源
-    logger.info("[关闭] 关闭连接池和数据库连接...")
-    await close_pool()
+    logger.info("[关闭] 关闭数据库连接...")
     await close_redis()
     await engine.dispose()
 
@@ -86,7 +84,6 @@ async def lifespan(app: FastAPI):
     setup_logging(settings.log_level)
 
     await init_redis()
-    get_pool()  # 初始化连接池
     await _sync_strategies_to_db()
     # 缓存预热（受配置开关控制）
     if settings.cache_warmup_on_startup:

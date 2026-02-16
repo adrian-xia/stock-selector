@@ -34,8 +34,8 @@ docs/design/
 
 ## V1 范围（当前阶段）
 
-- 数据采集：BaoStock + AKShare，直接入标准表，无 raw 中转层，批量写入自动适配 asyncpg 参数限制
-- 性能优化：优化连接池获取逻辑 + 批量并发同步，单股票同步 0.1 秒，日线同步性能提升 8-12 倍，全链路性能日志支持瓶颈分析
+- 数据采集：Tushare Pro API，引入 raw 层作为数据缓冲（原始表），解耦数据获取和清洗逻辑，按日期批量获取全市场数据
+- 性能优化：令牌桶限流（400 QPS），全链路性能日志支持瓶颈分析
 - 自动数据更新：每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警（V1 记录日志，V2 接入企业微信/钉钉），基于 Redis 的任务状态管理；每日自动更新交易日历（获取未来 90 天数据，周末任务作为兜底）
 - 数据完整性：基于累积进度表（`stock_sync_progress`）的断点续传，启动时自动恢复未完成同步，按 365 天/批分批处理数据和指标，退市智能过滤，失败自动重试（每日 20:00），完整性门控（完成率 >= 95% 才执行策略），Redis 分布式锁防并发，环境隔离（APP_ENV_FILE）
 - 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → 日线数据 → 技术指标）
@@ -45,16 +45,17 @@ docs/design/
 - AI 分析：❌ V1 未实施（盘后链路不包含 AI 分析步骤），V2 再接入 Gemini Flash 单模型
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 前端：选股工作台 + 回测结果页，轮询（无 WebSocket）
-- 数据库：12 张表（见 99-实施范围 §八）
+- 数据库：业务表 12 张 + raw 层表 6 张（P0 基础行情数据）
 - 不做：用户权限、实时监控、新闻舆情、高手跟投
 
 ## 技术栈
 
 - **后端：** Python 3.12 + FastAPI + SQLAlchemy + Pydantic
+- **数据源：** Tushare Pro API（令牌桶限流 400 QPS）
 - **回测：** Backtrader
 - **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
-- **性能优化：** 优化连接池获取逻辑（立即创建会话）+ 批量并发同步（asyncio.Semaphore）+ 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
+- **性能优化：** 按日期批量获取全市场数据 + 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
 - **自动更新：** 数据嗅探 + 智能重试 + 任务状态管理（Redis）+ 通知报警（V1 日志，V2 企业微信/钉钉）+ 交易日历自动更新（每日获取未来 90 天数据）
 - **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
 - **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
@@ -246,6 +247,7 @@ uv run python -m app.data.cli update-indicators
 
 关键环境变量（.env）：
 - `DATABASE_URL` — PostgreSQL 连接字符串
+- `TUSHARE_TOKEN` — Tushare Pro API Token（必填）
 - `REDIS_HOST` / `REDIS_PORT` — Redis 连接（可选，不配置则缓存降级）
 - `GEMINI_API_KEY` — Gemini API Key（可选，不配置则跳过 AI 分析）
 - `DATA_INTEGRITY_CHECK_ENABLED` — 启动时是否检查数据完整性（默认 true）
@@ -268,14 +270,12 @@ stock-selector/
 │   ├── config.py             # 配置加载
 │   ├── logger.py             # 日志配置
 │   ├── data/                 # 数据采集模块
-│   │   ├── sources/          # BaoStock / AKShare 客户端
-│   │   ├── pool.py           # BaoStock 连接池
-│   │   ├── batch.py          # 批量日线同步
-│   │   ├── adj_factor.py     # 复权因子批量更新
+│   │   ├── tushare.py        # TushareClient（令牌桶限流 + 异步包装）
+│   │   ├── batch.py          # 批量日线同步（按日期批量模式）
 │   │   ├── probe.py          # 数据嗅探（检测数据是否就绪）
-│   │   ├── etl.py            # ETL 清洗
+│   │   ├── etl.py            # ETL 清洗（transform_tushare_*）
 │   │   ├── cli.py            # 数据管理 CLI（含 backfill-daily 断点续传命令）
-│   │   └── manager.py        # DataManager（含 detect_missing_dates 方法）
+│   │   └── manager.py        # DataManager（sync_raw_daily + etl_daily）
 │   ├── strategy/             # 策略引擎
 │   │   ├── base.py           # BaseStrategy
 │   │   ├── technical/        # 技术面策略

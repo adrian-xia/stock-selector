@@ -43,7 +43,7 @@ async def test_detect_missing_dates_no_missing():
     real_manager = RealDataManager(
         session_factory=manager._session_factory,
         clients={},
-        primary="baostock",
+        primary="tushare",
     )
     real_manager.get_trade_calendar = manager.get_trade_calendar
 
@@ -88,7 +88,7 @@ async def test_detect_missing_dates_partial_missing():
     real_manager = RealDataManager(
         session_factory=manager._session_factory,
         clients={},
-        primary="baostock",
+        primary="tushare",
     )
     real_manager.get_trade_calendar = manager.get_trade_calendar
 
@@ -131,7 +131,7 @@ async def test_detect_missing_dates_all_missing():
     real_manager = RealDataManager(
         session_factory=manager._session_factory,
         clients={},
-        primary="baostock",
+        primary="tushare",
     )
     real_manager.get_trade_calendar = manager.get_trade_calendar
 
@@ -256,9 +256,7 @@ class TestSyncFromProgressResume:
         }
 
         with patch("app.scheduler.core.settings") as mock_settings, \
-             patch("app.data.pool.get_pool"), \
-             patch("app.data.baostock.BaoStockClient"), \
-             patch("app.data.akshare.AKShareClient"), \
+             patch("app.data.tushare.TushareClient"), \
              patch("app.data.manager.DataManager", return_value=mock_manager), \
              patch("app.database.async_session_factory"):
             mock_settings.data_integrity_check_enabled = True
@@ -290,9 +288,7 @@ class TestSyncFromProgressResume:
         }
 
         with patch("app.scheduler.core.settings") as mock_settings, \
-             patch("app.data.pool.get_pool"), \
-             patch("app.data.baostock.BaoStockClient"), \
-             patch("app.data.akshare.AKShareClient"), \
+             patch("app.data.tushare.TushareClient"), \
              patch("app.data.manager.DataManager", return_value=mock_manager), \
              patch("app.database.async_session_factory"):
             mock_settings.data_integrity_check_enabled = True
@@ -324,9 +320,7 @@ class TestSyncFromProgressResume:
         }
 
         with patch("app.scheduler.core.settings") as mock_settings, \
-             patch("app.data.pool.get_pool"), \
-             patch("app.data.baostock.BaoStockClient"), \
-             patch("app.data.akshare.AKShareClient"), \
+             patch("app.data.tushare.TushareClient"), \
              patch("app.data.manager.DataManager", return_value=mock_manager), \
              patch("app.database.async_session_factory"):
             mock_settings.data_integrity_check_enabled = True

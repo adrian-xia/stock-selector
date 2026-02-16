@@ -1,4 +1,4 @@
-"""sync-daily 复权因子集成测试。"""
+"""sync-daily CLI 命令单元测试（Tushare 按日期全市场模式）。"""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,51 +7,29 @@ from click.testing import CliRunner
 from app.data.cli import cli
 
 
-class TestSyncDailyAdjFactor:
-    """验证 sync-daily 流程包含复权因子同步。"""
+class TestSyncDailyTushare:
+    """验证 sync-daily 使用 Tushare 按日期全市场模式。"""
 
-    @patch("app.data.adj_factor.batch_update_adj_factor", new_callable=AsyncMock, return_value=1)
-    @patch("app.data.cli.BaoStockClient")
-    @patch("app.data.cli.async_session_factory")
     @patch("app.data.cli._build_manager")
-    def test_sync_daily_includes_adj_factor(
-        self, mock_mgr, mock_sf, mock_bs_cls, mock_batch_update
-    ) -> None:
-        """sync-daily 应在日线同步后同步复权因子。"""
+    def test_sync_daily_calls_raw_and_etl(self, mock_mgr) -> None:
+        """sync-daily 应调用 sync_raw_daily + etl_daily。"""
         manager = MagicMock()
         manager.is_trade_day = AsyncMock(return_value=True)
-        manager.get_stock_list = AsyncMock(return_value=[
-            {"ts_code": "600519.SH", "list_date": "2001-08-27"},
-        ])
-        manager.sync_daily = AsyncMock()
+        manager.sync_raw_daily = AsyncMock(
+            return_value={"daily": 5000, "adj_factor": 5000, "daily_basic": 5000}
+        )
+        manager.etl_daily = AsyncMock(return_value={"inserted": 5000})
         mock_mgr.return_value = manager
-
-        # mock BaoStockClient 实例
-        bs_instance = MagicMock()
-        bs_instance.fetch_adj_factor = AsyncMock(return_value=[
-            {"ts_code": "600519.SH", "trade_date": "2026-02-08", "adj_factor": 1.0},
-        ])
-        mock_bs_cls.return_value = bs_instance
 
         runner = CliRunner()
         result = runner.invoke(cli, ["sync-daily"])
 
         assert result.exit_code == 0
-        # 验证日线同步被调用
-        manager.sync_daily.assert_called_once()
-        # 验证复权因子获取被调用
-        bs_instance.fetch_adj_factor.assert_called_once()
-        # 验证批量更新被调用
-        mock_batch_update.assert_called_once()
-        # 输出应包含 adj_factor_updated
-        assert "adj_factor_updated" in result.output
+        manager.sync_raw_daily.assert_called_once()
+        manager.etl_daily.assert_called_once()
 
-    @patch("app.data.cli.BaoStockClient")
-    @patch("app.data.cli.async_session_factory")
     @patch("app.data.cli._build_manager")
-    def test_sync_daily_skip_non_trading_day(
-        self, mock_mgr, mock_sf, mock_bs_cls
-    ) -> None:
+    def test_sync_daily_skip_non_trading_day(self, mock_mgr) -> None:
         """非交易日应跳过同步。"""
         manager = MagicMock()
         manager.is_trade_day = AsyncMock(return_value=False)

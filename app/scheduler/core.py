@@ -114,21 +114,15 @@ async def sync_stock_list_on_startup() -> None:
 
     start = time.monotonic()
     try:
-        from app.data.akshare import AKShareClient
-        from app.data.baostock import BaoStockClient
         from app.data.manager import DataManager
-        from app.data.pool import get_pool
+        from app.data.tushare import TushareClient
         from app.database import async_session_factory
 
-        pool = get_pool()
-        clients = {
-            "baostock": BaoStockClient(connection_pool=pool),
-            "akshare": AKShareClient(),
-        }
+        client = TushareClient()
         manager = DataManager(
             session_factory=async_session_factory,
-            clients=clients,
-            primary="baostock",
+            clients={"tushare": client},
+            primary="tushare",
         )
         result = await manager.sync_stock_list()
         elapsed = time.monotonic() - start
@@ -158,21 +152,15 @@ async def sync_from_progress(skip_check: bool = False) -> None:
     logger.info("[启动同步] 开始基于进度表恢复同步")
 
     try:
-        from app.data.akshare import AKShareClient
-        from app.data.baostock import BaoStockClient
         from app.data.manager import DataManager
-        from app.data.pool import get_pool
+        from app.data.tushare import TushareClient
         from app.database import async_session_factory
 
-        pool = get_pool()
-        clients = {
-            "baostock": BaoStockClient(connection_pool=pool),
-            "akshare": AKShareClient(),
-        }
+        client = TushareClient()
         manager = DataManager(
             session_factory=async_session_factory,
-            clients=clients,
-            primary="baostock",
+            clients={"tushare": client},
+            primary="tushare",
         )
 
         # 获取同步锁

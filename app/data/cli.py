@@ -5,9 +5,8 @@ from datetime import date
 import click
 
 from app.config import settings
-from app.data.akshare import AKShareClient
-from app.data.baostock import BaoStockClient
 from app.data.manager import DataManager
+from app.data.tushare import TushareClient
 from app.database import async_session_factory
 from app.logger import setup_logging
 
@@ -15,14 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 def _build_manager() -> DataManager:
-    clients = {
-        "baostock": BaoStockClient(),
-        "akshare": AKShareClient(),
-    }
+    client = TushareClient()
     return DataManager(
         session_factory=async_session_factory,
-        clients=clients,
-        primary="baostock",
+        clients={"tushare": client},
+        primary="tushare",
     )
 
 
@@ -132,11 +128,8 @@ def import_all(start: str | None, optimize_indexes: bool) -> None:
 
 @cli.command("sync-daily")
 def sync_daily() -> None:
-    """Incremental sync of today's daily bar data."""
-    from app.data.adj_factor import batch_update_adj_factor
-
+    """Incremental sync of today's daily bar data (Tushare 按日期全市场模式)."""
     manager = _build_manager()
-    bs_client = BaoStockClient()
 
     async def _run() -> None:
         today = date.today()
@@ -145,30 +138,15 @@ def sync_daily() -> None:
             click.echo(f"{today} is not a trading day. Skipping sync.")
             return
 
-        stocks = await manager.get_stock_list()
-        click.echo(f"Syncing daily data for {len(stocks)} stocks...")
+        click.echo(f"Syncing daily data for {today} (全市场模式)...")
 
-        stats = {"success": 0, "failed": 0, "adj_updated": 0}
-        for stock in stocks:
-            ts_code = stock["ts_code"]
-            try:
-                await manager.sync_daily(ts_code, today, today)
-                # 同步当日复权因子
-                adj_records = await bs_client.fetch_adj_factor(ts_code, today, today)
-                if adj_records:
-                    updated = await batch_update_adj_factor(
-                        async_session_factory, ts_code, adj_records
-                    )
-                    stats["adj_updated"] += updated
-                stats["success"] += 1
-            except Exception as e:
-                logger.error("Sync failed for %s: %s", ts_code, e)
-                stats["failed"] += 1
+        # 1. 拉取原始数据到 raw 表
+        raw_counts = await manager.sync_raw_daily(today)
+        click.echo(f"Raw data: {raw_counts}")
 
-        click.echo(
-            f"Daily sync complete: success={stats['success']}, "
-            f"failed={stats['failed']}, adj_factor_updated={stats['adj_updated']}"
-        )
+        # 2. ETL 清洗到 stock_daily
+        etl_result = await manager.etl_daily(today)
+        click.echo(f"ETL: {etl_result['inserted']} rows inserted")
 
     asyncio.run(_run())
 
@@ -233,102 +211,29 @@ def update_indicators(target_date: str | None) -> None:
 @cli.command("sync-adj-factor")
 @click.option("--force", is_flag=True, help="强制刷新所有股票的复权因子（忽略已有数据）")
 def sync_adj_factor(force: bool) -> None:
-    """全量导入复权因子到 stock_daily.adj_factor 字段。"""
-    from sqlalchemy import text as sa_text
+    """全量导入复权因子到 stock_daily.adj_factor 字段。
 
-    from app.data.adj_factor import batch_update_adj_factor
-
-    manager = _build_manager()
-    bs_client = BaoStockClient()
-
-    async def _run() -> None:
-        stocks = await manager.get_stock_list()
-        total = len(stocks)
-
-        # 如果不是 force 模式，查询哪些股票还没有 adj_factor
-        if not force:
-            async with async_session_factory() as session:
-                rows = await session.execute(sa_text("""
-                    SELECT DISTINCT ts_code FROM stock_daily
-                    WHERE adj_factor IS NULL
-                """))
-                need_sync = {r[0] for r in rows.fetchall()}
-            stocks = [s for s in stocks if s["ts_code"] in need_sync]
-            click.echo(
-                f"需要同步复权因子: {len(stocks)}/{total} 只股票"
-                f"（{total - len(stocks)} 只已有数据，跳过）"
-            )
-        else:
-            click.echo(f"强制刷新所有 {total} 只股票的复权因子...")
-
-        total_to_sync = len(stocks)
-        if total_to_sync == 0:
-            click.echo("所有股票已有复权因子，无需同步。")
-            return
-
-        stats = {"success": 0, "failed": 0, "rows_updated": 0}
-        for i, stock in enumerate(stocks):
-            ts_code = stock["ts_code"]
-            list_date = stock.get("list_date")
-            try:
-                if isinstance(list_date, date):
-                    start = list_date
-                elif list_date:
-                    start = date.fromisoformat(str(list_date))
-                else:
-                    start = date(2015, 1, 1)
-                records = await bs_client.fetch_adj_factor(ts_code, start, date.today())
-                if records:
-                    updated = await batch_update_adj_factor(
-                        async_session_factory, ts_code, records
-                    )
-                    stats["rows_updated"] += updated
-                stats["success"] += 1
-            except Exception as e:
-                logger.error("复权因子同步失败 %s: %s", ts_code, e)
-                stats["failed"] += 1
-
-            if (i + 1) % 100 == 0:
-                click.echo(
-                    f"[{i + 1}/{total_to_sync}] 同步 {ts_code} — "
-                    f"成功={stats['success']}, 失败={stats['failed']}, "
-                    f"更新行数={stats['rows_updated']}"
-                )
-
-        click.echo(
-            f"复权因子同步完成: 成功={stats['success']}, "
-            f"失败={stats['failed']}, 更新行数={stats['rows_updated']}"
-        )
-
-    asyncio.run(_run())
+    Tushare 模式下，adj_factor 已在 sync_raw_daily → etl_daily 流程中自动处理。
+    此命令用于补全历史数据中缺失的复权因子。
+    """
+    click.echo("Tushare 模式下，复权因子已在 sync_raw_daily → etl_daily 流程中自动处理。")
+    click.echo("如需补全历史数据，请使用 backfill-daily 命令。")
 
 
 @cli.command("backfill-daily")
 @click.option("--start", required=True, help="开始日期 (YYYY-MM-DD)")
 @click.option("--end", required=True, help="结束日期 (YYYY-MM-DD)")
-@click.option("--rate-limit", default=None, type=int, help="并发数限制（默认使用配置值）")
-def backfill_daily(start: str, end: str, rate_limit: int | None) -> None:
-    """手动补齐指定日期范围的日线数据（断点续传）。
+def backfill_daily(start: str, end: str) -> None:
+    """手动补齐指定日期范围的日线数据（Tushare 按日期全市场模式）。
 
     只补齐缺失的交易日数据，跳过已有数据的日期和非交易日。
     """
     from app.data.batch import batch_sync_daily
-    from app.data.pool import get_pool
 
     start_date = date.fromisoformat(start)
     end_date = date.fromisoformat(end)
 
-    # 构建带连接池的 manager
-    pool = get_pool()
-    clients = {
-        "baostock": BaoStockClient(connection_pool=pool),
-        "akshare": AKShareClient(),
-    }
-    manager = DataManager(
-        session_factory=async_session_factory,
-        clients=clients,
-        primary="baostock",
-    )
+    manager = _build_manager()
 
     async def _run() -> None:
         import time
@@ -344,52 +249,13 @@ def backfill_daily(start: str, end: str, rate_limit: int | None) -> None:
 
         click.echo(f"发现 {len(missing_dates)} 个缺失交易日，开始补齐...")
 
-        # 2. 获取所有上市股票
-        stocks = await manager.get_stock_list(status="L")
-        stock_codes = [s["ts_code"] for s in stocks]
-        click.echo(f"共 {len(stock_codes)} 只上市股票")
-
-        # 3. 逐个缺失日期补齐
-        total_success = 0
-        total_failed = 0
+        # 2. 按日期批量同步（sync_raw_daily + etl_daily）
         overall_start = time.monotonic()
-
-        for i, missing_date in enumerate(missing_dates, 1):
-            date_start = time.monotonic()
-            click.echo(f"\n[{i}/{len(missing_dates)}] 补齐日期：{missing_date}")
-
-            try:
-                # 使用批量同步，支持速率限制
-                result = await batch_sync_daily(
-                    session_factory=async_session_factory,
-                    stock_codes=stock_codes,
-                    target_date=missing_date,
-                    connection_pool=pool,
-                    concurrency=rate_limit if rate_limit else settings.daily_sync_concurrency,
-                )
-
-                date_elapsed = time.monotonic() - date_start
-                total_success += result["success"]
-                total_failed += result["failed"]
-
-                click.echo(
-                    f"  完成：成功 {result['success']} 只，失败 {result['failed']} 只，"
-                    f"耗时 {int(date_elapsed)}秒"
-                )
-
-                # 估算剩余时间
-                if i < len(missing_dates):
-                    avg_time = (time.monotonic() - overall_start) / i
-                    remaining_time = int(avg_time * (len(missing_dates) - i))
-                    remaining_minutes = remaining_time // 60
-                    remaining_seconds = remaining_time % 60
-                    click.echo(
-                        f"  预计剩余时间：{remaining_minutes}分{remaining_seconds}秒"
-                    )
-
-            except Exception as e:
-                logger.error("补齐日期 %s 失败：%s", missing_date, e)
-                click.echo(f"  失败：{e}")
+        result = await batch_sync_daily(
+            session_factory=async_session_factory,
+            trade_dates=missing_dates,
+            manager=manager,
+        )
 
         overall_elapsed = int(time.monotonic() - overall_start)
         overall_minutes = overall_elapsed // 60
@@ -397,7 +263,7 @@ def backfill_daily(start: str, end: str, rate_limit: int | None) -> None:
 
         click.echo(
             f"\n补齐完成：共 {len(missing_dates)} 个交易日，"
-            f"成功 {total_success} 只次，失败 {total_failed} 只次，"
+            f"成功 {result['success']} 天，失败 {result['failed']} 天，"
             f"总耗时 {overall_minutes}分{overall_seconds}秒"
         )
 

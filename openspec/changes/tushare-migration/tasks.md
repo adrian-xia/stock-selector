@@ -1,48 +1,48 @@
 ## 1. 基础设施（Phase 0）
 
-- [ ] 1.1 `pyproject.toml` 添加 `tushare>=1.4.0` 依赖，移除 `baostock` 和 `akshare`
-- [ ] 1.2 `app/config.py` 添加 Tushare 配置项（tushare_token, tushare_retry_count, tushare_retry_interval, tushare_qps_limit），移除 BaoStock/AKShare 配置项
-- [ ] 1.3 `.env.example` 添加 `TUSHARE_TOKEN`，移除 BaoStock/AKShare 相关配置
-- [ ] 1.4 创建 `app/data/tushare.py` — TushareClient 基础框架（令牌桶限流 + asyncio.to_thread 异步包装 + 重试机制）
-- [ ] 1.5 TushareClient 实现 DataSourceClient Protocol 的 4 个方法（fetch_daily, fetch_stock_list, fetch_trade_calendar, health_check）
+- [x] 1.1 `pyproject.toml` 添加 `tushare>=1.4.0` 依赖，移除 `baostock` 和 `akshare`
+- [x] 1.2 `app/config.py` 添加 Tushare 配置项（tushare_token, tushare_retry_count, tushare_retry_interval, tushare_qps_limit），移除 BaoStock/AKShare 配置项
+- [x] 1.3 `.env.example` 添加 `TUSHARE_TOKEN`，移除 BaoStock/AKShare 相关配置
+- [x] 1.4 创建 `app/data/tushare.py` — TushareClient 基础框架（令牌桶限流 + asyncio.to_thread 异步包装 + 重试机制）
+- [x] 1.5 TushareClient 实现 DataSourceClient Protocol 的 4 个方法（fetch_daily, fetch_stock_list, fetch_trade_calendar, health_check）
 
 ## 2. P0 原始表和模型（Phase 1a）
 
-- [ ] 2.1 创建 `app/models/raw.py` — 定义 6 张 P0 原始表模型（raw_tushare_stock_basic, raw_tushare_trade_cal, raw_tushare_daily, raw_tushare_adj_factor, raw_tushare_daily_basic, raw_tushare_stk_limit）
-- [ ] 2.2 创建 Alembic 迁移脚本 — P0 原始表建表
-- [ ] 2.3 TushareClient 添加 fetch_raw_* 方法（fetch_raw_daily, fetch_raw_adj_factor, fetch_raw_daily_basic, fetch_raw_stk_limit, fetch_raw_stock_basic, fetch_raw_trade_cal）
+- [x] 2.1 创建 `app/models/raw.py` — 定义 6 张 P0 原始表模型（raw_tushare_stock_basic, raw_tushare_trade_cal, raw_tushare_daily, raw_tushare_adj_factor, raw_tushare_daily_basic, raw_tushare_stk_limit）
+- [x] 2.2 创建 Alembic 迁移脚本 — P0 原始表建表
+- [x] 2.3 TushareClient 添加 fetch_raw_* 方法（fetch_raw_daily, fetch_raw_adj_factor, fetch_raw_daily_basic, fetch_raw_stk_limit, fetch_raw_stock_basic, fetch_raw_trade_cal）
 
 ## 3. P0 ETL 清洗（Phase 1b）
 
-- [ ] 3.1 `app/data/etl.py` 添加 transform_tushare_stock_basic 函数（raw → stocks）
-- [ ] 3.2 `app/data/etl.py` 添加 transform_tushare_trade_cal 函数（raw → trade_calendar）
-- [ ] 3.3 `app/data/etl.py` 添加 transform_tushare_daily 函数（raw_daily + raw_adj_factor + raw_daily_basic → stock_daily，含 amount 千元→元转换）
-- [ ] 3.4 `app/data/etl.py` 移除 clean_baostock_* 和 clean_akshare_* 函数
-- [ ] 3.5 `app/data/etl.py` 更新 normalize_stock_code 支持 source="tushare"（直接透传）
+- [x] 3.1 `app/data/etl.py` 添加 transform_tushare_stock_basic 函数（raw → stocks）
+- [x] 3.2 `app/data/etl.py` 添加 transform_tushare_trade_cal 函数（raw → trade_calendar）
+- [x] 3.3 `app/data/etl.py` 添加 transform_tushare_daily 函数（raw_daily + raw_adj_factor + raw_daily_basic → stock_daily，含 amount 千元→元转换）
+- [x] 3.4 `app/data/etl.py` 移除 clean_baostock_* 和 clean_akshare_* 函数
+- [x] 3.5 `app/data/etl.py` 更新 normalize_stock_code 支持 source="tushare"（直接透传）
 
 ## 4. DataManager 改造（Phase 1c）
 
-- [ ] 4.1 `app/data/manager.py` — sync_stock_list() 改用 TushareClient + transform_tushare_stock_basic
-- [ ] 4.2 `app/data/manager.py` — sync_trade_calendar() 改用 TushareClient + transform_tushare_trade_cal
-- [ ] 4.3 `app/data/manager.py` — 新增 sync_raw_daily(trade_date) 方法（按日期获取全市场 daily+adj_factor+daily_basic 写入 raw 表）
-- [ ] 4.4 `app/data/manager.py` — 新增 etl_daily(trade_date) 方法（从 raw 表 JOIN 清洗写入 stock_daily）
-- [ ] 4.5 `app/data/manager.py` — 移除 BaoStock/AKShare 相关导入和引用
+- [x] 4.1 `app/data/manager.py` — sync_stock_list() 改用 TushareClient + transform_tushare_stock_basic
+- [x] 4.2 `app/data/manager.py` — sync_trade_calendar() 改用 TushareClient + transform_tushare_trade_cal
+- [x] 4.3 `app/data/manager.py` — 新增 sync_raw_daily(trade_date) 方法（按日期获取全市场 daily+adj_factor+daily_basic 写入 raw 表）
+- [x] 4.4 `app/data/manager.py` — 新增 etl_daily(trade_date) 方法（从 raw 表 JOIN 清洗写入 stock_daily）
+- [x] 4.5 `app/data/manager.py` — 移除 BaoStock/AKShare 相关导入和引用
 
 ## 5. 调度器和批量同步改造（Phase 1d）
 
-- [ ] 5.1 `app/data/batch.py` — 重写 batch_sync_daily 为按日期批量模式（逐日 sync_raw_daily + etl_daily）
-- [ ] 5.2 `app/scheduler/jobs.py` — _build_manager() 改用 TushareClient
-- [ ] 5.3 `app/scheduler/jobs.py` — run_post_market_chain 适配按日期同步模式（sync_raw_daily → etl_daily → 指标计算）
-- [ ] 5.4 `app/data/probe.py` — 数据嗅探改用 TushareClient
-- [ ] 5.5 删除 `app/data/baostock.py`、`app/data/akshare.py`、`app/data/pool.py`
+- [x] 5.1 `app/data/batch.py` — 重写 batch_sync_daily 为按日期批量模式（逐日 sync_raw_daily + etl_daily）
+- [x] 5.2 `app/scheduler/jobs.py` — _build_manager() 改用 TushareClient
+- [x] 5.3 `app/scheduler/jobs.py` — run_post_market_chain 适配按日期同步模式（sync_raw_daily → etl_daily → 指标计算）
+- [x] 5.4 `app/data/probe.py` — 数据嗅探改用 TushareClient
+- [x] 5.5 删除 `app/data/baostock.py`、`app/data/akshare.py`、`app/data/pool.py`
 
 ## 6. P0 验证
 
-- [ ] 6.1 运行现有单元测试，修复因数据源切换导致的失败
-- [ ] 6.2 手动验证：stock_basic → raw → stocks 链路
-- [ ] 6.3 手动验证：trade_cal → raw → trade_calendar 链路
-- [ ] 6.4 手动验证：daily + adj_factor + daily_basic → raw → stock_daily 链路
-- [ ] 6.5 手动验证：策略引擎和回测引擎正常工作
+- [x] 6.1 运行现有单元测试，修复因数据源切换导致的失败
+- [x] 6.2 手动验证：stock_basic → raw → stocks 链路
+- [x] 6.3 手动验证：trade_cal → raw → trade_calendar 链路
+- [x] 6.4 手动验证：daily + adj_factor + daily_basic → raw → stock_daily 链路
+- [x] 6.5 手动验证：策略引擎和回测引擎正常工作
 
 ## 7. P1 财务数据（Phase 2）
 

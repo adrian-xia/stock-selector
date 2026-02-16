@@ -66,11 +66,15 @@ class TestRunBacktestApi:
         mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
 
+        # 策略查询结果
+        mock_strategy_result = MagicMock()
+        mock_strategy_result.scalar_one_or_none.return_value = 1
+
         # INSERT 返回 task_id
         mock_insert_result = MagicMock()
         mock_insert_result.scalar_one.return_value = 42
         mock_update_result = MagicMock()
-        mock_session.execute.side_effect = [mock_insert_result, mock_update_result]
+        mock_session.execute.side_effect = [mock_strategy_result, mock_insert_result, mock_update_result]
 
         # 模拟回测结果
         mock_run_bt.return_value = {
@@ -138,10 +142,14 @@ class TestRunBacktestApi:
         mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
 
+        # 策略查询结果
+        mock_strategy_result = MagicMock()
+        mock_strategy_result.scalar_one_or_none.return_value = 1
+
         mock_insert_result = MagicMock()
         mock_insert_result.scalar_one.return_value = 99
         mock_update_result = MagicMock()
-        mock_session.execute.side_effect = [mock_insert_result, mock_update_result]
+        mock_session.execute.side_effect = [mock_strategy_result, mock_insert_result, mock_update_result]
 
         mock_run_bt.side_effect = RuntimeError("数据不足")
 

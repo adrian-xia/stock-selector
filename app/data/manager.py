@@ -9,13 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.data.client_base import DataSourceClient
 from app.data.etl import (
     batch_insert,
-    clean_akshare_daily,
-    clean_baostock_daily,
-    clean_baostock_stock_list,
-    clean_baostock_trade_calendar,
+    transform_tushare_daily,
+    transform_tushare_stock_basic,
+    transform_tushare_trade_cal,
 )
 from app.exceptions import DataSyncError
 from app.models.market import Stock, StockDaily, StockSyncProgress, TradeCalendar
+from app.models.raw import (
+    RawTushareAdjFactor,
+    RawTushareDaily,
+    RawTushareDailyBasic,
+)
 from app.models.technical import TechnicalDaily
 
 logger = logging.getLogger(__name__)
@@ -28,7 +32,7 @@ class DataManager:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         clients: dict[str, DataSourceClient],
-        primary: str = "baostock",
+        primary: str = "tushare",
     ) -> None:
         self._session_factory = session_factory
         self._clients = clients
@@ -38,21 +42,13 @@ class DataManager:
     def _primary_client(self) -> DataSourceClient:
         return self._clients[self._primary]
 
-    @property
-    def _backup_clients(self) -> list[tuple[str, DataSourceClient]]:
-        return [
-            (name, client)
-            for name, client in self._clients.items()
-            if name != self._primary
-        ]
-
     # --- Sync operations ---
 
     async def sync_stock_list(self) -> dict:
         """Fetch and persist stock list from data source."""
         async with self._session_factory() as session:
             raw_rows = await self._primary_client.fetch_stock_list()
-            cleaned = clean_baostock_stock_list(raw_rows)
+            cleaned = transform_tushare_stock_basic(raw_rows)
 
             # 使用 ON CONFLICT DO UPDATE 确保数据更新
             count = 0
@@ -95,7 +91,7 @@ class DataManager:
             raw_rows = await self._primary_client.fetch_trade_calendar(
                 start_date, end_date
             )
-            cleaned = clean_baostock_trade_calendar(raw_rows)
+            cleaned = transform_tushare_trade_cal(raw_rows)
 
             # 使用 ON CONFLICT DO UPDATE 确保数据更新，分批插入避免参数超限
             count = 0
@@ -107,7 +103,10 @@ class DataManager:
                     stmt = pg_insert(TradeCalendar.__table__).values(batch)
                     stmt = stmt.on_conflict_do_update(
                         index_elements=["cal_date", "exchange"],
-                        set_={"is_open": stmt.excluded.is_open}
+                        set_={
+                            "is_open": stmt.excluded.is_open,
+                            "pre_trade_date": stmt.excluded.pre_trade_date,
+                        }
                     )
                     await session.execute(stmt)
                     count += len(batch)
@@ -141,11 +140,8 @@ class DataManager:
         start_date: date,
         end_date: date,
     ) -> dict:
-        """Fetch daily bars for a single stock with primary/backup fallback."""
+        """Fetch daily bars for a single stock using TushareClient."""
         import time
-
-        clean_fn = clean_baostock_daily
-        source_name = self._primary
 
         # 1. API 调用计时
         api_start = time.monotonic()
@@ -153,34 +149,15 @@ class DataManager:
             raw_rows = await self._primary_client.fetch_daily(
                 code, start_date, end_date
             )
-        except Exception as primary_err:
-            logger.warning(
-                "Primary source (%s) failed for %s: %s",
-                self._primary, code, primary_err,
-            )
-            # Try backup sources
-            for backup_name, backup_client in self._backup_clients:
-                try:
-                    raw_rows = await backup_client.fetch_daily(
-                        code, start_date, end_date
-                    )
-                    clean_fn = clean_akshare_daily
-                    source_name = backup_name
-                    break
-                except Exception as backup_err:
-                    logger.warning(
-                        "Backup source (%s) failed for %s: %s",
-                        backup_name, code, backup_err,
-                    )
-            else:
-                raise DataSyncError(
-                    f"All sources failed for {code}"
-                ) from primary_err
+        except Exception as e:
+            raise DataSyncError(
+                f"Tushare failed for {code}: {e}"
+            ) from e
         api_elapsed = time.monotonic() - api_start
 
-        # 2. 数据清洗计时
+        # 2. 数据清洗计时（fetch_daily 已返回合并后的数据，直接转换）
         clean_start = time.monotonic()
-        cleaned = clean_fn(raw_rows)
+        cleaned = transform_tushare_daily(raw_rows, [], [])
         clean_elapsed = time.monotonic() - clean_start
 
         if not cleaned:
@@ -188,7 +165,7 @@ class DataManager:
                 "[sync_daily] %s: API总计=%.2fs, 清洗=%.2fs, 入库=0s (无数据)",
                 code, api_elapsed, clean_elapsed,
             )
-            return {"inserted": 0, "skipped": 0, "source": source_name}
+            return {"inserted": 0, "skipped": 0, "source": "tushare"}
 
         # 3. 数据库写入计时
         db_start = time.monotonic()
@@ -198,14 +175,141 @@ class DataManager:
             )
         db_elapsed = time.monotonic() - db_start
 
-        # 记录细粒度日志（DEBUG 级别）
-        # 注意：api_elapsed 包含连接池等待时间，详细分解见 BaoStockClient 日志
         logger.debug(
             "[sync_daily] %s: API总计=%.2fs, 清洗=%.2fs, 入库=%.2fs",
             code, api_elapsed, clean_elapsed, db_elapsed,
         )
 
-        return {"inserted": count, "source": source_name}
+        return {"inserted": count, "source": "tushare"}
+
+    async def sync_raw_daily(self, trade_date: date) -> dict:
+        """按日期获取全市场 daily + adj_factor + daily_basic 写入 raw 表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"daily": int, "adj_factor": int, "daily_basic": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+
+        # 并发获取三个接口的数据
+        import asyncio
+        raw_daily, raw_adj, raw_basic = await asyncio.gather(
+            client.fetch_raw_daily(td_str),
+            client.fetch_raw_adj_factor(td_str),
+            client.fetch_raw_daily_basic(td_str),
+        )
+
+        counts = {"daily": 0, "adj_factor": 0, "daily_basic": 0}
+
+        async with self._session_factory() as session:
+            if raw_daily:
+                counts["daily"] = await self._upsert_raw(
+                    session, RawTushareDaily.__table__, raw_daily
+                )
+            if raw_adj:
+                counts["adj_factor"] = await self._upsert_raw(
+                    session, RawTushareAdjFactor.__table__, raw_adj
+                )
+            if raw_basic:
+                counts["daily_basic"] = await self._upsert_raw(
+                    session, RawTushareDailyBasic.__table__, raw_basic
+                )
+            await session.commit()
+
+        logger.info(
+            "[sync_raw_daily] %s: daily=%d, adj_factor=%d, daily_basic=%d",
+            trade_date, counts["daily"], counts["adj_factor"], counts["daily_basic"],
+        )
+        return counts
+
+    async def etl_daily(self, trade_date: date) -> dict:
+        """从 raw 表 JOIN 清洗写入 stock_daily 业务表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"inserted": int}
+        """
+        td_str = trade_date.strftime("%Y%m%d")
+
+        async with self._session_factory() as session:
+            # 从 raw 表读取数据
+            daily_result = await session.execute(
+                select(RawTushareDaily).where(RawTushareDaily.trade_date == td_str)
+            )
+            raw_daily = [
+                {c.key: getattr(r, c.key) for c in RawTushareDaily.__table__.columns if c.key != "fetched_at"}
+                for r in daily_result.scalars().all()
+            ]
+
+            adj_result = await session.execute(
+                select(RawTushareAdjFactor).where(RawTushareAdjFactor.trade_date == td_str)
+            )
+            raw_adj = [
+                {c.key: getattr(r, c.key) for c in RawTushareAdjFactor.__table__.columns if c.key != "fetched_at"}
+                for r in adj_result.scalars().all()
+            ]
+
+            basic_result = await session.execute(
+                select(RawTushareDailyBasic).where(RawTushareDailyBasic.trade_date == td_str)
+            )
+            raw_basic = [
+                {c.key: getattr(r, c.key) for c in RawTushareDailyBasic.__table__.columns if c.key != "fetched_at"}
+                for r in basic_result.scalars().all()
+            ]
+
+        # ETL 清洗
+        cleaned = transform_tushare_daily(raw_daily, raw_adj, raw_basic)
+
+        if not cleaned:
+            logger.debug("[etl_daily] %s: 无数据", trade_date)
+            return {"inserted": 0}
+
+        # 写入 stock_daily
+        async with self._session_factory() as session:
+            count = await batch_insert(session, StockDaily.__table__, cleaned)
+
+        logger.info("[etl_daily] %s: 写入 %d 条", trade_date, count)
+        return {"inserted": count}
+
+    @staticmethod
+    async def _upsert_raw(
+        session: AsyncSession, table, rows: list[dict], batch_size: int = 5000
+    ) -> int:
+        """批量 UPSERT 原始数据到 raw 表（ON CONFLICT DO UPDATE）。"""
+        if not rows:
+            return 0
+
+        # 获取主键列名
+        pk_cols = [c.name for c in table.primary_key.columns]
+        # 非主键列用于 UPDATE
+        update_cols = [c.name for c in table.columns if c.name not in pk_cols and c.name != "fetched_at"]
+
+        # asyncpg 参数上限 32767
+        num_columns = len(rows[0])
+        max_batch = 32000 // max(num_columns, 1)
+        batch_size = min(batch_size, max_batch)
+
+        total = 0
+        for i in range(0, len(rows), batch_size):
+            batch = rows[i : i + batch_size]
+            stmt = pg_insert(table).values(batch)
+            if update_cols:
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=pk_cols,
+                    set_={col: getattr(stmt.excluded, col) for col in update_cols},
+                )
+            else:
+                stmt = stmt.on_conflict_do_nothing()
+            await session.execute(stmt)
+            total += len(batch)
+        return total
 
     # --- Query operations ---
 

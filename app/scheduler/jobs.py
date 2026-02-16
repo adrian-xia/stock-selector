@@ -8,10 +8,8 @@ from datetime import date, datetime
 from app.cache.redis_client import get_redis
 from app.cache.tech_cache import refresh_all_tech_cache
 from app.config import settings
-from app.data.akshare import AKShareClient
-from app.data.baostock import BaoStockClient
 from app.data.manager import DataManager
-from app.data.pool import get_pool
+from app.data.tushare import TushareClient
 from app.database import async_session_factory
 from app.strategy.factory import StrategyFactory
 from app.strategy.pipeline import execute_pipeline
@@ -20,16 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 def _build_manager() -> DataManager:
-    """构造 DataManager 实例（使用连接池）。"""
-    pool = get_pool()
-    clients = {
-        "baostock": BaoStockClient(connection_pool=pool),
-        "akshare": AKShareClient(),
-    }
+    """构造 DataManager 实例（使用 TushareClient）。"""
+    client = TushareClient()
     return DataManager(
         session_factory=async_session_factory,
-        clients=clients,
-        primary="baostock",
+        clients={"tushare": client},
+        primary="tushare",
     )
 
 

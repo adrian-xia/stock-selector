@@ -14,9 +14,22 @@ logger = logging.getLogger(__name__)
 _NULL_VALUES = {"", "N/A", "--", "None", "none", "null", "NULL"}
 
 
-def normalize_stock_code(raw_code: str, source: str = "baostock") -> str:
+def _safe_str(val, default: str = "") -> str:
+    """将值安全转换为字符串，NaN/None 返回默认值。"""
+    if val is None:
+        return default
+    if isinstance(val, float) and pd.isna(val):
+        return default
+    return str(val)
+
+
+def normalize_stock_code(raw_code: str, source: str = "tushare") -> str:
     """Normalize stock codes from various sources to standard format (600519.SH)."""
     if not raw_code:
+        return raw_code
+
+    if source == "tushare":
+        # Tushare 原生格式已经是 600519.SH，直接透传
         return raw_code
 
     if source == "baostock":
@@ -70,103 +83,98 @@ def parse_date(value: str | None) -> date | None:
     return None
 
 
-def clean_baostock_daily(raw_rows: list[dict]) -> list[dict]:
-    """Clean BaoStock daily bar data into standard format."""
-    cleaned: list[dict] = []
-    for raw in raw_rows:
-        trade_date = parse_date(raw.get("trade_date"))
-        if trade_date is None:
-            continue
-
-        vol = parse_decimal(raw.get("vol"))
-        amount = parse_decimal(raw.get("amount"))
-        trade_status = raw.get("trade_status", "1")
-        if vol is not None and vol == 0 and amount is not None and amount == 0:
-            trade_status = "0"
-
-        cleaned.append({
-            "ts_code": raw.get("ts_code", ""),
-            "trade_date": trade_date,
-            "open": parse_decimal(raw.get("open")),
-            "high": parse_decimal(raw.get("high")),
-            "low": parse_decimal(raw.get("low")),
-            "close": parse_decimal(raw.get("close")),
-            "pre_close": parse_decimal(raw.get("pre_close")),
-            "pct_chg": parse_decimal(raw.get("pct_chg")),
-            "vol": vol or Decimal("0"),
-            "amount": amount or Decimal("0"),
-            "turnover_rate": parse_decimal(raw.get("turnover_rate")),
-            "trade_status": trade_status,
-            "data_source": "baostock",
-        })
-    return cleaned
-
-
-def clean_akshare_daily(raw_rows: list[dict]) -> list[dict]:
-    """Clean AKShare daily bar data into standard format."""
-    cleaned: list[dict] = []
-    for raw in raw_rows:
-        trade_date = parse_date(raw.get("trade_date"))
-        if trade_date is None:
-            continue
-
-        vol = parse_decimal(raw.get("vol"))
-        amount = parse_decimal(raw.get("amount"))
-
-        cleaned.append({
-            "ts_code": raw.get("ts_code", ""),
-            "trade_date": trade_date,
-            "open": parse_decimal(raw.get("open")),
-            "high": parse_decimal(raw.get("high")),
-            "low": parse_decimal(raw.get("low")),
-            "close": parse_decimal(raw.get("close")),
-            "pre_close": parse_decimal(raw.get("pre_close")),
-            "pct_chg": parse_decimal(raw.get("pct_chg")),
-            "vol": vol or Decimal("0"),
-            "amount": amount or Decimal("0"),
-            "turnover_rate": parse_decimal(raw.get("turnover_rate")),
-            "trade_status": raw.get("trade_status", "1"),
-            "data_source": "akshare",
-        })
-    return cleaned
-
-
-def clean_baostock_stock_list(raw_rows: list[dict]) -> list[dict]:
-    """Clean BaoStock stock list data."""
+def transform_tushare_stock_basic(raw_rows: list[dict]) -> list[dict]:
+    """将 Tushare stock_basic 原始数据转换为 stocks 业务表格式。"""
     cleaned: list[dict] = []
     for raw in raw_rows:
         ts_code = raw.get("ts_code", "")
         if not ts_code:
             continue
-        list_date = parse_date(raw.get("list_date"))
-        delist_date = parse_date(raw.get("delist_date"))
         cleaned.append({
             "ts_code": ts_code,
-            "symbol": raw.get("symbol", ts_code.split(".")[0]),
-            "name": raw.get("name", ""),
-            "area": raw.get("area", ""),
-            "industry": raw.get("industry", ""),
-            "market": raw.get("market", ""),
-            "list_date": list_date,
-            "delist_date": delist_date,
-            "list_status": raw.get("list_status", "L"),
+            "symbol": _safe_str(raw.get("symbol", ts_code.split(".")[0])),
+            "name": _safe_str(raw.get("name", "")),
+            "area": _safe_str(raw.get("area", "")),
+            "industry": _safe_str(raw.get("industry", "")),
+            "market": _safe_str(raw.get("market", "")),
+            "list_date": parse_date(raw.get("list_date")),
+            "delist_date": parse_date(raw.get("delist_date")),
+            "list_status": _safe_str(raw.get("list_status", "L")),
         })
     return cleaned
 
 
-def clean_baostock_trade_calendar(raw_rows: list[dict]) -> list[dict]:
-    """Clean BaoStock trade calendar data."""
+def transform_tushare_trade_cal(raw_rows: list[dict]) -> list[dict]:
+    """将 Tushare trade_cal 原始数据转换为 trade_calendar 业务表格式。"""
     cleaned: list[dict] = []
     for raw in raw_rows:
         cal_date = parse_date(raw.get("cal_date"))
         if cal_date is None:
             continue
-        # BaoStockClient 已经将 is_open 转换为布尔值
-        is_open = raw.get("is_open", False)
+        is_open = raw.get("is_open", 0)
+        pre_trade_date = parse_date(raw.get("pretrade_date"))
         cleaned.append({
             "cal_date": cal_date,
-            "exchange": "SSE",
-            "is_open": is_open if isinstance(is_open, bool) else is_open == "1",
+            "exchange": raw.get("exchange", "SSE"),
+            "is_open": int(is_open) == 1 if not isinstance(is_open, bool) else is_open,
+            "pre_trade_date": pre_trade_date,
+        })
+    return cleaned
+
+
+def transform_tushare_daily(
+    raw_daily: list[dict],
+    raw_adj_factor: list[dict],
+    raw_daily_basic: list[dict],
+) -> list[dict]:
+    """将 Tushare daily + adj_factor + daily_basic 原始数据合并转换为 stock_daily 业务表格式。
+
+    注意：Tushare daily 的 amount 单位是千元，需要乘以 1000 转换为元。
+    """
+    # 构建 adj_factor 和 daily_basic 的查找表
+    adj_map: dict[str, Decimal | None] = {}
+    for r in raw_adj_factor:
+        key = f"{r.get('ts_code')}_{r.get('trade_date')}"
+        adj_map[key] = parse_decimal(r.get("adj_factor"))
+
+    basic_map: dict[str, Decimal | None] = {}
+    for r in raw_daily_basic:
+        key = f"{r.get('ts_code')}_{r.get('trade_date')}"
+        basic_map[key] = parse_decimal(r.get("turnover_rate"))
+
+    cleaned: list[dict] = []
+    for raw in raw_daily:
+        trade_date = parse_date(raw.get("trade_date"))
+        if trade_date is None:
+            continue
+
+        ts_code = raw.get("ts_code", "")
+        key = f"{ts_code}_{raw.get('trade_date')}"
+
+        vol = parse_decimal(raw.get("vol"))
+        # amount 千元 → 元
+        amount_raw = parse_decimal(raw.get("amount"))
+        amount = amount_raw * 1000 if amount_raw is not None else Decimal("0")
+
+        trade_status = "1"
+        if vol is not None and vol == 0 and amount == 0:
+            trade_status = "0"
+
+        cleaned.append({
+            "ts_code": ts_code,
+            "trade_date": trade_date,
+            "open": parse_decimal(raw.get("open")),
+            "high": parse_decimal(raw.get("high")),
+            "low": parse_decimal(raw.get("low")),
+            "close": parse_decimal(raw.get("close")),
+            "pre_close": parse_decimal(raw.get("pre_close")),
+            "pct_chg": parse_decimal(raw.get("pct_chg")),
+            "vol": vol or Decimal("0"),
+            "amount": amount,
+            "adj_factor": adj_map.get(key),
+            "turnover_rate": basic_map.get(key),
+            "trade_status": trade_status,
+            "data_source": "tushare",
         })
     return cleaned
 

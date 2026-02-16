@@ -35,20 +35,11 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = ""
 
-    # --- BaoStock ---
-    baostock_retry_count: int = 3
-    baostock_retry_interval: float = 2.0
-    baostock_timeout: int = 30
-    baostock_qps_limit: int = 5
-    baostock_pool_size: int = 5                 # 连接池大小（最大并发连接数）
-    baostock_pool_timeout: float = 30.0         # 获取连接的超时时间（秒）
-    baostock_session_ttl: float = 3600.0        # 会话生存时间（秒）
-
-    # --- AKShare ---
-    akshare_retry_count: int = 3
-    akshare_retry_interval: float = 1.0
-    akshare_timeout: int = 20
-    akshare_qps_limit: int = 10
+    # --- Tushare ---
+    tushare_token: str = ""                        # Tushare Pro API Token
+    tushare_retry_count: int = 3                   # API 调用失败重试次数
+    tushare_retry_interval: float = 1.0            # 重试间隔（秒）
+    tushare_qps_limit: int = 400                   # 每分钟最大请求数（官方限制 500，留余量）
 
     # --- ETL ---
     etl_batch_size: int = 5000

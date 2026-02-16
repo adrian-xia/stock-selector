@@ -4,8 +4,8 @@
 
 ## 功能特性
 
-- **多源数据采集** — 对接 BaoStock + AKShare，自动同步日线行情、财务指标、资金流向等数据，批量写入自动适配 asyncpg 参数限制
-- **高性能数据同步** — 优化连接池 + 批量并发同步，单股票同步 0.1 秒，8000+ 只股票日线数据同步从 2-3 小时降至 15 分钟（8-12 倍提升），全链路性能日志支持瓶颈分析（数据同步、技术指标、缓存刷新、调度任务）
+- **Tushare 数据源** — 对接 Tushare Pro API，自动同步日线行情、财务指标、资金流向等数据，引入 raw 层作为数据缓冲，解耦数据获取和清洗逻辑
+- **高性能数据同步** — 按日期批量获取全市场数据（避免逐股票遍历），令牌桶限流（400 QPS），全链路性能日志支持瓶颈分析（数据同步、技术指标、缓存刷新、调度任务）
 - **智能数据更新** — 每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警，无需手动干预；每日自动更新交易日历（获取未来 90 天数据）
 - **数据完整性检查** — 基于累积进度表（`stock_sync_progress`）的断点续传机制，启动时自动恢复未完成的同步任务，按 365 天/批分批处理，支持退市股票智能过滤和失败自动重试（每日 20:00），完整性门控确保数据完成率达标后才执行策略
 - **数据初始化向导** — 交互式引导首次数据初始化，支持 1年/3年/自定义范围选项
@@ -27,6 +27,7 @@
 |------|------|
 | 后端框架 | Python 3.12 + FastAPI + SQLAlchemy (async) |
 | 数据校验 | Pydantic v2 |
+| 数据源 | Tushare Pro API |
 | 数据库 | PostgreSQL + asyncpg |
 | 缓存 | Redis + hiredis |
 | 回测引擎 | Backtrader |
@@ -72,6 +73,9 @@ cp .env.example .env
 # 数据库连接
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selector
 
+# Tushare API Token（必填）
+TUSHARE_TOKEN=your-tushare-token-here
+
 # AI 分析（可选，不填则跳过 AI 评分）
 # 方式一：API Key
 GEMINI_API_KEY=your-gemini-api-key
@@ -96,7 +100,7 @@ AUTO_UPDATE_PROBE_THRESHOLD=0.8         # 嗅探成功阈值（80%样本有数�
 ### 初始化数据库
 
 ```bash
-# 执行数据库迁移（创建 12 张表）
+# 执行数据库迁移（创建业务表 + raw 层表）
 uv run alembic upgrade head
 ```
 
