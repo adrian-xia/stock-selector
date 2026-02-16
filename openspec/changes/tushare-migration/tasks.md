@@ -92,7 +92,7 @@
 
 - [x] 9.1 创建 `app/models/index.py` — 定义 6 张指数业务表模型（index_basic, index_daily, index_weight, industry_classify, industry_member, index_technical_daily）
 - [x] 9.2 `app/models/raw.py` 添加 12 张指数原始表模型（raw_tushare_index_basic, raw_tushare_index_weight, raw_tushare_index_daily, raw_tushare_index_weekly, raw_tushare_index_monthly, raw_tushare_index_dailybasic, raw_tushare_index_global, raw_tushare_daily_info, raw_tushare_sz_daily_info, raw_tushare_index_classify, raw_tushare_index_member_all, raw_tushare_sw_daily）
-- [ ] 9.3 `app/models/raw.py` 添加 4 张中信行业+指数技术面原始表（raw_tushare_ci_index_member, raw_tushare_ci_daily, raw_tushare_index_factor_pro, raw_tushare_tdx_daily）
+- [x] 9.3 `app/models/raw.py` 添加 4 张中信行业+指数技术面原始表（raw_tushare_ci_index_member, raw_tushare_ci_daily, raw_tushare_index_factor_pro, raw_tushare_tdx_daily）
 - [ ] 9.4 创建 Alembic 迁移脚本 — 指数原始表 + 指数业务表建表（含 index_technical_daily）
 - [ ] 9.5 TushareClient 添加指数 fetch_raw_* 方法
 - [ ] 9.6 `app/data/etl.py` 添加指数 ETL 清洗函数
@@ -188,8 +188,8 @@
 ## 13. 文档和清理（Phase 8）
 
 - [ ] 13.1 补全 `docs/tushare/` 下缺失的接口文档（从官网获取指数/板块/扩展接口文档）
-- [x] 13.2 更新 `docs/design/01-详细设计-数据采集.md` — 数据源改为 Tushare，新增 raw 层架构说明
-- [x] 13.3 更新 `docs/design/99-实施范围-V1与V2划分.md` — 标注 Tushare 迁移为已实施
-- [x] 13.4 更新 `README.md` — 技术栈、数据源、配置说明（已在之前提交中完成）
-- [x] 13.5 更新 `CLAUDE.md` — V1 范围、技术栈、目录结构（已在之前提交中完成）
+- [ ] 13.2 更新 `docs/design/01-详细设计-数据采集.md` — 数据源改为 Tushare，新增 raw 层架构说明
+- [ ] 13.3 更新 `docs/design/99-实施范围-V1与V2划分.md` — 标注 Tushare 迁移为已实施
+- [ ] 13.4 更新 `README.md` — 技术栈、数据源、配置说明（已在之前提交中完成）
+- [ ] 13.5 更新 `CLAUDE.md` — V1 范围、技术栈、目录结构（已在之前提交中完成）
 - [x] 13.6 删除 BaoStock/AKShare 相关测试，新增 TushareClient 单元测试
