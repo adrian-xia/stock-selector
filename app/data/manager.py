@@ -15,7 +15,8 @@ from app.data.etl import (
     transform_tushare_trade_cal,
 )
 from app.exceptions import DataSyncError
-from app.models.market import FinanceIndicator, Stock, StockDaily, StockSyncProgress, TradeCalendar
+from app.models.finance import FinanceIndicator
+from app.models.market import Stock, StockDaily, StockSyncProgress, TradeCalendar
 from app.models.raw import (
     RawTushareAdjFactor,
     RawTushareDaily,
