@@ -44,16 +44,16 @@
 - [x] 6.4 手动验证：daily + adj_factor + daily_basic → raw → stock_daily 链路
 - [x] 6.5 手动验证：策略引擎和回测引擎正常工作（1 年数据范围）
 
-## 6a. P0 自动化数据校验测试
+## 6a. P0 自动化数据校验测试（V2 再实施，需要实际数据）
 
-- [x] 6a.1 创建 `tests/integration/test_p0_data_validation.py` — P0 核心数据校验测试
-- [x] 6a.2 测试 raw_tushare_stock_basic 数据完整性（上市股票数 >= 5000）
-- [x] 6a.3 测试 raw_tushare_trade_cal 数据完整性（交易日历覆盖未来 90 天）
-- [x] 6a.4 测试 raw_tushare_daily 数据完整性（每个交易日记录数 >= 上市股票数 × 0.95）
-- [x] 6a.5 测试 raw → stock_daily ETL 转换正确性（amount 千元→元转换，复权因子应用）
-- [x] 6a.6 测试跨表一致性（raw_tushare_daily + raw_tushare_adj_factor + raw_tushare_daily_basic → stock_daily 记录数匹配）
-- [x] 6a.7 测试数据质量（stock_daily 关键字段 open/high/low/close 非空率 >= 99%）
-- [x] 6a.8 测试涨跌停价格合理性（raw_tushare_stk_limit 涨停价 >= 昨收价，跌停价 <= 昨收价）
+- [ ] 6a.1 创建 `tests/integration/test_p0_data_validation.py` — P0 核心数据校验测试（V2 再实施）
+- [ ] 6a.2 测试 raw_tushare_stock_basic 数据完整性（上市股票数 >= 5000）（V2 再实施）
+- [ ] 6a.3 测试 raw_tushare_trade_cal 数据完整性（交易日历覆盖未来 90 天）（V2 再实施）
+- [ ] 6a.4 测试 raw_tushare_daily 数据完整性（每个交易日记录数 >= 上市股票数 × 0.95）（V2 再实施）
+- [ ] 6a.5 测试 raw → stock_daily ETL 转换正确性（amount 千元→元转换，复权因子应用）（V2 再实施）
+- [ ] 6a.6 测试跨表一致性（raw_tushare_daily + raw_tushare_adj_factor + raw_tushare_daily_basic → stock_daily 记录数匹配）（V2 再实施）
+- [ ] 6a.7 测试数据质量（stock_daily 关键字段 open/high/low/close 非空率 >= 99%）（V2 再实施）
+- [ ] 6a.8 测试涨跌停价格合理性（raw_tushare_stk_limit 涨停价 >= 昨收价，跌停价 <= 昨收价）（V2 再实施）
 
 ## 7. P1 财务数据（Phase 2）
 
@@ -63,13 +63,13 @@
 - [x] 7.4 `app/data/etl.py` 添加 transform_tushare_fina_indicator 函数（raw → finance_indicator）
 - [x] 7.5 DataManager 添加 sync_raw_fina(period) 和 etl_fina(period) 方法
 
-## 7a. P1 数据校验测试
+## 7a. P1 数据校验测试（V2 再实施，需要实际数据）
 
-- [x] 7a.1 创建 `tests/integration/test_p1_data_validation.py` — P1 财务数据校验测试
-- [x] 7a.2 测试 raw_tushare_fina_indicator 数据完整性（记录数 >= 预期季度数 × 上市公司数 × 0.95）
-- [x] 7a.3 测试 raw → finance_indicator ETL 转换正确性（字段映射、数值转换、日期格式）
-- [x] 7a.4 测试财务数据质量（关键字段非空率 >= 90%，数值范围合理性）
-- [x] 7a.5 测试跨表一致性（raw 表和业务表记录数匹配度 >= 95%）
+- [ ] 7a.1 创建 `tests/integration/test_p1_data_validation.py` — P1 财务数据校验测试（V2 再实施）
+- [ ] 7a.2 测试 raw_tushare_fina_indicator 数据完整性（记录数 >= 预期季度数 × 上市公司数 × 0.95）（V2 再实施）
+- [ ] 7a.3 测试 raw → finance_indicator ETL 转换正确性（字段映射、数值转换、日期格式）（V2 再实施）
+- [ ] 7a.4 测试财务数据质量（关键字段非空率 >= 90%，数值范围合理性）（V2 再实施）
+- [ ] 7a.5 测试跨表一致性（raw 表和业务表记录数匹配度 >= 95%）（V2 再实施）
 
 ## 8. P2 资金流向（Phase 3）
 
