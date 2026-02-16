@@ -1283,3 +1283,62 @@ class TushareClient:
         """
         df = await self._call("stk_surv", api_name="stk_surv", ts_code=ts_code, end_date=end_date, start_date=start_date, survey_date=survey_date)
         return df.to_dict("records")
+
+    # 11e. 两融数据（4 个）
+
+    async def fetch_raw_margin(self, trade_date: str = "", start_date: str = "", end_date: str = "", exchange_id: str = "") -> list[dict]:
+        """获取融资融券交易汇总（对应 margin 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+            exchange_id: 交易所（SSE/SZSE）
+
+        Returns:
+            融资融券交易汇总原始数据列表
+        """
+        df = await self._call("margin", api_name="margin", trade_date=trade_date, start_date=start_date, end_date=end_date, exchange_id=exchange_id)
+        return df.to_dict("records")
+
+    async def fetch_raw_margin_detail(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取融资融券交易明细（对应 margin_detail 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            融资融券交易明细原始数据列表
+        """
+        df = await self._call("margin_detail", api_name="margin_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_margin_target(self, ts_code: str = "") -> list[dict]:
+        """获取融资融券标的（对应 margin_target 接口）。
+
+        Args:
+            ts_code: 股票代码
+
+        Returns:
+            融资融券标的原始数据列表
+        """
+        df = await self._call("margin_target", api_name="margin_target", ts_code=ts_code)
+        return df.to_dict("records")
+
+    async def fetch_raw_slb_len(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取转融通借入（对应 slb_len 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            转融通借入原始数据列表
+        """
+        df = await self._call("slb_len", api_name="slb_len", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
