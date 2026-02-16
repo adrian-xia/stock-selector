@@ -436,3 +436,78 @@ def transform_tushare_index_technical(raw_rows: list[dict]) -> list[dict]:
         })
     return cleaned
 
+
+# =====================================================================
+# P4 板块数据 ETL 清洗函数（3 个）
+# =====================================================================
+
+
+def transform_tushare_concept_index(raw_rows: list[dict], src: str) -> list[dict]:
+    """清洗板块基础信息（raw_tushare_ths_index/dc_index/tdx_index → concept_index）。
+
+    统一三个数据源（THS/DC/TDX）到 concept_index 业务表。
+
+    Args:
+        raw_rows: 原始数据行列表
+        src: 数据源标识（THS/DC/TDX）
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "ts_code": raw["ts_code"],
+            "name": raw.get("name"),
+            "src": src,
+            "type": raw.get("type"),
+        })
+    return cleaned
+
+
+def transform_tushare_concept_daily(raw_rows: list[dict]) -> list[dict]:
+    """清洗板块日线行情（raw_tushare_ths_daily → concept_daily）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "ts_code": raw["ts_code"],
+            "trade_date": parse_date(raw["trade_date"]),
+            "open": parse_decimal(raw.get("open")),
+            "high": parse_decimal(raw.get("high")),
+            "low": parse_decimal(raw.get("low")),
+            "close": parse_decimal(raw.get("close")),
+            "pre_close": parse_decimal(raw.get("pre_close")),
+            "change": parse_decimal(raw.get("change")),
+            "pct_chg": parse_decimal(raw.get("pct_chg")),
+            "vol": parse_decimal(raw.get("vol")) or Decimal("0"),
+            "amount": parse_decimal(raw.get("amount")) or Decimal("0"),
+        })
+    return cleaned
+
+
+def transform_tushare_concept_member(raw_rows: list[dict]) -> list[dict]:
+    """清洗板块成分股（raw_tushare_ths_member/dc_member/tdx_member → concept_member）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "concept_code": raw["ts_code"],
+            "stock_code": raw["code"],
+            "in_date": parse_date(raw["in_date"]),
+            "out_date": parse_date(raw.get("out_date")),
+        })
+    return cleaned
+
