@@ -139,20 +139,20 @@
 - [x] 11.4 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11c. 市场参考数据（9 张 raw 表）
-- [ ] 11.5 `app/models/raw.py` 添加市场参考数据原始表（raw_tushare_top10_holders, raw_tushare_top10_floatholders, raw_tushare_pledge_stat, raw_tushare_pledge_detail, raw_tushare_repurchase, raw_tushare_share_float, raw_tushare_block_trade, raw_tushare_stk_holdernumber, raw_tushare_stk_holdertrade）
-- [ ] 11.6 TushareClient 添加对应 fetch_raw_* 方法
+- [x] 11.5 `app/models/raw.py` 添加市场参考数据原始表（raw_tushare_top10_holders, raw_tushare_top10_floatholders, raw_tushare_pledge_stat, raw_tushare_pledge_detail, raw_tushare_repurchase, raw_tushare_share_float, raw_tushare_block_trade, raw_tushare_stk_holdernumber, raw_tushare_stk_holdertrade）
+- [x] 11.6 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11d. 特色数据（9 张 raw 表）
-- [ ] 11.7 `app/models/raw.py` 添加特色数据原始表（raw_tushare_report_rc, raw_tushare_cyq_perf, raw_tushare_cyq_chips, raw_tushare_stk_factor, raw_tushare_stk_factor_pro, raw_tushare_ccass_hold, raw_tushare_ccass_hold_detail, raw_tushare_hk_hold, raw_tushare_stk_surv）
-- [ ] 11.8 TushareClient 添加对应 fetch_raw_* 方法
+- [x] 11.7 `app/models/raw.py` 添加特色数据原始表（raw_tushare_report_rc, raw_tushare_cyq_perf, raw_tushare_cyq_chips, raw_tushare_stk_factor, raw_tushare_stk_factor_pro, raw_tushare_ccass_hold, raw_tushare_ccass_hold_detail, raw_tushare_hk_hold, raw_tushare_stk_surv）
+- [x] 11.8 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11e. 两融数据（4 张 raw 表）
-- [ ] 11.9 `app/models/raw.py` 添加两融原始表（raw_tushare_margin, raw_tushare_margin_detail, raw_tushare_margin_target, raw_tushare_slb_len）
-- [ ] 11.10 TushareClient 添加对应 fetch_raw_* 方法
+- [x] 11.9 `app/models/raw.py` 添加两融原始表（raw_tushare_margin, raw_tushare_margin_detail, raw_tushare_margin_target, raw_tushare_slb_len）
+- [x] 11.10 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11f. 打板专题（14 张 raw 表）
-- [ ] 11.11 `app/models/raw.py` 添加打板专题原始表（raw_tushare_limit_list_d, raw_tushare_ths_limit, raw_tushare_limit_step, raw_tushare_hm_board, raw_tushare_hm_list, raw_tushare_hm_detail, raw_tushare_stk_auction, raw_tushare_stk_auction_o, raw_tushare_kpl_list, raw_tushare_kpl_concept, raw_tushare_broker_recommend, raw_tushare_ths_hot, raw_tushare_dc_hot, raw_tushare_ggt_monthly）
-- [ ] 11.12 TushareClient 添加对应 fetch_raw_* 方法
+- [x] 11.11 `app/models/raw.py` 添加打板专题原始表（raw_tushare_limit_list_d, raw_tushare_ths_limit, raw_tushare_limit_step, raw_tushare_hm_board, raw_tushare_hm_list, raw_tushare_hm_detail, raw_tushare_stk_auction, raw_tushare_stk_auction_o, raw_tushare_kpl_list, raw_tushare_kpl_concept, raw_tushare_broker_recommend, raw_tushare_ths_hot, raw_tushare_dc_hot, raw_tushare_ggt_monthly）
+- [x] 11.12 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11g. Alembic 迁移 + ETL
 - [ ] 11.13 创建 Alembic 迁移脚本 — P5 全部扩展原始表建表（48 张）
