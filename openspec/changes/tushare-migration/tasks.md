@@ -97,8 +97,8 @@
 - [x] 9.5 TushareClient 添加指数 fetch_raw_* 方法
 - [x] 9.6 `app/data/etl.py` 添加指数 ETL 清洗函数
 - [x] 9.7 DataManager 添加指数同步方法（sync_index_basic, sync_index_daily, sync_index_weight, sync_industry_classify, sync_industry_member）
-- [ ] 9.8 `app/data/indicator.py` 泛化计算函数，支持传入不同的行情表和技术指标表（index_daily → index_technical_daily）
-- [ ] 9.9 DataManager 添加 update_index_indicators(trade_date) 方法
+- [x] 9.8 `app/data/indicator.py` 泛化计算函数，支持传入不同的行情表和技术指标表（index_daily → index_technical_daily）
+- [x] 9.9 DataManager 添加 update_index_indicators(trade_date) 方法
 
 ## 9a. P3 数据校验测试
 
