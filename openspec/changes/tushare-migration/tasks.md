@@ -94,7 +94,7 @@
 - [x] 9.2 `app/models/raw.py` 添加 12 张指数原始表模型（raw_tushare_index_basic, raw_tushare_index_weight, raw_tushare_index_daily, raw_tushare_index_weekly, raw_tushare_index_monthly, raw_tushare_index_dailybasic, raw_tushare_index_global, raw_tushare_daily_info, raw_tushare_sz_daily_info, raw_tushare_index_classify, raw_tushare_index_member_all, raw_tushare_sw_daily）
 - [x] 9.3 `app/models/raw.py` 添加 4 张中信行业+指数技术面原始表（raw_tushare_ci_index_member, raw_tushare_ci_daily, raw_tushare_index_factor_pro, raw_tushare_tdx_daily）
 - [x] 9.4 创建 Alembic 迁移脚本 — 指数原始表 + 指数业务表建表（含 index_technical_daily）
-- [ ] 9.5 TushareClient 添加指数 fetch_raw_* 方法
+- [x] 9.5 TushareClient 添加指数 fetch_raw_* 方法
 - [ ] 9.6 `app/data/etl.py` 添加指数 ETL 清洗函数
 - [ ] 9.7 DataManager 添加指数同步方法（sync_index_basic, sync_index_daily, sync_index_weight, sync_industry_classify, sync_industry_member）
 - [ ] 9.8 `app/data/indicator.py` 泛化计算函数，支持传入不同的行情表和技术指标表（index_daily → index_technical_daily）

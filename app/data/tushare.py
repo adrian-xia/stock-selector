@@ -561,3 +561,273 @@ class TushareClient:
             return Decimal(str(val))
         except (InvalidOperation, ValueError):
             return None
+
+    # =====================================================================
+    # P3 指数数据 fetch_raw_* 方法（16 个）
+    # =====================================================================
+
+    async def fetch_raw_index_basic(self, market: str = "") -> list[dict]:
+        """获取指数基础信息（对应 index_basic 接口）。
+
+        Args:
+            market: 市场类型（SSE/SZSE/MSCI/CSI/CNI），空字符串表示全部
+
+        Returns:
+            指数基础信息列表
+        """
+        df = await self._call("index_basic", api_name="index_basic", market=market)
+        return df.to_dict("records")
+
+    async def fetch_raw_index_weight(
+        self, index_code: str, trade_date: str
+    ) -> list[dict]:
+        """获取指数成分股权重（对应 index_weight 接口）。
+
+        Args:
+            index_code: 指数代码（如 000300.SH）
+            trade_date: 交易日期（YYYYMMDD）
+
+        Returns:
+            成分股权重列表
+        """
+        df = await self._call(
+            "index_weight",
+            api_name="index_weight",
+            index_code=index_code,
+            trade_date=trade_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取指数日线行情（对应 index_daily 接口）。
+
+        Args:
+            ts_code: 指数代码（如 000300.SH）
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            指数日线行情列表
+        """
+        df = await self._call(
+            "index_daily",
+            api_name="index_daily",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_weekly(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取指数周线行情（对应 index_weekly 接口）。"""
+        df = await self._call(
+            "index_weekly",
+            api_name="index_weekly",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_monthly(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取指数月线行情（对应 index_monthly 接口）。"""
+        df = await self._call(
+            "index_monthly",
+            api_name="index_monthly",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    # __CONTINUE_HERE__
+    async def fetch_raw_index_dailybasic(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取指数每日指标（对应 index_dailybasic 接口）。"""
+        df = await self._call(
+            "index_dailybasic",
+            api_name="index_dailybasic",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_global(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取国际指数行情（对应 index_global 接口）。"""
+        df = await self._call(
+            "index_global",
+            api_name="index_global",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_daily_info(
+        self, trade_date: str, ts_code: str = "", exchange: str = ""
+    ) -> list[dict]:
+        """获取大盘每日指标（对应 daily_info 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD）
+            ts_code: 市场代码（如 000001.SH）
+            exchange: 交易所（SSE/SZSE）
+
+        Returns:
+            大盘每日指标列表
+        """
+        df = await self._call(
+            "daily_info",
+            api_name="daily_info",
+            trade_date=trade_date,
+            ts_code=ts_code,
+            exchange=exchange,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_sz_daily_info(
+        self, trade_date: str, ts_code: str = ""
+    ) -> list[dict]:
+        """获取深圳市场每日指标（对应 sz_daily_info 接口）。"""
+        df = await self._call(
+            "sz_daily_info",
+            api_name="sz_daily_info",
+            trade_date=trade_date,
+            ts_code=ts_code,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_classify(self, level: str = "", src: str = "SW") -> list[dict]:
+        """获取申万行业分类（对应 index_classify 接口）。
+
+        Args:
+            level: 行业级别（L1/L2/L3）
+            src: 分类来源（SW=申万，默认）
+
+        Returns:
+            行业分类列表
+        """
+        df = await self._call(
+            "index_classify",
+            api_name="index_classify",
+            level=level,
+            src=src,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_member_all(
+        self, index_code: str = "", ts_code: str = "", is_new: str = ""
+    ) -> list[dict]:
+        """获取申万行业成分股（对应 index_member_all 接口）。
+
+        Args:
+            index_code: 指数代码（如 801010.SI）
+            ts_code: 股票代码（如 600519.SH）
+            is_new: 是否最新（Y/N）
+
+        Returns:
+            行业成分股列表
+        """
+        df = await self._call(
+            "index_member_all",
+            api_name="index_member_all",
+            index_code=index_code,
+            ts_code=ts_code,
+            is_new=is_new,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_sw_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取申万行业日线行情（对应 sw_daily 接口）。"""
+        df = await self._call(
+            "sw_daily",
+            api_name="sw_daily",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_ci_index_member(
+        self, index_code: str = "", ts_code: str = ""
+    ) -> list[dict]:
+        """获取中信行业成分股（对应 ci_index_member 接口）。
+
+        Args:
+            index_code: 指数代码（如 CI005001.CI）
+            ts_code: 股票代码（如 600519.SH）
+
+        Returns:
+            中信行业成分股列表
+        """
+        df = await self._call(
+            "ci_index_member",
+            api_name="ci_index_member",
+            index_code=index_code,
+            ts_code=ts_code,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_ci_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取中信行业日线行情（对应 ci_daily 接口）。"""
+        df = await self._call(
+            "ci_daily",
+            api_name="ci_daily",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_index_factor_pro(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取指数技术面因子（对应 index_factor_pro 接口）。
+
+        包含 MA/MACD/KDJ/RSI/BOLL/ATR/CCI/WR 等技术指标。
+        """
+        df = await self._call(
+            "index_factor_pro",
+            api_name="index_factor_pro",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
+
+    async def fetch_raw_tdx_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> list[dict]:
+        """获取通达信日线行情（对应 tdx_daily 接口）。"""
+        df = await self._call(
+            "tdx_daily",
+            api_name="tdx_daily",
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return df.to_dict("records")
