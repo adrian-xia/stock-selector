@@ -189,7 +189,7 @@
 
 - [ ] 13.1 补全 `docs/tushare/` 下缺失的接口文档（从官网获取指数/板块/扩展接口文档）
 - [x] 13.2 更新 `docs/design/01-详细设计-数据采集.md` — 数据源改为 Tushare，新增 raw 层架构说明
-- [ ] 13.3 更新 `docs/design/99-实施范围-V1与V2划分.md` — 标注 Tushare 迁移为已实施
+- [x] 13.3 更新 `docs/design/99-实施范围-V1与V2划分.md` — 标注 Tushare 迁移为已实施，新增第十章《Tushare 迁移实施总结》
 - [x] 13.4 更新 `README.md` — 技术栈、数据源、配置说明（已在之前提交中完成）
 - [x] 13.5 更新 `CLAUDE.md` — V1 范围、技术栈、目录结构（已在之前提交中完成）
 - [x] 13.6 删除 BaoStock/AKShare 相关测试，新增 TushareClient 单元测试
