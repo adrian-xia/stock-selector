@@ -1336,3 +1336,253 @@ class DataManager:
         logger.info(f"[etl_fina] 完成 {period} 财务数据 ETL")
         return {"inserted": inserted}
 
+    # =====================================================================
+    # P3 指数数据同步方法（5 个）
+    # =====================================================================
+
+    async def sync_index_basic(self, market: str = "") -> dict:
+        """同步指数基础信息（API → raw → index_basic）。
+
+        Args:
+            market: 市场类型（SSE/SZSE/MSCI/CSI/CNI），空字符串表示全部
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_index_basic] 开始同步指数基础信息（market={market or '全部'}）")
+
+        # 1. 从 Tushare 获取原始数据
+        raw_data = await self.client.fetch_raw_index_basic(market=market)
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw_tushare_index_basic
+        async with self.session_factory() as session:
+            from app.models.raw import RawTushareIndexBasic
+
+            raw_inserted = await batch_insert(
+                session, RawTushareIndexBasic.__table__, raw_data
+            )
+            logger.info(f"  - 写入 raw_tushare_index_basic: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_index_basic
+
+            cleaned = transform_tushare_index_basic(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 index_basic
+            from app.models.index import IndexBasic
+
+            cleaned_inserted = await batch_insert(
+                session, IndexBasic.__table__, cleaned
+            )
+            logger.info(f"  - 写入 index_basic: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_index_basic] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
+    # __CONTINUE_HERE__
+    async def sync_index_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> dict:
+        """同步指数日线行情（API → raw → index_daily）。
+
+        Args:
+            ts_code: 指数代码（如 000300.SH）
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_index_daily] 开始同步指数日线行情")
+
+        # 1. 从 Tushare 获取原始数据
+        raw_data = await self.client.fetch_raw_index_daily(
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw_tushare_index_daily
+        async with self.session_factory() as session:
+            from app.models.raw import RawTushareIndexDaily
+
+            raw_inserted = await batch_insert(
+                session, RawTushareIndexDaily.__table__, raw_data
+            )
+            logger.info(f"  - 写入 raw_tushare_index_daily: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_index_daily
+
+            cleaned = transform_tushare_index_daily(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 index_daily
+            from app.models.index import IndexDaily
+
+            cleaned_inserted = await batch_insert(
+                session, IndexDaily.__table__, cleaned
+            )
+            logger.info(f"  - 写入 index_daily: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_index_daily] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
+    async def sync_index_weight(self, index_code: str, trade_date: str) -> dict:
+        """同步指数成分股权重（API → raw → index_weight）。
+
+        Args:
+            index_code: 指数代码（如 000300.SH）
+            trade_date: 交易日期（YYYYMMDD）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_index_weight] 开始同步指数成分股权重（{index_code}, {trade_date}）")
+
+        # 1. 从 Tushare 获取原始数据
+        raw_data = await self.client.fetch_raw_index_weight(
+            index_code=index_code, trade_date=trade_date
+        )
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw_tushare_index_weight
+        async with self.session_factory() as session:
+            from app.models.raw import RawTushareIndexWeight
+
+            raw_inserted = await batch_insert(
+                session, RawTushareIndexWeight.__table__, raw_data
+            )
+            logger.info(f"  - 写入 raw_tushare_index_weight: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_index_weight
+
+            cleaned = transform_tushare_index_weight(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 index_weight
+            from app.models.index import IndexWeight
+
+            cleaned_inserted = await batch_insert(
+                session, IndexWeight.__table__, cleaned
+            )
+            logger.info(f"  - 写入 index_weight: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_index_weight] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
+    async def sync_industry_classify(self, level: str = "", src: str = "SW") -> dict:
+        """同步行业分类（API → raw → industry_classify）。
+
+        Args:
+            level: 行业级别（L1/L2/L3）
+            src: 分类来源（SW=申万，默认）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_industry_classify] 开始同步行业分类（level={level or '全部'}, src={src}）")
+
+        # 1. 从 Tushare 获取原始数据
+        raw_data = await self.client.fetch_raw_index_classify(level=level, src=src)
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw_tushare_index_classify
+        async with self.session_factory() as session:
+            from app.models.raw import RawTushareIndexClassify
+
+            raw_inserted = await batch_insert(
+                session, RawTushareIndexClassify.__table__, raw_data
+            )
+            logger.info(f"  - 写入 raw_tushare_index_classify: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_industry_classify
+
+            cleaned = transform_tushare_industry_classify(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 industry_classify
+            from app.models.index import IndustryClassify
+
+            cleaned_inserted = await batch_insert(
+                session, IndustryClassify.__table__, cleaned
+            )
+            logger.info(f"  - 写入 industry_classify: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_industry_classify] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
+    async def sync_industry_member(
+        self, index_code: str = "", ts_code: str = "", is_new: str = ""
+    ) -> dict:
+        """同步行业成分股（API → raw → industry_member）。
+
+        Args:
+            index_code: 指数代码（如 801010.SI）
+            ts_code: 股票代码（如 600519.SH）
+            is_new: 是否最新（Y/N）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_industry_member] 开始同步行业成分股")
+
+        # 1. 从 Tushare 获取原始数据
+        raw_data = await self.client.fetch_raw_index_member_all(
+            index_code=index_code, ts_code=ts_code, is_new=is_new
+        )
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw_tushare_index_member_all
+        async with self.session_factory() as session:
+            from app.models.raw import RawTushareIndexMemberAll
+
+            raw_inserted = await batch_insert(
+                session, RawTushareIndexMemberAll.__table__, raw_data
+            )
+            logger.info(f"  - 写入 raw_tushare_index_member_all: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_industry_member
+
+            cleaned = transform_tushare_industry_member(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 industry_member
+            from app.models.index import IndustryMember
+
+            cleaned_inserted = await batch_insert(
+                session, IndustryMember.__table__, cleaned
+            )
+            logger.info(f"  - 写入 industry_member: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_industry_member] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
