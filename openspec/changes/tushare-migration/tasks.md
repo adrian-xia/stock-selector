@@ -155,7 +155,7 @@
 - [x] 11.12 TushareClient 添加对应 fetch_raw_* 方法
 
 ### 11g. Alembic 迁移 + ETL
-- [ ] 11.13 创建 Alembic 迁移脚本 — P5 全部扩展原始表建表（48 张）
+- [x] 11.13 创建 Alembic 迁移脚本 — P5 全部扩展原始表建表（48 张）
 - [ ] 11.14 按需添加 ETL 清洗函数和 DataManager 同步方法
 
 ## 11a. P5 数据校验测试
