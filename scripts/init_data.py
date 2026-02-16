@@ -16,30 +16,30 @@ from datetime import date, timedelta
 from sqlalchemy import select, text
 
 from app.config import settings
-from app.data.akshare import AKShareClient
-from app.data.baostock import BaoStockClient
-from app.data.batch import batch_sync_daily
 from app.data.indicator import compute_all_stocks
 from app.data.manager import DataManager
-from app.data.pool import get_pool
+from app.data.tushare import TushareClient
 from app.database import async_session_factory
 from app.logger import setup_logging
-from app.models.stock import StockDaily
+from app.models.market import StockDaily
 
 logger = logging.getLogger(__name__)
 
 
 def _build_manager() -> DataManager:
     """构建 DataManager 实例。"""
-    pool = get_pool()
     clients = {
-        "baostock": BaoStockClient(connection_pool=pool),
-        "akshare": AKShareClient(),
+        "tushare": TushareClient(
+            token=settings.tushare_token,
+            qps_limit=settings.tushare_qps_limit,
+            retry_count=settings.tushare_retry_count,
+            retry_interval=settings.tushare_retry_interval,
+        ),
     }
     return DataManager(
         session_factory=async_session_factory,
         clients=clients,
-        primary="baostock",
+        primary="tushare",
     )
 
 
@@ -200,10 +200,6 @@ async def sync_daily_data(
     print("   （根据数据范围和网络速度，可能需要数分钟到数小时）")
     print()
 
-    # 获取所有上市股票
-    stocks = await manager.get_stock_list(status="L")
-    stock_codes = [s["ts_code"] for s in stocks]
-
     # 获取交易日列表
     trading_dates = await manager.get_trade_calendar(start_date, end_date)
 
@@ -214,8 +210,7 @@ async def sync_daily_data(
     print(f"共需同步 {len(trading_dates)} 个交易日")
     print()
 
-    # 逐个交易日同步
-    pool = get_pool()
+    # 逐个交易日同步（sync_raw_daily + etl_daily）
     total_success = 0
     total_failed = 0
     overall_start = time.monotonic()
@@ -224,23 +219,22 @@ async def sync_daily_data(
         date_start = time.monotonic()
 
         try:
-            result = await batch_sync_daily(
-                session_factory=async_session_factory,
-                stock_codes=stock_codes,
-                target_date=trade_date,
-                connection_pool=pool,
-            )
+            # 1. 同步原始数据到 raw 表
+            raw_result = await manager.sync_raw_daily(trade_date)
+
+            # 2. ETL 清洗到业务表
+            etl_result = await manager.etl_daily(trade_date)
 
             date_elapsed = time.monotonic() - date_start
-            total_success += result["success"]
-            total_failed += result["failed"]
+            success_count = etl_result.get("inserted", 0)
+            total_success += success_count
 
             # 每 10 个交易日显示一次进度
             if i % 10 == 0 or i == len(trading_dates):
                 progress = (i / len(trading_dates)) * 100
                 print(f"[{i}/{len(trading_dates)}] {progress:.1f}% - "
                       f"最新日期：{trade_date}，"
-                      f"成功 {result['success']} 只，失败 {result['failed']} 只，"
+                      f"写入 {success_count} 条，"
                       f"耗时 {int(date_elapsed)}秒")
 
                 # 估算剩余时间
@@ -254,6 +248,7 @@ async def sync_daily_data(
         except Exception as e:
             logger.error("同步日期 %s 失败：%s", trade_date, e)
             print(f"✗ 日期 {trade_date} 同步失败：{e}")
+            total_failed += 1
 
     overall_elapsed = int(time.monotonic() - overall_start)
     overall_minutes = overall_elapsed // 60
@@ -261,8 +256,8 @@ async def sync_daily_data(
 
     print()
     print(f"✓ 日线数据同步完成：")
-    print(f"   成功：{total_success} 只次")
-    print(f"   失败：{total_failed} 只次")
+    print(f"   成功：{total_success} 条记录")
+    print(f"   失败：{total_failed} 个交易日")
     print(f"   总耗时：{overall_minutes}分{overall_seconds}秒")
 
     return {"success": total_success, "failed": total_failed}
@@ -374,7 +369,7 @@ async def main():
         print("=" * 60)
         print(f"股票列表：{stock_count} 只")
         print(f"交易日历：{calendar_count} 个交易日")
-        print(f"日线数据：成功 {daily_result['success']} 只次，失败 {daily_result['failed']} 只次")
+        print(f"日线数据：成功 {daily_result['success']} 条记录，失败 {daily_result['failed']} 个交易日")
         print(f"技术指标：成功 {indicator_result['success']} 只，失败 {indicator_result['failed']} 只")
         print(f"总耗时：{overall_minutes}分{overall_seconds}秒")
         print()
