@@ -51,17 +51,48 @@ async def verify_data_availability(start_date: date, end_date: date) -> bool:
             logger.error("❌ 没有交易日数据")
             return False
 
-        # 检查日线数据
+        # 获取所有交易日
         result = await session.execute(
-            text("SELECT COUNT(DISTINCT trade_date) FROM stock_daily WHERE trade_date BETWEEN :start AND :end"),
+            text("SELECT cal_date FROM trade_calendar WHERE cal_date BETWEEN :start AND :end AND is_open = true ORDER BY cal_date"),
             {"start": start_date, "end": end_date}
         )
-        daily_days = result.scalar()
-        logger.info(f"  - 有日线数据的日期数：{daily_days}")
+        trade_dates = [row[0] for row in result.fetchall()]
 
-        if daily_days == 0:
-            logger.error("❌ 没有日线数据")
+        # 检查日线数据 - 逐日检查数据量
+        result = await session.execute(
+            text("SELECT trade_date, COUNT(*) as cnt FROM stock_daily WHERE trade_date BETWEEN :start AND :end GROUP BY trade_date"),
+            {"start": start_date, "end": end_date}
+        )
+        daily_counts = {row[0]: row[1] for row in result.fetchall()}
+
+        missing_dates = []
+        low_count_dates = []
+        min_expected_count = stock_count * 0.5  # 至少应该有 50% 的股票有数据
+
+        for trade_date in trade_dates:
+            count = daily_counts.get(trade_date, 0)
+            if count == 0:
+                missing_dates.append(trade_date)
+            elif count < min_expected_count:
+                low_count_dates.append((trade_date, count))
+
+        if missing_dates:
+            logger.error(f"❌ 发现 {len(missing_dates)} 个交易日完全没有日线数据：")
+            for missing_date in missing_dates[:5]:
+                logger.error(f"    - {missing_date}")
+            if len(missing_dates) > 5:
+                logger.error(f"    ... 还有 {len(missing_dates) - 5} 个")
             return False
+
+        if low_count_dates:
+            logger.error(f"❌ 发现 {len(low_count_dates)} 个交易日数据量异常（< {min_expected_count:.0f} 条）：")
+            for trade_date, count in low_count_dates[:5]:
+                logger.error(f"    - {trade_date}：{count} 条（预期 {stock_count} 条）")
+            if len(low_count_dates) > 5:
+                logger.error(f"    ... 还有 {len(low_count_dates) - 5} 个")
+            return False
+
+        logger.info(f"  - 有日线数据的日期数：{len(daily_counts)}")
 
         # 检查技术指标
         result = await session.execute(
