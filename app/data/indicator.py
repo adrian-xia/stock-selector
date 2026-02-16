@@ -1,7 +1,11 @@
 """技术指标计算引擎。
 
-基于 pandas 向量化计算所有技术指标，写入 technical_daily 表。
-支持单股票计算、全市场批量计算和增量更新。
+基于 pandas 向量化计算所有技术指标，支持多种市场数据表：
+- stock_daily → technical_daily（股票技术指标）
+- index_daily → index_technical_daily（指数技术指标）
+- concept_daily → concept_technical_daily（板块技术指标）
+
+支持单标的计算、全市场批量计算和增量更新。
 
 指标列表（共 23 个）：
 - 均线：MA5, MA10, MA20, MA60, MA120, MA250
@@ -17,12 +21,16 @@ import logging
 import time
 from collections.abc import Callable
 from datetime import date
+from typing import Any, Type
 
 import numpy as np
 import pandas as pd
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
+from app.models.concept import ConceptDaily, ConceptTechnicalDaily
+from app.models.index import IndexDaily, IndexTechnicalDaily
 from app.models.market import Stock, StockDaily
 from app.models.technical import TechnicalDaily
 
@@ -261,13 +269,14 @@ def _compute_atr(
 
 
 # ============================================================
-# 核心入口：单股票指标计算
+# 核心入口：泛化指标计算（支持多种市场数据表）
 # ============================================================
 
 
-def compute_single_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """计算单只股票的全部 23 个技术指标。
+def compute_indicators_generic(df: pd.DataFrame) -> pd.DataFrame:
+    """计算单个标的的全部 23 个技术指标（泛化版本）。
 
+    适用于任何包含 OHLCV 数据的 DataFrame（股票、指数、板块）。
     输入 DataFrame 必须包含以下列（按 trade_date 升序排列）：
     trade_date, open, high, low, close, vol
 
@@ -275,7 +284,7 @@ def compute_single_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
     数据不足的行对应指标值为 NaN。
 
     Args:
-        df: 单只股票的日线数据 DataFrame
+        df: 单个标的的日线数据 DataFrame
 
     Returns:
         包含所有指标列的 DataFrame
@@ -358,6 +367,32 @@ def compute_single_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
+# 核心入口：单股票指标计算（向后兼容）
+# ============================================================
+
+
+def compute_single_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """计算单只股票的全部 23 个技术指标。
+
+    输入 DataFrame 必须包含以下列（按 trade_date 升序排列）：
+    trade_date, open, high, low, close, vol
+
+    输出 DataFrame 在原始列基础上新增 23 个指标列。
+    数据不足的行对应指标值为 NaN。
+
+    Args:
+        df: 单只股票的日线数据 DataFrame
+
+    Returns:
+        包含所有指标列的 DataFrame
+
+    Note:
+        此函数为向后兼容保留，内部调用 compute_indicators_generic。
+    """
+    return compute_indicators_generic(df)
+
+
+# ============================================================
 # 数据库写入辅助
 # ============================================================
 
@@ -388,30 +423,11 @@ async def _upsert_technical_rows(
 
     Returns:
         处理的行数
+
+    Note:
+        此函数为向后兼容保留，内部调用 _upsert_technical_rows_generic。
     """
-    if not rows:
-        return 0
-
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-    table = TechnicalDaily.__table__
-
-    # asyncpg 参数上限 32767，每行列数 = ts_code + trade_date + 指标列
-    cols_per_row = 2 + len(INDICATOR_COLUMNS)
-    chunk_size = 32767 // cols_per_row
-
-    for i in range(0, len(rows), chunk_size):
-        chunk = rows[i : i + chunk_size]
-        stmt = pg_insert(table).values(chunk)
-        update_dict = {col: stmt.excluded[col] for col in INDICATOR_COLUMNS}
-        update_dict["updated_at"] = text("NOW()")
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["ts_code", "trade_date"],
-            set_=update_dict,
-        )
-        await session.execute(stmt)
-
-    return len(rows)
+    return await _upsert_technical_rows_generic(session, rows, TechnicalDaily)
 
 
 def _build_indicator_row(ts_code: str, trade_date: date, row: pd.Series) -> dict:
@@ -435,6 +451,49 @@ def _build_indicator_row(ts_code: str, trade_date: date, row: pd.Series) -> dict
         else:
             record[col] = None
     return record
+
+
+async def _upsert_technical_rows_generic(
+    session: AsyncSession,
+    rows: list[dict],
+    target_table: Type[DeclarativeBase],
+) -> int:
+    """将技术指标数据 UPSERT 到指定技术指标表（泛化版本）。
+
+    使用 PostgreSQL 的 INSERT ... ON CONFLICT DO UPDATE 实现幂等写入。
+    自动分片以适配 asyncpg 32767 参数限制。
+
+    Args:
+        session: 异步数据库会话
+        rows: 待写入的行数据列表，每行包含 ts_code, trade_date 和指标列
+        target_table: 目标技术指标表模型（TechnicalDaily/IndexTechnicalDaily/ConceptTechnicalDaily）
+
+    Returns:
+        处理的行数
+    """
+    if not rows:
+        return 0
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    table = target_table.__table__
+
+    # asyncpg 参数上限 32767，每行列数 = ts_code + trade_date + 指标列
+    cols_per_row = 2 + len(INDICATOR_COLUMNS)
+    chunk_size = 32767 // cols_per_row
+
+    for i in range(0, len(rows), chunk_size):
+        chunk = rows[i : i + chunk_size]
+        stmt = pg_insert(table).values(chunk)
+        update_dict = {col: stmt.excluded[col] for col in INDICATOR_COLUMNS}
+        update_dict["updated_at"] = text("NOW()")
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["ts_code", "trade_date"],
+            set_=update_dict,
+        )
+        await session.execute(stmt)
+
+    return len(rows)
 
 
 # ============================================================
@@ -705,6 +764,301 @@ async def compute_incremental(
     logger.info(
         "[技术指标] 增量计算完成：日期 %s，成功 %d 只，失败 %d 只，总耗时 %.1fs，平均 %.3fs/只",
         target_date, success, failed, elapsed, avg_time,
+    )
+
+    # 检测慢速计算（总耗时 >10 分钟）
+    if elapsed > 600:
+        logger.warning("[技术指标] 慢速计算：增量计算耗时 %.1fs (%.1f分钟)", elapsed, elapsed / 60)
+
+    return summary
+
+
+# ============================================================
+# 泛化批量计算和增量计算（支持多种市场数据表）
+# ============================================================
+
+
+async def compute_all_generic(
+    session_factory: async_sessionmaker[AsyncSession],
+    source_table: Type[DeclarativeBase],
+    target_table: Type[DeclarativeBase],
+    code_filter_column: str = "list_status",
+    code_filter_value: str = "L",
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict:
+    """泛化全市场批量计算技术指标并写入指定技术指标表。
+
+    遍历所有标的，逐个加载历史日线数据，计算全部指标，
+    使用 UPSERT 写入数据库。每 BATCH_COMMIT_SIZE 个标的提交一次。
+
+    Args:
+        session_factory: 异步数据库会话工厂
+        source_table: 源数据表模型（StockDaily/IndexDaily/ConceptDaily）
+        target_table: 目标技术指标表模型（TechnicalDaily/IndexTechnicalDaily/ConceptTechnicalDaily）
+        code_filter_column: 用于过滤标的的列名（如 "list_status"）
+        code_filter_value: 过滤值（如 "L" 表示上市）
+        progress_callback: 可选的进度回调函数，接收 (processed, total) 参数
+
+    Returns:
+        汇总字典：{"total": N, "success": M, "failed": F, "elapsed_seconds": T}
+    """
+    start_time = time.time()
+
+    # 1. 查询所有标的代码
+    async with session_factory() as session:
+        if code_filter_column and code_filter_value:
+            # 对于股票，从 Stock 表查询上市股票
+            if source_table == StockDaily:
+                stmt = select(Stock.ts_code).where(getattr(Stock, code_filter_column) == code_filter_value)
+            else:
+                # 对于指数和板块，直接从源表查询所有唯一代码
+                stmt = select(source_table.ts_code).distinct()
+        else:
+            stmt = select(source_table.ts_code).distinct()
+
+        result = await session.execute(stmt)
+        all_codes = [row[0] for row in result.all()]
+
+    total = len(all_codes)
+    success = 0
+    failed = 0
+    logger.info("开始全量计算技术指标（%s → %s），共 %d 个标的",
+                source_table.__tablename__, target_table.__tablename__, total)
+
+    # 2. 逐个计算，分批提交
+    batch_rows: list[dict] = []
+    batch_count = 0
+
+    for i, ts_code in enumerate(all_codes):
+        try:
+            # 加载该标的的历史日线数据
+            async with session_factory() as session:
+                stmt = (
+                    select(source_table)
+                    .where(source_table.ts_code == ts_code)
+                    .order_by(source_table.trade_date.asc())
+                )
+                result = await session.execute(stmt)
+                rows = result.scalars().all()
+
+            if not rows:
+                # 无日线数据，跳过
+                logger.debug("标的 %s 无日线数据，跳过", ts_code)
+                continue
+
+            # 转换为 DataFrame
+            records = [{
+                "trade_date": r.trade_date,
+                "open": float(r.open) if r.open else 0.0,
+                "high": float(r.high) if r.high else 0.0,
+                "low": float(r.low) if r.low else 0.0,
+                "close": float(r.close) if r.close else 0.0,
+                "vol": float(r.vol) if r.vol else 0.0,
+            } for r in rows]
+            df = pd.DataFrame(records)
+
+            # 计算指标
+            df_with_indicators = compute_indicators_generic(df)
+
+            # 构建写入行（所有交易日的指标）
+            for _, row in df_with_indicators.iterrows():
+                batch_rows.append(
+                    _build_indicator_row(ts_code, row["trade_date"], row)
+                )
+
+            success += 1
+
+        except Exception as e:
+            logger.error("计算标的 %s 指标失败: %s", ts_code, e)
+            failed += 1
+
+        batch_count += 1
+
+        # 每 BATCH_COMMIT_SIZE 个标的提交一次
+        if batch_count >= BATCH_COMMIT_SIZE and batch_rows:
+            async with session_factory() as session:
+                await _upsert_technical_rows_generic(session, batch_rows, target_table)
+                await session.commit()
+            logger.info(
+                "已提交 %d 个标的的指标数据（%d 行）",
+                batch_count, len(batch_rows),
+            )
+            batch_rows = []
+            batch_count = 0
+
+        # 进度回调
+        if progress_callback and (i + 1) % 500 == 0:
+            progress_callback(i + 1, total)
+
+    # 提交剩余数据
+    if batch_rows:
+        async with session_factory() as session:
+            await _upsert_technical_rows_generic(session, batch_rows, target_table)
+            await session.commit()
+
+    elapsed = round(time.time() - start_time, 2)
+    summary = {
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "elapsed_seconds": elapsed,
+    }
+
+    # 记录总体汇总日志
+    avg_time = elapsed / total if total > 0 else 0
+    logger.info(
+        "[技术指标] 全量计算完成（%s → %s）：成功 %d 个，失败 %d 个，总耗时 %.1fs，平均 %.3fs/个",
+        source_table.__tablename__, target_table.__tablename__, success, failed, elapsed, avg_time,
+    )
+
+    # 检测慢速计算（总耗时 >30 分钟）
+    if elapsed > 1800:
+        logger.warning("[技术指标] 慢速计算：全量计算耗时 %.1fs (%.1f分钟)", elapsed, elapsed / 60)
+
+    return summary
+
+
+async def compute_incremental_generic(
+    session_factory: async_sessionmaker[AsyncSession],
+    source_table: Type[DeclarativeBase],
+    target_table: Type[DeclarativeBase],
+    target_date: date | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict:
+    """泛化增量计算技术指标：仅计算指定交易日（默认最新）的指标。
+
+    对每个标的加载 LOOKBACK_DAYS 天历史数据，计算指标后仅
+    UPSERT 目标日期那一行到指定技术指标表。
+
+    Args:
+        session_factory: 异步数据库会话工厂
+        source_table: 源数据表模型（StockDaily/IndexDaily/ConceptDaily）
+        target_table: 目标技术指标表模型（TechnicalDaily/IndexTechnicalDaily/ConceptTechnicalDaily）
+        target_date: 目标交易日，None 表示自动检测最新交易日
+        progress_callback: 可选的进度回调函数
+
+    Returns:
+        汇总字典：{"trade_date": "YYYY-MM-DD", "total": N, "success": M, "failed": F}
+    """
+    start_time = time.time()
+
+    # 1. 确定目标交易日
+    if target_date is None:
+        async with session_factory() as session:
+            result = await session.execute(
+                select(source_table.trade_date)
+                .order_by(source_table.trade_date.desc())
+                .limit(1)
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                logger.warning("%s 表无数据，无法确定最新交易日", source_table.__tablename__)
+                return {"trade_date": None, "total": 0, "success": 0, "failed": 0}
+            target_date = row
+
+    logger.info("增量计算目标日期: %s（%s → %s）", target_date,
+                source_table.__tablename__, target_table.__tablename__)
+
+    # 2. 查询在目标日期有日线数据的所有标的
+    async with session_factory() as session:
+        stmt = (
+            select(source_table.ts_code)
+            .where(source_table.trade_date == target_date)
+            .distinct()
+        )
+        result = await session.execute(stmt)
+        target_codes = [row[0] for row in result.all()]
+
+    total = len(target_codes)
+    success = 0
+    failed = 0
+    batch_rows: list[dict] = []
+    batch_count = 0
+
+    logger.info("目标日期 %s 共 %d 个标的需要计算", target_date, total)
+
+    for i, ts_code in enumerate(target_codes):
+        try:
+            # 加载历史数据（截止到目标日期）
+            async with session_factory() as session:
+                stmt = (
+                    select(source_table)
+                    .where(
+                        source_table.ts_code == ts_code,
+                        source_table.trade_date <= target_date,
+                    )
+                    .order_by(source_table.trade_date.desc())
+                    .limit(LOOKBACK_DAYS)
+                )
+                result = await session.execute(stmt)
+                rows = result.scalars().all()
+
+            if not rows:
+                continue
+
+            # 转换为 DataFrame（注意：查询是 DESC 排序，需要反转）
+            records = [{
+                "trade_date": r.trade_date,
+                "open": float(r.open) if r.open else 0.0,
+                "high": float(r.high) if r.high else 0.0,
+                "low": float(r.low) if r.low else 0.0,
+                "close": float(r.close) if r.close else 0.0,
+                "vol": float(r.vol) if r.vol else 0.0,
+            } for r in reversed(rows)]
+            df = pd.DataFrame(records)
+
+            # 计算指标
+            df_with_indicators = compute_indicators_generic(df)
+
+            # 仅取目标日期那一行
+            target_row = df_with_indicators[
+                df_with_indicators["trade_date"] == target_date
+            ]
+            if not target_row.empty:
+                batch_rows.append(
+                    _build_indicator_row(ts_code, target_date, target_row.iloc[0])
+                )
+
+            success += 1
+
+        except Exception as e:
+            logger.error("增量计算标的 %s 指标失败: %s", ts_code, e)
+            failed += 1
+
+        batch_count += 1
+
+        # 每 BATCH_COMMIT_SIZE 个标的提交一次
+        if batch_count >= BATCH_COMMIT_SIZE and batch_rows:
+            async with session_factory() as session:
+                await _upsert_technical_rows_generic(session, batch_rows, target_table)
+                await session.commit()
+            batch_rows = []
+            batch_count = 0
+
+        # 进度回调
+        if progress_callback and (i + 1) % 500 == 0:
+            progress_callback(i + 1, total)
+
+    # 提交剩余数据
+    if batch_rows:
+        async with session_factory() as session:
+            await _upsert_technical_rows_generic(session, batch_rows, target_table)
+            await session.commit()
+
+    elapsed = round(time.time() - start_time, 2)
+    summary = {
+        "trade_date": str(target_date),
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "elapsed_seconds": elapsed,
+    }
+
+    # 记录总体汇总日志
+    avg_time = elapsed / total if total > 0 else 0
+    logger.info(
+        "[技术指标] 增量计算完成（%s → %s）：日期 %s，成功 %d 个，失败 %d 个，总耗时 %.1fs，平均 %.3fs/个",
+        source_table.__tablename__, target_table.__tablename__, target_date, success, failed, elapsed, avg_time,
     )
 
     # 检测慢速计算（总耗时 >10 分钟）
