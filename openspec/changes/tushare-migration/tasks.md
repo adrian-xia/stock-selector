@@ -170,7 +170,7 @@
 ## 12. 数据初始化 CLI（Phase 7）
 
 - [x] 12.1 更新 `app/data/cli.py` — 新增 init-tushare 命令（全量初始化：stock_basic → trade_cal → 逐日 daily → fina → moneyflow → 指数/板块 → 技术指标）
-- [ ] 12.2 新增 `raw_sync_progress` 表追踪原始数据拉取进度，支持断点续传
+- [x] 12.2 新增 `raw_sync_progress` 表追踪原始数据拉取进度，支持断点续传
 - [x] 12.3 更新 `scripts/init_data.py` — 初始化向导改用 Tushare
 - [ ] 12.4 盘后链路增量更新集成测试（sync_raw_daily → etl_daily → 指标计算 → 策略执行）
 
