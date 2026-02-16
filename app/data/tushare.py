@@ -1145,3 +1145,141 @@ class TushareClient:
         """获取股东增减持（对应 stk_holdertrade 接口）。"""
         df = await self._call("stk_holdertrade", api_name="stk_holdertrade", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
+
+    # 11d. 特色数据（9 个）
+
+    async def fetch_raw_report_rc(self, ts_code: str = "", date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取券商月度金股（对应 report_rc 接口）。
+
+        Args:
+            ts_code: 股票代码
+            date: 报告日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            券商月度金股原始数据列表
+        """
+        df = await self._call("report_rc", api_name="report_rc", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_cyq_perf(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取筹码分布（对应 cyq_perf 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            筹码分布原始数据列表
+        """
+        df = await self._call("cyq_perf", api_name="cyq_perf", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_cyq_chips(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取筹码集中度（对应 cyq_chips 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            筹码集中度原始数据列表
+        """
+        df = await self._call("cyq_chips", api_name="cyq_chips", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_factor(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取技术因子（日频）（对应 stk_factor 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            技术因子原始数据列表
+        """
+        df = await self._call("stk_factor", api_name="stk_factor", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_factor_pro(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取技术因子（日频增强版）（对应 stk_factor_pro 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            技术因子增强版原始数据列表
+        """
+        df = await self._call("stk_factor_pro", api_name="stk_factor_pro", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_ccass_hold(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取港股通持股汇总（对应 ccass_hold 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            港股通持股汇总原始数据列表
+        """
+        df = await self._call("ccass_hold", api_name="ccass_hold", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_ccass_hold_detail(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取港股通持股明细（对应 ccass_hold_detail 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            港股通持股明细原始数据列表
+        """
+        df = await self._call("ccass_hold_detail", api_name="ccass_hold_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_hk_hold(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", exchange: str = "") -> list[dict]:
+        """获取沪深港通持股明细（对应 hk_hold 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+            exchange: 交易所（SH/SZ）
+
+        Returns:
+            沪深港通持股明细原始数据列表
+        """
+        df = await self._call("hk_hold", api_name="hk_hold", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, exchange=exchange)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_surv(self, ts_code: str = "", end_date: str = "", start_date: str = "", survey_date: str = "") -> list[dict]:
+        """获取股票调查问卷（对应 stk_surv 接口）。
+
+        Args:
+            ts_code: 股票代码
+            end_date: 报告期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            survey_date: 调查日期（YYYYMMDD）
+
+        Returns:
+            股票调查问卷原始数据列表
+        """
+        df = await self._call("stk_surv", api_name="stk_surv", ts_code=ts_code, end_date=end_date, start_date=start_date, survey_date=survey_date)
+        return df.to_dict("records")
