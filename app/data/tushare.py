@@ -383,6 +383,130 @@ class TushareClient:
         df = await self._call("disclosure_date", end_date=end_date)
         return df.to_dict("records")
 
+    # ------------------------------------------------------------------
+    # P2 资金流向和龙虎榜数据获取
+    # ------------------------------------------------------------------
+
+    async def fetch_raw_moneyflow(self, trade_date: str) -> list[dict]:
+        """获取个股资金流向原始数据（对应 moneyflow 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            个股资金流向原始数据列表
+        """
+        df = await self._call("moneyflow", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_dc(self, trade_date: str) -> list[dict]:
+        """获取个股资金流向原始数据 - 东方财富（对应 moneyflow_dc 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            东方财富个股资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_dc", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_ths(self, trade_date: str) -> list[dict]:
+        """获取个股资金流向原始数据 - 同花顺（对应 moneyflow_ths 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            同花顺个股资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_ths", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_hsgt(self, trade_date: str) -> list[dict]:
+        """获取沪深港通资金流向原始数据（对应 moneyflow_hsgt 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            沪深港通资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_hsgt", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_ind_ths(self, trade_date: str) -> list[dict]:
+        """获取同花顺行业资金流向原始数据（对应 moneyflow_ind_ths 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            同花顺行业资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_ind_ths", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_cnt_ths(self, trade_date: str) -> list[dict]:
+        """获取同花顺概念板块资金流向原始数据（对应 moneyflow_cnt_ths 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            同花顺概念板块资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_cnt_ths", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_ind_dc(self, trade_date: str) -> list[dict]:
+        """获取东财概念及行业板块资金流向原始数据（对应 moneyflow_ind_dc 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            东财概念及行业板块资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_ind_dc", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_moneyflow_mkt_dc(self, trade_date: str) -> list[dict]:
+        """获取大盘资金流向原始数据 - 东方财富（对应 moneyflow_mkt_dc 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            大盘资金流向原始数据列表
+        """
+        df = await self._call("moneyflow_mkt_dc", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_top_list(self, trade_date: str) -> list[dict]:
+        """获取龙虎榜每日明细原始数据（对应 top_list 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            龙虎榜每日明细原始数据列表
+        """
+        df = await self._call("top_list", trade_date=trade_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_top_inst(self, trade_date: str) -> list[dict]:
+        """获取龙虎榜机构明细原始数据（对应 top_inst 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD 格式）
+
+        Returns:
+            龙虎榜机构明细原始数据列表
+        """
+        df = await self._call("top_inst", trade_date=trade_date)
+        return df.to_dict("records")
+
 
     # ------------------------------------------------------------------
     # 内部方法

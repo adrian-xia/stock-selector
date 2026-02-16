@@ -76,7 +76,7 @@
 - [x] 8.1 `app/models/raw.py` 添加 8 张 P2 原始表模型（raw_tushare_moneyflow, raw_tushare_moneyflow_dc, raw_tushare_moneyflow_ths, raw_tushare_moneyflow_hsgt, raw_tushare_moneyflow_ind_ths, raw_tushare_moneyflow_cnt_ths, raw_tushare_moneyflow_ind_dc, raw_tushare_moneyflow_mkt_dc）
 - [x] 8.2 `app/models/raw.py` 添加 2 张龙虎榜原始表模型（raw_tushare_top_list, raw_tushare_top_inst）
 - [x] 8.3 创建 Alembic 迁移脚本 — P2 原始表建表（已创建 67b6a3dd7ed3，数据库已有 26 张 raw 表：P0 6张 + P1 10张 + P2 10张）
-- [ ] 8.4 TushareClient 添加资金流向和龙虎榜 fetch_raw_* 方法
+- [x] 8.4 TushareClient 添加资金流向和龙虎榜 fetch_raw_* 方法（10 个方法：moneyflow, moneyflow_dc, moneyflow_ths, moneyflow_hsgt, moneyflow_ind_ths, moneyflow_cnt_ths, moneyflow_ind_dc, moneyflow_mkt_dc, top_list, top_inst）
 - [ ] 8.5 `app/data/etl.py` 添加 transform_tushare_moneyflow 和 transform_tushare_top_list 函数
 - [ ] 8.6 DataManager 添加 sync_raw_moneyflow(trade_date) 和 etl_moneyflow(trade_date) 方法
 
