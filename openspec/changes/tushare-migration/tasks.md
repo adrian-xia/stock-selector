@@ -77,16 +77,16 @@
 - [x] 8.2 `app/models/raw.py` 添加 2 张龙虎榜原始表模型（raw_tushare_top_list, raw_tushare_top_inst）
 - [x] 8.3 创建 Alembic 迁移脚本 — P2 原始表建表（已创建 67b6a3dd7ed3，数据库已有 26 张 raw 表：P0 6张 + P1 10张 + P2 10张）
 - [x] 8.4 TushareClient 添加资金流向和龙虎榜 fetch_raw_* 方法（10 个方法：moneyflow, moneyflow_dc, moneyflow_ths, moneyflow_hsgt, moneyflow_ind_ths, moneyflow_cnt_ths, moneyflow_ind_dc, moneyflow_mkt_dc, top_list, top_inst）
-- [ ] 8.5 `app/data/etl.py` 添加 transform_tushare_moneyflow 和 transform_tushare_top_list 函数
-- [ ] 8.6 DataManager 添加 sync_raw_moneyflow(trade_date) 和 etl_moneyflow(trade_date) 方法
+- [ ] 8.5 `app/data/etl.py` 添加 transform_tushare_moneyflow 和 transform_tushare_top_list 函数（V2 再实施，V1 只建 raw 表）
+- [ ] 8.6 DataManager 添加 sync_raw_moneyflow(trade_date) 和 etl_moneyflow(trade_date) 方法（V2 再实施，V1 只建 raw 表）
 
-## 8a. P2 数据校验测试
+## 8a. P2 数据校验测试（V2 再实施，依赖数据同步）
 
-- [ ] 8a.1 创建 `tests/integration/test_p2_data_validation.py` — P2 资金流向数据校验测试
-- [ ] 8a.2 测试 raw_tushare_moneyflow 数据完整性（每个交易日记录数 >= 上市股票数 × 0.90）
-- [ ] 8a.3 测试龙虎榜数据质量（raw_tushare_top_list 关键字段非空率 >= 95%）
-- [ ] 8a.4 测试资金流向数据合理性（净流入 = 大单流入 - 大单流出，误差 <= 1%）
-- [ ] 8a.5 测试多数据源一致性（moneyflow vs moneyflow_dc vs moneyflow_ths 数据覆盖率对比）
+- [ ] 8a.1 创建 `tests/integration/test_p2_data_validation.py` — P2 资金流向数据校验测试（V2 再实施）
+- [ ] 8a.2 测试 raw_tushare_moneyflow 数据完整性（每个交易日记录数 >= 上市股票数 × 0.90）（V2 再实施）
+- [ ] 8a.3 测试龙虎榜数据质量（raw_tushare_top_list 关键字段非空率 >= 95%）（V2 再实施）
+- [ ] 8a.4 测试资金流向数据合理性（净流入 = 大单流入 - 大单流出，误差 <= 1%）（V2 再实施）
+- [ ] 8a.5 测试多数据源一致性（moneyflow vs moneyflow_dc vs moneyflow_ths 数据覆盖率对比）（V2 再实施）
 
 ## 9. P3 指数数据（Phase 4）
 
