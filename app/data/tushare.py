@@ -1342,3 +1342,216 @@ class TushareClient:
         """
         df = await self._call("slb_len", api_name="slb_len", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
+
+    # 11f. 打板专题（14 个）
+
+    async def fetch_raw_limit_list_d(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit_type: str = "") -> list[dict]:
+        """获取每日涨跌停统计（对应 limit_list_d 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+            limit_type: 涨跌停类型（U=涨停，D=跌停）
+
+        Returns:
+            每日涨跌停统计原始数据列表
+        """
+        df = await self._call("limit_list_d", api_name="limit_list_d", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
+        return df.to_dict("records")
+
+    async def fetch_raw_ths_limit(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit_type: str = "") -> list[dict]:
+        """获取同花顺涨跌停（对应 ths_limit 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+            limit_type: 涨跌停类型（U=涨停，D=跌停）
+
+        Returns:
+            同花顺涨跌停原始数据列表
+        """
+        df = await self._call("ths_limit", api_name="ths_limit", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
+        return df.to_dict("records")
+
+    async def fetch_raw_limit_step(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取涨跌停阶梯（对应 limit_step 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            涨跌停阶梯原始数据列表
+        """
+        df = await self._call("limit_step", api_name="limit_step", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_hm_board(self, trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取热门板块（对应 hm_board 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            热门板块原始数据列表
+        """
+        df = await self._call("hm_board", api_name="hm_board", trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_hm_list(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取热门股票（对应 hm_list 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            热门股票原始数据列表
+        """
+        df = await self._call("hm_list", api_name="hm_list", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_hm_detail(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取热门股票明细（对应 hm_detail 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            热门股票明细原始数据列表
+        """
+        df = await self._call("hm_detail", api_name="hm_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_auction(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取集合竞价（对应 stk_auction 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            集合竞价原始数据列表
+        """
+        df = await self._call("stk_auction", api_name="stk_auction", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_stk_auction_o(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取集合竞价（开盘）（对应 stk_auction_o 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            集合竞价（开盘）原始数据列表
+        """
+        df = await self._call("stk_auction_o", api_name="stk_auction_o", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_kpl_list(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit_type: str = "") -> list[dict]:
+        """获取科创板涨跌停（对应 kpl_list 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+            limit_type: 涨跌停类型（U=涨停，D=跌停）
+
+        Returns:
+            科创板涨跌停原始数据列表
+        """
+        df = await self._call("kpl_list", api_name="kpl_list", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
+        return df.to_dict("records")
+
+    async def fetch_raw_kpl_concept(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取科创板概念（对应 kpl_concept 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            科创板概念原始数据列表
+        """
+        df = await self._call("kpl_concept", api_name="kpl_concept", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_broker_recommend(self, ts_code: str = "", date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取券商推荐（对应 broker_recommend 接口）。
+
+        Args:
+            ts_code: 股票代码
+            date: 推荐日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            券商推荐原始数据列表
+        """
+        df = await self._call("broker_recommend", api_name="broker_recommend", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_ths_hot(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取同花顺热榜（对应 ths_hot 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            同花顺热榜原始数据列表
+        """
+        df = await self._call("ths_hot", api_name="ths_hot", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_dc_hot(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取东财热榜（对应 dc_hot 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            东财热榜原始数据列表
+        """
+        df = await self._call("dc_hot", api_name="dc_hot", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_ggt_monthly(self, month: str = "", start_month: str = "", end_month: str = "") -> list[dict]:
+        """获取港股通月度统计（对应 ggt_monthly 接口）。
+
+        Args:
+            month: 月份（YYYYMM）
+            start_month: 开始月份（YYYYMM）
+            end_month: 结束月份（YYYYMM）
+
+        Returns:
+            港股通月度统计原始数据列表
+        """
+        df = await self._call("ggt_monthly", api_name="ggt_monthly", month=month, start_month=start_month, end_month=end_month)
+        return df.to_dict("records")
