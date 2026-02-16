@@ -1586,3 +1586,160 @@ class DataManager:
         logger.info(f"[sync_industry_member] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
 
+    # =====================================================================
+    # P4 板块数据同步方法（3 个）
+    # =====================================================================
+
+    async def sync_concept_index(self, src: str = "THS") -> dict:
+        """同步板块基础信息（API → raw → concept_index）。
+
+        统一三个数据源（THS/DC/TDX）到 concept_index 业务表。
+
+        Args:
+            src: 数据源（THS=同花顺，DC=东方财富，TDX=通达信）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_concept_index] 开始同步板块基础信息（src={src}）")
+
+        # 根据数据源选择不同的 fetch 方法和 raw 表
+        if src == "THS":
+            raw_data = await self._primary_client.fetch_raw_ths_index()
+            from app.models.raw import RawTushareThsIndex
+            raw_table = RawTushareThsIndex.__table__
+        elif src == "DC":
+            raw_data = await self._primary_client.fetch_raw_dc_index(src="DC")
+            from app.models.raw import RawTushareDcIndex
+            raw_table = RawTushareDcIndex.__table__
+        elif src == "TDX":
+            raw_data = await self._primary_client.fetch_raw_tdx_index()
+            from app.models.raw import RawTushareTdxIndex
+            raw_table = RawTushareTdxIndex.__table__
+        else:
+            raise ValueError(f"不支持的数据源: {src}")
+
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw 表
+        async with self._session_factory() as session:
+            raw_inserted = await batch_insert(session, raw_table, raw_data)
+            logger.info(f"  - 写入 raw 表: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_concept_index
+            cleaned = transform_tushare_concept_index(raw_data, src)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 concept_index
+            from app.models.concept import ConceptIndex
+            cleaned_inserted = await batch_insert(session, ConceptIndex.__table__, cleaned)
+            logger.info(f"  - 写入 concept_index: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_concept_index] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
+    async def sync_concept_daily(
+        self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
+    ) -> dict:
+        """同步板块日线行情（API → raw → concept_daily）。
+
+        Args:
+            ts_code: 板块代码（如 885720.TI）
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_concept_daily] 开始同步板块日线行情")
+
+        # 1. 从 Tushare 获取原始数据（使用同花顺数据源）
+        raw_data = await self._primary_client.fetch_raw_ths_daily(
+            ts_code=ts_code,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw_tushare_ths_daily
+        async with self._session_factory() as session:
+            from app.models.raw import RawTushareThsDaily
+            raw_inserted = await batch_insert(session, RawTushareThsDaily.__table__, raw_data)
+            logger.info(f"  - 写入 raw_tushare_ths_daily: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_concept_daily
+            cleaned = transform_tushare_concept_daily(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 concept_daily
+            from app.models.concept import ConceptDaily
+            cleaned_inserted = await batch_insert(session, ConceptDaily.__table__, cleaned)
+            logger.info(f"  - 写入 concept_daily: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_concept_daily] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
+    async def sync_concept_member(self, ts_code: str, src: str = "THS") -> dict:
+        """同步板块成分股（API → raw → concept_member）。
+
+        Args:
+            ts_code: 板块代码
+            src: 数据源（THS=同花顺，DC=东方财富，TDX=通达信）
+
+        Returns:
+            同步结果统计
+        """
+        logger.info(f"[sync_concept_member] 开始同步板块成分股（{ts_code}, src={src}）")
+
+        # 根据数据源选择不同的 fetch 方法和 raw 表
+        if src == "THS":
+            raw_data = await self._primary_client.fetch_raw_ths_member(ts_code)
+            from app.models.raw import RawTushareThsMember
+            raw_table = RawTushareThsMember.__table__
+        elif src == "DC":
+            raw_data = await self._primary_client.fetch_raw_dc_member(ts_code)
+            from app.models.raw import RawTushareDcMember
+            raw_table = RawTushareDcMember.__table__
+        elif src == "TDX":
+            raw_data = await self._primary_client.fetch_raw_tdx_member(ts_code)
+            from app.models.raw import RawTushareTdxMember
+            raw_table = RawTushareTdxMember.__table__
+        else:
+            raise ValueError(f"不支持的数据源: {src}")
+
+        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+
+        if not raw_data:
+            logger.warning("  - 未获取到数据")
+            return {"raw_inserted": 0, "cleaned_inserted": 0}
+
+        # 2. 写入 raw 表
+        async with self._session_factory() as session:
+            raw_inserted = await batch_insert(session, raw_table, raw_data)
+            logger.info(f"  - 写入 raw 表: {raw_inserted} 条")
+
+            # 3. ETL 转换
+            from app.data.etl import transform_tushare_concept_member
+            cleaned = transform_tushare_concept_member(raw_data)
+            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+
+            # 4. 写入 concept_member
+            from app.models.concept import ConceptMember
+            cleaned_inserted = await batch_insert(session, ConceptMember.__table__, cleaned)
+            logger.info(f"  - 写入 concept_member: {cleaned_inserted} 条")
+
+        logger.info(f"[sync_concept_member] 完成")
+        return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
+
