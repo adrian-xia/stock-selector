@@ -91,3 +91,73 @@ class TestParseDate:
 
     def test_invalid_compact(self):
         assert parse_date("2025130") is None
+
+
+# ---------------------------------------------------------------------------
+# P2 资金流向 ETL 测试
+# ---------------------------------------------------------------------------
+
+
+class TestTransformTushareMoneyflow:
+    """transform_tushare_moneyflow 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_moneyflow
+
+        raw = [{"ts_code": "600519.SH", "trade_date": "20260216",
+                "buy_sm_vol": 100, "buy_sm_amount": 5000.0,
+                "sell_sm_vol": 80, "sell_sm_amount": 4000.0,
+                "buy_md_vol": None, "buy_md_amount": None,
+                "sell_md_vol": 0, "sell_md_amount": 0,
+                "buy_lg_vol": 50, "buy_lg_amount": 10000.0,
+                "sell_lg_vol": 30, "sell_lg_amount": 6000.0,
+                "buy_elg_vol": 10, "buy_elg_amount": 20000.0,
+                "sell_elg_vol": 5, "sell_elg_amount": 10000.0,
+                "net_mf_amount": 15000.0}]
+        result = transform_tushare_moneyflow(raw)
+        assert len(result) == 1
+        assert result[0]["ts_code"] == "600519.SH"
+        assert result[0]["trade_date"] == date(2026, 2, 16)
+        assert result[0]["data_source"] == "tushare"
+        assert result[0]["buy_md_vol"] == Decimal("0")  # None → 0
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_moneyflow
+        assert transform_tushare_moneyflow([]) == []
+
+    def test_skip_empty_ts_code(self):
+        from app.data.etl import transform_tushare_moneyflow
+
+        raw = [{"ts_code": "", "trade_date": "20260216",
+                "buy_sm_vol": 100, "buy_sm_amount": 5000.0,
+                "sell_sm_vol": 0, "sell_sm_amount": 0,
+                "buy_md_vol": 0, "buy_md_amount": 0,
+                "sell_md_vol": 0, "sell_md_amount": 0,
+                "buy_lg_vol": 0, "buy_lg_amount": 0,
+                "sell_lg_vol": 0, "sell_lg_amount": 0,
+                "buy_elg_vol": 0, "buy_elg_amount": 0,
+                "sell_elg_vol": 0, "sell_elg_amount": 0,
+                "net_mf_amount": 0}]
+        assert transform_tushare_moneyflow(raw) == []
+
+
+class TestTransformTushareTopList:
+    """transform_tushare_top_list 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_top_list
+
+        raw = [{"ts_code": "000001.SZ", "trade_date": "20260216",
+                "name": "平安银行", "l_buy": 50000.0, "l_sell": 30000.0,
+                "net_amount": 20000.0, "reason": "日涨幅偏离值达7%"}]
+        result = transform_tushare_top_list(raw)
+        assert len(result) == 1
+        assert result[0]["buy_total"] == Decimal("50000.0")
+        assert result[0]["sell_total"] == Decimal("30000.0")
+        assert result[0]["net_buy"] == Decimal("20000.0")
+        assert result[0]["reason"] == "日涨幅偏离值达7%"
+        assert result[0]["data_source"] == "tushare"
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_top_list
+        assert transform_tushare_top_list([]) == []

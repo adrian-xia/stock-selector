@@ -91,6 +91,22 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 timeout=settings.sync_batch_timeout,
             )
 
+        # 步骤 3.5：资金流向同步（非关键，失败不阻断）
+        moneyflow_start = time.monotonic()
+        try:
+            mf_result = await manager.sync_raw_moneyflow(target)
+            tl_result = await manager.sync_raw_top_list(target)
+            etl_result = await manager.etl_moneyflow(target)
+            logger.info(
+                "[资金流向同步] 完成：raw=%s, top=%s, etl=%s，耗时 %.1fs",
+                mf_result, tl_result, etl_result, time.monotonic() - moneyflow_start,
+            )
+        except Exception:
+            logger.warning(
+                "[资金流向同步] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - moneyflow_start, traceback.format_exc(),
+            )
+
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 

@@ -511,3 +511,110 @@ def transform_tushare_concept_member(raw_rows: list[dict]) -> list[dict]:
         })
     return cleaned
 
+
+# ---------------------------------------------------------------------------
+# P2 资金流向 ETL
+# ---------------------------------------------------------------------------
+
+
+def transform_tushare_moneyflow(raw_rows: list[dict]) -> list[dict]:
+    """将 Tushare moneyflow 原始数据转换为 money_flow 业务表格式。
+
+    字段一一对应，日期 VARCHAR(8) → DATE，数值 NUMERIC → Decimal，NaN/None → 0。
+    """
+    if not raw_rows:
+        return []
+
+    _ZERO = Decimal("0")
+    cleaned: list[dict] = []
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+        trade_date = parse_date(raw.get("trade_date"))
+        if trade_date is None:
+            continue
+
+        cleaned.append({
+            "ts_code": ts_code,
+            "trade_date": trade_date,
+            "buy_sm_vol": parse_decimal(raw.get("buy_sm_vol")) or _ZERO,
+            "buy_sm_amount": parse_decimal(raw.get("buy_sm_amount")) or _ZERO,
+            "sell_sm_vol": parse_decimal(raw.get("sell_sm_vol")) or _ZERO,
+            "sell_sm_amount": parse_decimal(raw.get("sell_sm_amount")) or _ZERO,
+            "buy_md_vol": parse_decimal(raw.get("buy_md_vol")) or _ZERO,
+            "buy_md_amount": parse_decimal(raw.get("buy_md_amount")) or _ZERO,
+            "sell_md_vol": parse_decimal(raw.get("sell_md_vol")) or _ZERO,
+            "sell_md_amount": parse_decimal(raw.get("sell_md_amount")) or _ZERO,
+            "buy_lg_vol": parse_decimal(raw.get("buy_lg_vol")) or _ZERO,
+            "buy_lg_amount": parse_decimal(raw.get("buy_lg_amount")) or _ZERO,
+            "sell_lg_vol": parse_decimal(raw.get("sell_lg_vol")) or _ZERO,
+            "sell_lg_amount": parse_decimal(raw.get("sell_lg_amount")) or _ZERO,
+            "buy_elg_vol": parse_decimal(raw.get("buy_elg_vol")) or _ZERO,
+            "buy_elg_amount": parse_decimal(raw.get("buy_elg_amount")) or _ZERO,
+            "sell_elg_vol": parse_decimal(raw.get("sell_elg_vol")) or _ZERO,
+            "sell_elg_amount": parse_decimal(raw.get("sell_elg_amount")) or _ZERO,
+            "net_mf_amount": parse_decimal(raw.get("net_mf_amount")) or _ZERO,
+            "data_source": "tushare",
+        })
+    return cleaned
+
+
+def transform_tushare_top_list(raw_rows: list[dict]) -> list[dict]:
+    """将 Tushare top_list 原始数据转换为 dragon_tiger 业务表格式。
+
+    字段映射：l_buy → buy_total, l_sell → sell_total, net_amount → net_buy。
+    """
+    if not raw_rows:
+        return []
+
+    cleaned: list[dict] = []
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+        trade_date = parse_date(raw.get("trade_date"))
+        if trade_date is None:
+            continue
+
+        cleaned.append({
+            "ts_code": ts_code,
+            "trade_date": trade_date,
+            "reason": _safe_str(raw.get("reason")) or None,
+            "buy_total": parse_decimal(raw.get("l_buy")),
+            "sell_total": parse_decimal(raw.get("l_sell")),
+            "net_buy": parse_decimal(raw.get("net_amount")),
+            "list_name": _safe_str(raw.get("name")) or None,
+            "data_source": "tushare",
+        })
+    return cleaned
+
+
+def transform_tushare_top_inst(raw_rows: list[dict]) -> list[dict]:
+    """将 Tushare top_inst 原始数据转换为标准格式（备用）。"""
+    if not raw_rows:
+        return []
+
+    cleaned: list[dict] = []
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+        trade_date = parse_date(raw.get("trade_date"))
+        if trade_date is None:
+            continue
+
+        cleaned.append({
+            "ts_code": ts_code,
+            "trade_date": trade_date,
+            "exalter": _safe_str(raw.get("exalter")),
+            "side": _safe_str(raw.get("side")) or None,
+            "buy": parse_decimal(raw.get("buy")),
+            "buy_rate": parse_decimal(raw.get("buy_rate")),
+            "sell": parse_decimal(raw.get("sell")),
+            "sell_rate": parse_decimal(raw.get("sell_rate")),
+            "net_buy": parse_decimal(raw.get("net_buy")),
+            "reason": _safe_str(raw.get("reason")) or None,
+        })
+    return cleaned
+
