@@ -2100,3 +2100,86 @@ class RawTushareStkSurv(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
+
+
+# 11e. 两融数据（4 张）
+
+
+class RawTushareMargin(Base):
+    """融资融券交易汇总原始表（对应 margin 接口）。"""
+
+    __tablename__ = "raw_tushare_margin"
+    __table_args__ = (Index("idx_raw_margin_trade_date", "trade_date"),)
+
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    exchange_id: Mapped[str] = mapped_column(String(8), primary_key=True)
+    rzye: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rzmre: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rzche: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqye: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqmcl: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqchl: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rzrqye: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareMarginDetail(Base):
+    """融资融券交易明细原始表（对应 margin_detail 接口）。"""
+
+    __tablename__ = "raw_tushare_margin_detail"
+    __table_args__ = (
+        Index("idx_raw_margin_detail_ts_code", "ts_code"),
+        Index("idx_raw_margin_detail_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rzye: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rzmre: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rzche: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqye: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqyl: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqmcl: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rqchl: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    rzrqye: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareMarginTarget(Base):
+    """融资融券标的原始表（对应 margin_target 接口）。"""
+
+    __tablename__ = "raw_tushare_margin_target"
+    __table_args__ = (Index("idx_raw_margin_target_ts_code", "ts_code"),)
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    in_date: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    out_date: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RawTushareSlbLen(Base):
+    """转融通借入原始表（对应 slb_len 接口）。"""
+
+    __tablename__ = "raw_tushare_slb_len"
+    __table_args__ = (
+        Index("idx_raw_slb_len_ts_code", "ts_code"),
+        Index("idx_raw_slb_len_trade_date", "trade_date"),
+    )
+
+    ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    slb_amt: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    slb_vol: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
+    slb_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
