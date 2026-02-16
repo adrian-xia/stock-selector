@@ -264,3 +264,175 @@ def transform_tushare_fina_indicator(raw_rows: list[dict]) -> list[dict]:
         })
     return cleaned
 
+
+# =====================================================================
+# P3 指数数据 ETL 清洗函数（6 个）
+# =====================================================================
+
+
+def transform_tushare_index_basic(raw_rows: list[dict]) -> list[dict]:
+    """清洗指数基础信息（raw_tushare_index_basic → index_basic）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "ts_code": raw["ts_code"],
+            "name": raw.get("name"),
+            "fullname": raw.get("fullname"),
+            "market": raw.get("market"),
+            "publisher": raw.get("publisher"),
+            "index_type": raw.get("index_type"),
+            "category": raw.get("category"),
+            "base_date": parse_date(raw.get("base_date")),
+            "base_point": parse_decimal(raw.get("base_point")),
+            "list_date": parse_date(raw.get("list_date")),
+            "weight_rule": raw.get("weight_rule"),
+            "desc": raw.get("desc"),
+            "exp_date": parse_date(raw.get("exp_date")),
+        })
+    return cleaned
+
+
+def transform_tushare_index_daily(raw_rows: list[dict]) -> list[dict]:
+    """清洗指数日线行情（raw_tushare_index_daily → index_daily）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "ts_code": raw["ts_code"],
+            "trade_date": parse_date(raw["trade_date"]),
+            "open": parse_decimal(raw.get("open")),
+            "high": parse_decimal(raw.get("high")),
+            "low": parse_decimal(raw.get("low")),
+            "close": parse_decimal(raw.get("close")),
+            "pre_close": parse_decimal(raw.get("pre_close")),
+            "change": parse_decimal(raw.get("change")),
+            "pct_chg": parse_decimal(raw.get("pct_chg")),
+            "vol": parse_decimal(raw.get("vol")) or Decimal("0"),
+            "amount": parse_decimal(raw.get("amount")) or Decimal("0"),
+        })
+    return cleaned
+
+
+def transform_tushare_index_weight(raw_rows: list[dict]) -> list[dict]:
+    """清洗指数成分股权重（raw_tushare_index_weight → index_weight）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "index_code": raw["index_code"],
+            "con_code": raw["con_code"],
+            "trade_date": parse_date(raw["trade_date"]),
+            "weight": parse_decimal(raw.get("weight")),
+        })
+    return cleaned
+
+
+def transform_tushare_industry_classify(raw_rows: list[dict]) -> list[dict]:
+    """清洗行业分类（raw_tushare_index_classify → industry_classify）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "index_code": raw["index_code"],
+            "industry_name": raw.get("industry_name"),
+            "level": raw.get("level"),
+            "industry_code": raw.get("industry_code"),
+            "src": raw.get("src"),
+        })
+    return cleaned
+
+
+def transform_tushare_industry_member(raw_rows: list[dict]) -> list[dict]:
+    """清洗行业成分股（raw_tushare_index_member_all → industry_member）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "index_code": raw["index_code"],
+            "con_code": raw["con_code"],
+            "in_date": parse_date(raw["in_date"]),
+            "out_date": parse_date(raw.get("out_date")),
+            "is_new": raw.get("is_new"),
+        })
+    return cleaned
+
+
+def transform_tushare_index_technical(raw_rows: list[dict]) -> list[dict]:
+    """清洗指数技术指标（raw_tushare_index_factor_pro → index_technical_daily）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    cleaned = []
+    for raw in raw_rows:
+        cleaned.append({
+            "ts_code": raw["ts_code"],
+            "trade_date": parse_date(raw["trade_date"]),
+            # 均线指标
+            "ma5": parse_decimal(raw.get("ma5")),
+            "ma10": parse_decimal(raw.get("ma10")),
+            "ma20": parse_decimal(raw.get("ma20")),
+            "ma60": parse_decimal(raw.get("ma60")),
+            "ma120": parse_decimal(raw.get("ma120")),
+            "ma250": parse_decimal(raw.get("ma250")),
+            # MACD 指标
+            "macd_dif": parse_decimal(raw.get("macd_dif")),
+            "macd_dea": parse_decimal(raw.get("macd_dea")),
+            "macd_hist": parse_decimal(raw.get("macd")),  # raw 表中是 macd，业务表中是 macd_hist
+            # KDJ 指标
+            "kdj_k": parse_decimal(raw.get("kdj_k")),
+            "kdj_d": parse_decimal(raw.get("kdj_d")),
+            "kdj_j": parse_decimal(raw.get("kdj_j")),
+            # RSI 指标
+            "rsi6": parse_decimal(raw.get("rsi6")),
+            "rsi12": parse_decimal(raw.get("rsi12")),
+            "rsi24": parse_decimal(raw.get("rsi24")),
+            # 布林带指标
+            "boll_upper": parse_decimal(raw.get("boll_upper")),
+            "boll_mid": parse_decimal(raw.get("boll_mid")),
+            "boll_lower": parse_decimal(raw.get("boll_lower")),
+            # 成交量指标（raw 表中没有，需要自己计算）
+            "vol_ma5": None,
+            "vol_ma10": None,
+            "vol_ratio": None,
+            # 其他指标
+            "atr14": parse_decimal(raw.get("atr")),
+            "cci14": parse_decimal(raw.get("cci")),
+            "willr14": parse_decimal(raw.get("wr")),
+        })
+    return cleaned
+
