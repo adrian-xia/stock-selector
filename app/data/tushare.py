@@ -1022,3 +1022,79 @@ class TushareClient:
         """
         df = await self._call("stk_list_his", api_name="stk_list_his", ts_code=ts_code, list_date=list_date, delist_date=delist_date)
         return df.to_dict("records")
+
+    # 11b. 行情补充（5 个）
+
+    async def fetch_raw_weekly(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取周线行情（对应 weekly 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            周线行情列表
+        """
+        df = await self._call("weekly", api_name="weekly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_monthly(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取月线行情（对应 monthly 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            月线行情列表
+        """
+        df = await self._call("monthly", api_name="monthly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_suspend_d(self, ts_code: str = "", suspend_date: str = "", resume_date: str = "") -> list[dict]:
+        """获取停复牌信息（对应 suspend_d 接口）。
+
+        Args:
+            ts_code: 股票代码
+            suspend_date: 停牌日期（YYYYMMDD）
+            resume_date: 复牌日期（YYYYMMDD）
+
+        Returns:
+            停复牌信息列表
+        """
+        df = await self._call("suspend_d", api_name="suspend_d", ts_code=ts_code, suspend_date=suspend_date, resume_date=resume_date)
+        return df.to_dict("records")
+
+    async def fetch_raw_hsgt_top10(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", market_type: str = "") -> list[dict]:
+        """获取沪深港通十大成交股（对应 hsgt_top10 接口）。
+
+        Args:
+            ts_code: 股票代码
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+            market_type: 市场类型（1=沪股通，3=深股通）
+
+        Returns:
+            沪深港通十大成交股列表
+        """
+        df = await self._call("hsgt_top10", api_name="hsgt_top10", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, market_type=market_type)
+        return df.to_dict("records")
+
+    async def fetch_raw_ggt_daily(self, trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+        """获取港股通每日成交统计（对应 ggt_daily 接口）。
+
+        Args:
+            trade_date: 交易日期（YYYYMMDD）
+            start_date: 开始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            港股通每日成交统计列表
+        """
+        df = await self._call("ggt_daily", api_name="ggt_daily", trade_date=trade_date, start_date=start_date, end_date=end_date)
+        return df.to_dict("records")
