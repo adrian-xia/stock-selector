@@ -113,7 +113,7 @@
 
 - [x] 10.1 创建 `app/models/concept.py` — 定义 4 张板块业务表模型（concept_index, concept_daily, concept_member, concept_technical_daily）
 - [x] 10.2 `app/models/raw.py` 添加 8 张板块原始表模型（raw_tushare_ths_index, raw_tushare_ths_daily, raw_tushare_ths_member, raw_tushare_dc_index, raw_tushare_dc_member, raw_tushare_dc_hot_new, raw_tushare_tdx_index, raw_tushare_tdx_member）
-- [ ] 10.3 创建 Alembic 迁移脚本 — 板块原始表 + 板块业务表建表（含 concept_technical_daily）
+- [x] 10.3 创建 Alembic 迁移脚本 — 板块原始表 + 板块业务表建表（含 concept_technical_daily）
 - [ ] 10.4 TushareClient 添加板块 fetch_raw_* 方法
 - [ ] 10.5 `app/data/etl.py` 添加板块 ETL 清洗函数（统一三个数据源到 concept_* 业务表）
 - [ ] 10.6 DataManager 添加板块同步方法（sync_concept_index, sync_concept_daily, sync_concept_member）
