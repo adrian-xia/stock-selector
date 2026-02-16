@@ -117,7 +117,7 @@
 - [x] 10.4 TushareClient 添加板块 fetch_raw_* 方法
 - [x] 10.5 `app/data/etl.py` 添加板块 ETL 清洗函数（统一三个数据源到 concept_* 业务表）
 - [x] 10.6 DataManager 添加板块同步方法（sync_concept_index, sync_concept_daily, sync_concept_member）
-- [ ] 10.7 DataManager 添加 update_concept_indicators(trade_date) 方法
+- [x] 10.7 DataManager 添加 update_concept_indicators(trade_date) 方法
 
 ## 10a. P4 数据校验测试
 
