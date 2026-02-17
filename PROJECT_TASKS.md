@@ -93,8 +93,8 @@
 ## V2 详细实施计划
 
 > **基于设计文档：** `docs/design/99-实施范围-V1与V2划分.md`
-> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1 完整，P2-P5 仅建表）、策略引擎、回测系统、智能数据自动更新
-> **V2 目标：** 完成数据采集体系（P2-P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
+> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2 完整，P3-P5 仅建表）、策略引擎、回测系统、智能数据自动更新
+> **V2 目标：** 完成数据采集体系（P3-P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
 > **实施方式：** 每个变更使用 OpenSpec 工作流管理，独立实施和归档
 
 ---
@@ -104,7 +104,7 @@
 V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个批次：
 
 ### 第一批：数据采集体系完善（数据基础）
-1. **p2-moneyflow-etl** - P2 资金流向数据 ETL 实施（2-3 天）
+1. ~~**p2-moneyflow-etl** - P2 资金流向数据 ETL 实施~~ ✅ 已完成
 2. **p3-index-etl** - P3 指数数据 ETL 实施（3-4 天）
 3. **p4-concept-etl** - P4 板块数据 ETL 实施（3-4 天）
 4. **p5-core-data-etl** - P5 核心扩展数据 ETL 实施（3-4 天）
@@ -140,20 +140,17 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ## V2 变更详细规划
 
-### Change 1: `p2-moneyflow-etl` — P2 资金流向数据 ETL
+### Change 1: `p2-moneyflow-etl` — P2 资金流向数据 ETL ✅ 已完成
 
-**目标：** 完成 P2 资金流向 10 张 raw 表的 ETL 清洗和数据同步，支持资金流向策略
+**完成日期：** 2026-02-17
 
-**范围：**
-- ETL 清洗函数：`transform_tushare_moneyflow`、`transform_tushare_top_list` 等
-- DataManager 方法：`sync_raw_moneyflow`、`etl_moneyflow`
+**实施内容：**
+- ETL 清洗函数：`transform_tushare_moneyflow`、`transform_tushare_top_list`、`transform_tushare_top_inst`
+- DataManager 方法：`sync_raw_moneyflow`、`sync_raw_top_list`、`etl_moneyflow`
 - 业务表映射：raw → `money_flow`、`dragon_tiger`
-- 盘后链路集成：在 `sync_raw_daily` 后增加资金流向同步步骤
-- 涉及 raw 表（10 张）：moneyflow, moneyflow_dc, moneyflow_ths, moneyflow_hsgt, moneyflow_ind_ths, moneyflow_cnt_ths, moneyflow_ind_dc, moneyflow_mkt_dc, top_list, top_inst
-
-**依赖：** 无（V1 已完成建表和 ORM 模型）
-**涉及文件：** `app/data/etl.py`, `app/data/manager.py`, `app/scheduler/jobs.py`
-**设计文档：** `docs/design/01-详细设计-数据采集.md` §3.3, `docs/design/99-实施范围-V1与V2划分.md` §3.3
+- 盘后链路集成：在批量数据拉取后增加资金流向同步步骤（失败不阻断后续链路）
+- dragon_tiger 表添加 `(ts_code, trade_date, reason)` 唯一约束
+- 单元测试：transform_tushare_moneyflow、transform_tushare_top_list 测试覆盖
 
 ---
 

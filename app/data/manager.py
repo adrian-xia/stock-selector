@@ -11,17 +11,23 @@ from app.data.etl import (
     batch_insert,
     transform_tushare_daily,
     transform_tushare_fina_indicator,
+    transform_tushare_moneyflow,
     transform_tushare_stock_basic,
+    transform_tushare_top_list,
     transform_tushare_trade_cal,
 )
 from app.exceptions import DataSyncError
 from app.models.finance import FinanceIndicator
+from app.models.flow import DragonTiger, MoneyFlow
 from app.models.market import Stock, StockDaily, StockSyncProgress, TradeCalendar
 from app.models.raw import (
     RawTushareAdjFactor,
     RawTushareDaily,
     RawTushareDailyBasic,
     RawTushareFinaIndicator,
+    RawTushareMoneyflow,
+    RawTushareTopInst,
+    RawTushareTopList,
 )
 from app.models.technical import TechnicalDaily
 
@@ -280,6 +286,133 @@ class DataManager:
 
         logger.info("[etl_daily] %s: 写入 %d 条", trade_date, count)
         return {"inserted": count}
+
+    # --- P2 资金流向同步 ---
+
+    async def sync_raw_moneyflow(self, trade_date: date) -> dict:
+        """按日期获取全市场个股资金流向写入 raw 表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"moneyflow": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+
+        raw_moneyflow = await client.fetch_raw_moneyflow(td_str)
+
+        counts = {"moneyflow": 0}
+        async with self._session_factory() as session:
+            if raw_moneyflow:
+                counts["moneyflow"] = await self._upsert_raw(
+                    session, RawTushareMoneyflow.__table__, raw_moneyflow
+                )
+            await session.commit()
+
+        logger.info(
+            "[sync_raw_moneyflow] %s: moneyflow=%d",
+            trade_date, counts["moneyflow"],
+        )
+        return counts
+
+    async def sync_raw_top_list(self, trade_date: date) -> dict:
+        """按日期获取龙虎榜明细和机构明细写入 raw 表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"top_list": int, "top_inst": int}
+        """
+        import asyncio
+
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+
+        raw_top_list, raw_top_inst = await asyncio.gather(
+            client.fetch_raw_top_list(td_str),
+            client.fetch_raw_top_inst(td_str),
+        )
+
+        counts = {"top_list": 0, "top_inst": 0}
+        async with self._session_factory() as session:
+            if raw_top_list:
+                counts["top_list"] = await self._upsert_raw(
+                    session, RawTushareTopList.__table__, raw_top_list
+                )
+            if raw_top_inst:
+                counts["top_inst"] = await self._upsert_raw(
+                    session, RawTushareTopInst.__table__, raw_top_inst
+                )
+            await session.commit()
+
+        logger.info(
+            "[sync_raw_top_list] %s: top_list=%d, top_inst=%d",
+            trade_date, counts["top_list"], counts["top_inst"],
+        )
+        return counts
+
+    async def etl_moneyflow(self, trade_date: date) -> dict:
+        """从 raw 表读取资金流向和龙虎榜数据，清洗后写入业务表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"money_flow": int, "dragon_tiger": int}
+        """
+        td_str = trade_date.strftime("%Y%m%d")
+
+        async with self._session_factory() as session:
+            # 读取 raw_tushare_moneyflow
+            mf_result = await session.execute(
+                select(RawTushareMoneyflow).where(
+                    RawTushareMoneyflow.trade_date == td_str
+                )
+            )
+            raw_mf = [
+                {c.key: getattr(r, c.key) for c in RawTushareMoneyflow.__table__.columns if c.key != "fetched_at"}
+                for r in mf_result.scalars().all()
+            ]
+
+            # 读取 raw_tushare_top_list
+            tl_result = await session.execute(
+                select(RawTushareTopList).where(
+                    RawTushareTopList.trade_date == td_str
+                )
+            )
+            raw_tl = [
+                {c.key: getattr(r, c.key) for c in RawTushareTopList.__table__.columns if c.key != "fetched_at"}
+                for r in tl_result.scalars().all()
+            ]
+
+        # ETL 清洗
+        cleaned_mf = transform_tushare_moneyflow(raw_mf)
+        cleaned_tl = transform_tushare_top_list(raw_tl)
+
+        counts = {"money_flow": 0, "dragon_tiger": 0}
+
+        async with self._session_factory() as session:
+            if cleaned_mf:
+                counts["money_flow"] = await batch_insert(
+                    session, MoneyFlow.__table__, cleaned_mf
+                )
+            if cleaned_tl:
+                counts["dragon_tiger"] = await batch_insert(
+                    session, DragonTiger.__table__, cleaned_tl
+                )
+
+        logger.info(
+            "[etl_moneyflow] %s: money_flow=%d, dragon_tiger=%d",
+            trade_date, counts["money_flow"], counts["dragon_tiger"],
+        )
+        return counts
 
     @staticmethod
     async def _upsert_raw(

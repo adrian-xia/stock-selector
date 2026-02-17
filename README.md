@@ -19,7 +19,7 @@
 - **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
 - **前端界面** — React 18 + Ant Design 5 + ECharts，选股工作台 + 回测中心
-- **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新；集成测试覆盖 P0/P1 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性）
+- **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新、P2 资金流向 ETL；集成测试覆盖 P0/P1 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性）
 
 ## 技术栈
 
@@ -370,7 +370,7 @@ stock-selector/
 │   ├── main.py                 # FastAPI 入口
 │   ├── config.py               # 配置管理（pydantic-settings）
 │   ├── database.py             # SQLAlchemy 异步引擎
-│   ├── models/                 # ORM 模型（12 张业务表 + 26 张 raw 层表）
+│   ├── models/                 # ORM 模型（12 张业务表 + 90 张 raw 层表）
 │   ├── data/                   # 数据采集模块
 │   │   ├── baostock.py         #   BaoStock 客户端
 │   │   ├── akshare.py          #   AKShare 客户端
