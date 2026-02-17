@@ -271,3 +271,73 @@ class TestTransformTushareIndexTechnical:
         assert len(result) == 1
         assert result[0]["ma5"] is None
         assert result[0]["ma10"] is None  # NaN → None
+
+
+class TestTransformTushareConceptIndex:
+    """transform_tushare_concept_index 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_concept_index
+
+        raw = [{"ts_code": "885720.TI", "name": "半导体", "type": "N"}]
+        result = transform_tushare_concept_index(raw, src="THS")
+        assert len(result) == 1
+        assert result[0]["ts_code"] == "885720.TI"
+        assert result[0]["name"] == "半导体"
+        assert result[0]["src"] == "THS"
+        assert result[0]["type"] == "N"
+
+    def test_dc_source(self):
+        from app.data.etl import transform_tushare_concept_index
+
+        raw = [{"ts_code": "BK0001", "name": "新能源", "type": None}]
+        result = transform_tushare_concept_index(raw, src="DC")
+        assert len(result) == 1
+        assert result[0]["src"] == "DC"
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_concept_index
+        assert transform_tushare_concept_index([], src="THS") == []
+
+
+class TestTransformTushareConceptDaily:
+    """transform_tushare_concept_daily 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_concept_daily
+
+        raw = [{"ts_code": "885720.TI", "trade_date": "20260217",
+                "open": 1200.5, "high": 1250.0, "low": 1180.0,
+                "close": 1240.0, "pre_close": 1200.0,
+                "change": 40.0, "pct_chg": 3.33,
+                "vol": 5000000.0, "amount": 6000000.0}]
+        result = transform_tushare_concept_daily(raw)
+        assert len(result) == 1
+        assert result[0]["ts_code"] == "885720.TI"
+        assert result[0]["trade_date"] == date(2026, 2, 17)
+        assert result[0]["close"] == Decimal("1240.0")
+        assert result[0]["vol"] == Decimal("5000000.0")
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_concept_daily
+        assert transform_tushare_concept_daily([]) == []
+
+
+class TestTransformTushareConceptMember:
+    """transform_tushare_concept_member 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_concept_member
+
+        raw = [{"ts_code": "885720.TI", "code": "600519.SH",
+                "in_date": "20200101", "out_date": None}]
+        result = transform_tushare_concept_member(raw)
+        assert len(result) == 1
+        assert result[0]["concept_code"] == "885720.TI"
+        assert result[0]["stock_code"] == "600519.SH"
+        assert result[0]["in_date"] == date(2020, 1, 1)
+        assert result[0]["out_date"] is None
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_concept_member
+        assert transform_tushare_concept_member([]) == []
