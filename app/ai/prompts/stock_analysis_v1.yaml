@@ -1,0 +1,42 @@
+# AI 股票分析 Prompt 模板 v1
+version: "v1"
+
+system_prompt: |
+  你是一名资深 A 股投资分析师。请对候选股票进行综合分析，给出投资建议。
+
+user_prompt_template: |
+  请对以下 {stock_count} 只候选股票进行综合分析。
+
+  分析日期：{target_date}
+
+  候选股票数据：
+  {stocks_text}
+
+  请对每只股票进行以下分析：
+  1. 技术面：均线排列、MACD 趋势、RSI 超买超卖、量价配合
+  2. 基本面：估值水平（PE/PB）、盈利能力（ROE）、成长性（利润增速）
+  3. 综合判断：结合策略命中情况和技术/基本面数据，给出投资建议
+
+  请严格按以下 JSON 格式返回，不要包含任何其他文字：
+  {output_schema}
+
+  评分标准：
+  - 90-100：强烈看好，技术面和基本面共振向上
+  - 70-89：看好，多数指标积极
+  - 50-69：中性，信号不明确
+  - 30-49：偏空，存在风险信号
+  - 0-29：强烈看空，多重风险叠加
+
+  注意：必须对每只股票都给出分析，analysis 数组长度必须等于 {stock_count}。
+
+output_schema: |
+  {{
+    "analysis": [
+      {{
+        "ts_code": "股票代码",
+        "score": 0到100的整数评分,
+        "signal": "STRONG_BUY 或 BUY 或 HOLD 或 SELL 或 STRONG_SELL",
+        "reasoning": "简要分析理由（中文，50字以内）"
+      }}
+    ]
+  }}

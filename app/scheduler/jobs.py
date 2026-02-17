@@ -167,10 +167,43 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 "[完整性门控] 通过：完成率 %.1f%% >= 阈值 %.1f%%，执行策略",
                 completion_rate * 100, threshold * 100,
             )
+            picks = []
             try:
-                await pipeline_step(target)
+                picks = await pipeline_step(target)
             except Exception:
                 logger.error("[盘后链路] 策略管道执行失败\n%s", traceback.format_exc())
+
+            # 步骤 5.5：AI 分析（非关键，失败不阻断）
+            if picks:
+                ai_start = time.monotonic()
+                try:
+                    from app.ai.manager import get_ai_manager
+                    ai_manager = get_ai_manager()
+                    if ai_manager.is_enabled:
+                        # 取 Top 30 候选股进行 AI 分析
+                        top_picks = picks[:30]
+                        # 构建 market_data（简化版，使用 pick 自身数据）
+                        market_data = {
+                            p.ts_code: {"close": p.close, "pct_chg": p.pct_chg}
+                            for p in top_picks
+                        }
+                        analyzed = await ai_manager.analyze(top_picks, market_data, target)
+                        # 获取 token 用量并持久化
+                        token_usage = ai_manager._get_client().get_last_usage() if ai_manager._client else None
+                        saved = await ai_manager.save_results(
+                            analyzed, target, async_session_factory, token_usage
+                        )
+                        logger.info(
+                            "[AI分析] 完成：分析 %d 只，持久化 %d 条，耗时 %.1fs",
+                            len(top_picks), saved, time.monotonic() - ai_start,
+                        )
+                    else:
+                        logger.info("[AI分析] 未启用，跳过")
+                except Exception:
+                    logger.warning(
+                        "[AI分析] 失败（继续执行），耗时 %.1fs\n%s",
+                        time.monotonic() - ai_start, traceback.format_exc(),
+                    )
         else:
             logger.warning(
                 "[完整性门控] 未通过：完成率 %.1f%% < 阈值 %.1f%%，跳过策略（总 %d，完成 %d，失败 %d）",
@@ -238,11 +271,14 @@ async def cache_refresh_step(target_date: date) -> None:
         logger.warning("[缓存刷新] 失败（耗时 %.1fs），策略管道将回源数据库：%s", elapsed, e)
 
 
-async def pipeline_step(target_date: date) -> None:
+async def pipeline_step(target_date: date) -> list:
     """执行策略管道：使用全部已注册策略。
 
     Args:
         target_date: 目标日期
+
+    Returns:
+        候选股票列表（StockPick）
     """
     step_start = time.monotonic()
     logger.info("[策略管道] 开始：%s", target_date)
@@ -263,6 +299,7 @@ async def pipeline_step(target_date: date) -> None:
         "[策略管道] 完成：筛选出 %d 只，耗时 %dms",
         len(result.picks), result.elapsed_ms,
     )
+    return result.picks
 
 
 async def sync_stock_list_job() -> None:

@@ -42,10 +42,10 @@ docs/design/
 - 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁，完整的关闭日志记录
 - 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
 - 策略引擎：12 种核心策略（8 种技术面 + 4 种基本面），扁平继承，单模式接口
-- AI 分析：❌ V1 未实施（盘后链路不包含 AI 分析步骤），V2 再接入 Gemini Flash 单模型
+- AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 前端：选股工作台 + 回测结果页，轮询（无 WebSocket）
-- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张仅建表） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily）
+- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张仅建表） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results）
 - 不做：用户权限、实时监控、新闻舆情、高手跟投
 
 ## 技术栈

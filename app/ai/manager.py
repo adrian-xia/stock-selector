@@ -2,23 +2,30 @@
 
 编排 AI 分析流程：接收候选股票 → 构建 Prompt → 调用 Gemini → 解析结果 → 输出评分。
 V1 使用 Gemini Flash 单模型，失败时静默降级。
+支持结果持久化、每日调用上限和 Token 用量记录。
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import date
-from typing import TYPE_CHECKING
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.ai.clients.gemini import (
     GeminiClient,
     GeminiError,
 )
-from app.ai.prompts import build_analysis_prompt
+from app.ai.prompts import build_analysis_prompt, get_prompt_version
 from app.ai.schemas import AIAnalysisResponse
 from app.config import Settings, settings
+from app.models.ai import AIAnalysisResult
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from app.strategy.pipeline import StockPick
 
 logger = logging.getLogger(__name__)
@@ -28,6 +35,7 @@ class AIManager:
     """AI 分析编排器。
 
     延迟初始化 GeminiClient，未配置 API Key 且未启用 ADC 时自动禁用。
+    支持结果持久化写入、每日调用上限控制和 Token 用量记录。
 
     Args:
         ai_settings: 应用配置（包含 Gemini 相关字段）
@@ -60,6 +68,48 @@ class AIManager:
             )
         return self._client
 
+    async def _check_daily_limit(self, trade_date: date) -> bool:
+        """检查当日 AI 调用是否已达上限。
+
+        基于 Redis 计数，Redis 不可用时放行。
+
+        Returns:
+            True 表示可以继续调用，False 表示已达上限
+        """
+        limit = self._settings.ai_daily_call_limit
+        if limit <= 0:
+            return True
+
+        try:
+            from app.cache.redis_client import get_redis
+            redis = await get_redis()
+            if redis is None:
+                return True
+
+            key = f"ai:daily_calls:{trade_date.isoformat()}"
+            count = await redis.get(key)
+            if count is not None and int(count) >= limit:
+                logger.info("AI 每日调用上限已达 %d/%d，跳过", int(count), limit)
+                return False
+            return True
+        except Exception:
+            return True
+
+    async def _incr_daily_count(self, trade_date: date) -> None:
+        """递增当日 AI 调用计数。"""
+        try:
+            from app.cache.redis_client import get_redis
+            redis = await get_redis()
+            if redis is None:
+                return
+
+            key = f"ai:daily_calls:{trade_date.isoformat()}"
+            await redis.incr(key)
+            await redis.expire(key, 86400 * 2)  # 2 天过期
+        except Exception:
+            pass
+
+
     async def analyze(
         self,
         picks: list[StockPick],
@@ -82,6 +132,10 @@ class AIManager:
         if not self._enabled or not picks:
             return picks
 
+        # 检查每日调用上限
+        if not await self._check_daily_limit(target_date):
+            return picks
+
         try:
             # 构建 Prompt
             prompt = build_analysis_prompt(picks, market_data, target_date)
@@ -94,6 +148,9 @@ class AIManager:
 
             # 校验响应
             response = AIAnalysisResponse.model_validate(raw)
+
+            # 递增调用计数
+            await self._incr_daily_count(target_date)
 
             # 合并 AI 评分到 picks
             return self._merge_scores(picks, response)
@@ -110,11 +167,7 @@ class AIManager:
         picks: list[StockPick],
         response: AIAnalysisResponse,
     ) -> list[StockPick]:
-        """将 AI 评分合并到 StockPick 中。
-
-        处理部分响应：AI 返回数量不匹配时，未匹配的股票 ai_score 保持 None。
-        """
-        # 构建 ts_code -> AI 结果映射
+        """将 AI 评分合并到 StockPick 中。"""
         ai_map = {item.ts_code: item for item in response.analysis}
 
         matched_count = 0
@@ -126,21 +179,113 @@ class AIManager:
                 pick.ai_summary = ai_item.reasoning
                 matched_count += 1
 
-        # 检查数量是否匹配
         if matched_count < len(picks):
             logger.warning(
                 "AI 返回 %d 条结果，输入 %d 只股票，%d 只未匹配",
                 len(response.analysis), len(picks), len(picks) - matched_count,
             )
 
-        # 按 ai_score 降序排序，None 排最后
         picks.sort(key=lambda p: (p.ai_score is not None, p.ai_score or 0), reverse=True)
 
-        logger.info(
-            "AI 分析完成：%d/%d 只股票获得评分",
-            matched_count, len(picks),
-        )
+        logger.info("AI 分析完成：%d/%d 只股票获得评分", matched_count, len(picks))
         return picks
+
+
+    async def save_results(
+        self,
+        picks: list[StockPick],
+        trade_date: date,
+        session_factory: async_sessionmaker[AsyncSession],
+        token_usage: dict[str, int] | None = None,
+    ) -> int:
+        """将 AI 分析结果 UPSERT 到 ai_analysis_results 表。
+
+        Args:
+            picks: 带有 AI 评分的候选股票
+            trade_date: 分析日期
+            session_factory: 数据库会话工厂
+            token_usage: Token 用量
+
+        Returns:
+            写入的记录数
+        """
+        # 过滤有 AI 评分的记录
+        scored = [p for p in picks if p.ai_score is not None]
+        if not scored:
+            return 0
+
+        prompt_version = get_prompt_version()
+        now = datetime.now()
+
+        rows = [
+            {
+                "ts_code": p.ts_code,
+                "trade_date": trade_date,
+                "ai_score": p.ai_score,
+                "ai_signal": p.ai_signal or "HOLD",
+                "ai_summary": p.ai_summary or "",
+                "prompt_version": prompt_version,
+                "token_usage": token_usage,
+                "created_at": now,
+            }
+            for p in scored
+        ]
+
+        async with session_factory() as session:
+            stmt = pg_insert(AIAnalysisResult).values(rows)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["ts_code", "trade_date"],
+                set_={
+                    "ai_score": stmt.excluded.ai_score,
+                    "ai_signal": stmt.excluded.ai_signal,
+                    "ai_summary": stmt.excluded.ai_summary,
+                    "prompt_version": stmt.excluded.prompt_version,
+                    "token_usage": stmt.excluded.token_usage,
+                    "created_at": stmt.excluded.created_at,
+                },
+            )
+            await session.execute(stmt)
+            await session.commit()
+
+        logger.info("[AI结果持久化] %s: %d 条", trade_date, len(rows))
+        return len(rows)
+
+    async def get_results(
+        self,
+        trade_date: date,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> list[dict[str, Any]]:
+        """查询指定日期的 AI 分析结果。
+
+        Args:
+            trade_date: 查询日期
+            session_factory: 数据库会话工厂
+
+        Returns:
+            AI 分析结果列表
+        """
+        async with session_factory() as session:
+            stmt = (
+                select(AIAnalysisResult)
+                .where(AIAnalysisResult.trade_date == trade_date)
+                .order_by(AIAnalysisResult.ai_score.desc())
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+
+        return [
+            {
+                "ts_code": r.ts_code,
+                "trade_date": r.trade_date.isoformat(),
+                "ai_score": r.ai_score,
+                "ai_signal": r.ai_signal,
+                "ai_summary": r.ai_summary,
+                "prompt_version": r.prompt_version,
+                "token_usage": r.token_usage,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
 
 
 # ---------------------------------------------------------------------------
