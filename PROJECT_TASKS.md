@@ -93,8 +93,8 @@
 ## V2 详细实施计划
 
 > **基于设计文档：** `docs/design/99-实施范围-V1与V2划分.md`
-> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2+P3+P4 完整，P5 仅建表）、策略引擎、回测系统、智能数据自动更新
-> **V2 目标：** 完成数据采集体系（P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
+> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2+P3+P4 完整，P5 核心约 20 张表已实施）、策略引擎、回测系统、智能数据自动更新
+> **V2 目标：** 完成数据采集体系（P5 补充表 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
 > **实施方式：** 每个变更使用 OpenSpec 工作流管理，独立实施和归档
 
 ---
@@ -107,7 +107,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 1. ~~**p2-moneyflow-etl** - P2 资金流向数据 ETL 实施~~ ✅ 已完成
 2. ~~**p3-index-etl** - P3 指数数据 ETL 实施~~ ✅ 已完成
 3. ~~**p4-concept-etl** - P4 板块数据 ETL 实施~~ ✅ 已完成
-4. **p5-core-data-etl** - P5 核心扩展数据 ETL 实施（3-4 天）
+4. ~~**p5-core-data-etl** - P5 核心扩展数据 ETL 实施~~ ✅ 已完成
 5. **data-validation-tests** - 数据校验测试补全（2-3 天）
 
 **预计总工作量：** 13-18 天
@@ -181,27 +181,19 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 4: `p5-core-data-etl` — P5 核心扩展数据 ETL
+### Change 4: `p5-core-data-etl` — P5 核心扩展数据 ETL ✅ 已完成
 
-**目标：** 完成 P5 中 P1/P2 优先级的约 20 张 raw 表的 ETL，覆盖停复牌、股东、两融、热门等核心扩展数据
+**完成日期：** 2026-02-17
 
-**范围：**
-- P1 优先（影响交易决策）：
-  - `raw_tushare_suspend_d`（停复牌信息）
-  - `raw_tushare_limit_list_d`（每日涨跌停统计）
-- P2 优先（增强数据维度）：
-  - 基础补充：stock_company, daily_share
-  - 行情补充：weekly, monthly
-  - 股东数据：top10_holders, top10_floatholders, stk_holdernumber, stk_holdertrade, block_trade
-  - 技术因子：stk_factor, stk_factor_pro
-  - 两融数据：margin, margin_detail, margin_target
-  - 热门数据：hm_board, hm_list, ths_hot, dc_hot, ths_limit
-- ETL 清洗函数 + DataManager 同步方法
-- 盘后链路集成（按需同步频率：日/周/月）
-
-**依赖：** 无
-**涉及文件：** `app/data/etl.py`, `app/data/manager.py`, `app/scheduler/jobs.py`
-**设计文档：** `docs/design/99-实施范围-V1与V2划分.md` §3.6
+**实施内容：**
+- ETL 清洗函数：`transform_tushare_suspend_d`、`transform_tushare_limit_list_d`
+- 业务表：`suspend_info`（停复牌信息）、`limit_list_daily`（涨跌停统计）+ Alembic 迁移
+- DataManager 日频同步：13 个 sync_raw 方法（suspend_d、limit_list_d、margin、margin_detail、block_trade、daily_share、stk_factor、stk_factor_pro、hm_board、hm_list、ths_hot、dc_hot、ths_limit）
+- DataManager 周频/月频同步：sync_raw_weekly、sync_raw_monthly
+- DataManager 静态/季度同步：sync_raw_stock_company、sync_raw_margin_target、sync_raw_top10_holders、sync_raw_top10_floatholders、sync_raw_stk_holdernumber、sync_raw_stk_holdertrade
+- DataManager ETL：etl_suspend、etl_limit_list
+- 聚合方法：sync_p5_core（按日频/周频/月频/季度/静态分组调度）
+- 盘后链路集成：步骤 3.8，失败不阻断后续链路
 
 ---
 

@@ -140,6 +140,20 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 time.monotonic() - concept_start, traceback.format_exc(),
             )
 
+        # 步骤 3.8：P5 核心数据同步（非关键，失败不阻断）
+        p5_start = time.monotonic()
+        try:
+            p5_result = await manager.sync_p5_core(target)
+            logger.info(
+                "[P5核心数据同步] 完成：%s，耗时 %.1fs",
+                p5_result, time.monotonic() - p5_start,
+            )
+        except Exception:
+            logger.warning(
+                "[P5核心数据同步] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - p5_start, traceback.format_exc(),
+            )
+
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 

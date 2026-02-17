@@ -17,8 +17,10 @@ from app.data.etl import (
     transform_tushare_index_weight,
     transform_tushare_industry_classify,
     transform_tushare_industry_member,
+    transform_tushare_limit_list_d,
     transform_tushare_moneyflow,
     transform_tushare_stock_basic,
+    transform_tushare_suspend_d,
     transform_tushare_top_list,
     transform_tushare_trade_cal,
 )
@@ -48,7 +50,30 @@ from app.models.raw import (
     RawTushareMoneyflow,
     RawTushareTopInst,
     RawTushareTopList,
+    # P5 扩展数据 raw 表
+    RawTushareBlockTrade,
+    RawTushareDailyShare,
+    RawTushareDcHot,
+    RawTushareHmBoard,
+    RawTushareHmList,
+    RawTushareLimitListD,
+    RawTushareMargin,
+    RawTushareMarginDetail,
+    RawTushareMarginTarget,
+    RawTushareMonthly,
+    RawTushareStkFactor,
+    RawTushareStkFactorPro,
+    RawTushareStkHoldernumber,
+    RawTushareStkHoldertrade,
+    RawTushareStockCompany,
+    RawTushareSuspendD,
+    RawTushareThsHot,
+    RawTushareThsLimit,
+    RawTushareTop10Floatholders,
+    RawTushareTop10Holders,
+    RawTushareWeekly,
 )
+from app.models.extend import LimitListDaily, SuspendInfo
 from app.models.technical import TechnicalDaily
 
 logger = logging.getLogger(__name__)
@@ -2263,4 +2288,532 @@ class DataManager:
         )
 
         return result
+
+    # ===================================================================
+    # P5 扩展数据同步
+    # ===================================================================
+
+    # --- P5 日频 raw 同步 ---
+
+    async def sync_raw_suspend_d(self, trade_date: date) -> dict:
+        """按日期获取停复牌信息写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_suspend_d(td_str)
+        counts = {"suspend_d": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["suspend_d"] = await self._upsert_raw(
+                    session, RawTushareSuspendD.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_suspend_d] %s: %d", trade_date, counts["suspend_d"])
+        return counts
+
+    async def sync_raw_limit_list_d(self, trade_date: date) -> dict:
+        """按日期获取涨跌停统计写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_limit_list_d(td_str)
+        counts = {"limit_list_d": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["limit_list_d"] = await self._upsert_raw(
+                    session, RawTushareLimitListD.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_limit_list_d] %s: %d", trade_date, counts["limit_list_d"])
+        return counts
+
+    async def sync_raw_margin(self, trade_date: date) -> dict:
+        """按日期获取融资融券汇总写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_margin(td_str)
+        counts = {"margin": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["margin"] = await self._upsert_raw(
+                    session, RawTushareMargin.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_margin] %s: %d", trade_date, counts["margin"])
+        return counts
+
+    async def sync_raw_margin_detail(self, trade_date: date) -> dict:
+        """按日期获取融资融券明细写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_margin_detail(td_str)
+        counts = {"margin_detail": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["margin_detail"] = await self._upsert_raw(
+                    session, RawTushareMarginDetail.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_margin_detail] %s: %d", trade_date, counts["margin_detail"])
+        return counts
+
+    async def sync_raw_block_trade(self, trade_date: date) -> dict:
+        """按日期获取大宗交易写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_block_trade(td_str)
+        counts = {"block_trade": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["block_trade"] = await self._upsert_raw(
+                    session, RawTushareBlockTrade.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_block_trade] %s: %d", trade_date, counts["block_trade"])
+        return counts
+
+    async def sync_raw_daily_share(self, trade_date: date) -> dict:
+        """按日期获取每日股本写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_daily_share(td_str)
+        counts = {"daily_share": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["daily_share"] = await self._upsert_raw(
+                    session, RawTushareDailyShare.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_daily_share] %s: %d", trade_date, counts["daily_share"])
+        return counts
+
+    async def sync_raw_stk_factor(self, trade_date: date) -> dict:
+        """按日期获取技术因子写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_stk_factor(td_str)
+        counts = {"stk_factor": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["stk_factor"] = await self._upsert_raw(
+                    session, RawTushareStkFactor.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_stk_factor] %s: %d", trade_date, counts["stk_factor"])
+        return counts
+
+    async def sync_raw_stk_factor_pro(self, trade_date: date) -> dict:
+        """按日期获取技术因子Pro写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_stk_factor_pro(td_str)
+        counts = {"stk_factor_pro": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["stk_factor_pro"] = await self._upsert_raw(
+                    session, RawTushareStkFactorPro.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_stk_factor_pro] %s: %d", trade_date, counts["stk_factor_pro"])
+        return counts
+
+    async def sync_raw_hm_board(self, trade_date: date) -> dict:
+        """按日期获取热门板块写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_hm_board(td_str)
+        counts = {"hm_board": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["hm_board"] = await self._upsert_raw(
+                    session, RawTushareHmBoard.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_hm_board] %s: %d", trade_date, counts["hm_board"])
+        return counts
+
+    async def sync_raw_hm_list(self, trade_date: date) -> dict:
+        """按日期获取热门股票写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_hm_list(td_str)
+        counts = {"hm_list": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["hm_list"] = await self._upsert_raw(
+                    session, RawTushareHmList.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_hm_list] %s: %d", trade_date, counts["hm_list"])
+        return counts
+
+    async def sync_raw_ths_hot(self, trade_date: date) -> dict:
+        """按日期获取同花顺热股写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_ths_hot(td_str)
+        counts = {"ths_hot": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["ths_hot"] = await self._upsert_raw(
+                    session, RawTushareThsHot.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_ths_hot] %s: %d", trade_date, counts["ths_hot"])
+        return counts
+
+    async def sync_raw_dc_hot(self, trade_date: date) -> dict:
+        """按日期获取东财热股写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_dc_hot(td_str)
+        counts = {"dc_hot": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["dc_hot"] = await self._upsert_raw(
+                    session, RawTushareDcHot.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_dc_hot] %s: %d", trade_date, counts["dc_hot"])
+        return counts
+
+    async def sync_raw_ths_limit(self, trade_date: date) -> dict:
+        """按日期获取同花顺涨跌停写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_ths_limit(td_str)
+        counts = {"ths_limit": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["ths_limit"] = await self._upsert_raw(
+                    session, RawTushareThsLimit.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_ths_limit] %s: %d", trade_date, counts["ths_limit"])
+        return counts
+
+    # --- P5 周频/月频 raw 同步 ---
+
+    async def sync_raw_weekly(self, trade_date: date) -> dict:
+        """按日期获取周线行情写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_weekly(td_str)
+        counts = {"weekly": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["weekly"] = await self._upsert_raw(
+                    session, RawTushareWeekly.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_weekly] %s: %d", trade_date, counts["weekly"])
+        return counts
+
+    async def sync_raw_monthly(self, trade_date: date) -> dict:
+        """按日期获取月线行情写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_monthly(td_str)
+        counts = {"monthly": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["monthly"] = await self._upsert_raw(
+                    session, RawTushareMonthly.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_monthly] %s: %d", trade_date, counts["monthly"])
+        return counts
+
+    # --- P5 静态/低频 raw 同步 ---
+
+    async def sync_raw_stock_company(self) -> dict:
+        """获取上市公司基本信息（全量）写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        # 分交易所获取全量数据
+        counts = {"stock_company": 0}
+        async with self._session_factory() as session:
+            for exchange in ("SSE", "SZSE"):
+                raw_data = await client.fetch_raw_stock_company(exchange=exchange)
+                if raw_data:
+                    counts["stock_company"] += await self._upsert_raw(
+                        session, RawTushareStockCompany.__table__, raw_data
+                    )
+            await session.commit()
+        logger.info("[sync_raw_stock_company] total=%d", counts["stock_company"])
+        return counts
+
+    async def sync_raw_margin_target(self) -> dict:
+        """获取融资融券标的（全量）写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        raw_data = await client.fetch_raw_margin_target()
+        counts = {"margin_target": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["margin_target"] = await self._upsert_raw(
+                    session, RawTushareMarginTarget.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_margin_target] total=%d", counts["margin_target"])
+        return counts
+
+    # --- P5 季度 raw 同步 ---
+
+    async def sync_raw_top10_holders(self, trade_date: date) -> dict:
+        """按日期获取前十大股东写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_top10_holders(ann_date=td_str)
+        counts = {"top10_holders": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["top10_holders"] = await self._upsert_raw(
+                    session, RawTushareTop10Holders.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_top10_holders] %s: %d", trade_date, counts["top10_holders"])
+        return counts
+
+    async def sync_raw_top10_floatholders(self, trade_date: date) -> dict:
+        """按日期获取前十大流通股东写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_top10_floatholders(ann_date=td_str)
+        counts = {"top10_floatholders": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["top10_floatholders"] = await self._upsert_raw(
+                    session, RawTushareTop10Floatholders.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_top10_floatholders] %s: %d", trade_date, counts["top10_floatholders"])
+        return counts
+
+    async def sync_raw_stk_holdernumber(self, trade_date: date) -> dict:
+        """按日期获取股东户数写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_stk_holdernumber(enddate=td_str)
+        counts = {"stk_holdernumber": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["stk_holdernumber"] = await self._upsert_raw(
+                    session, RawTushareStkHoldernumber.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_stk_holdernumber] %s: %d", trade_date, counts["stk_holdernumber"])
+        return counts
+
+    async def sync_raw_stk_holdertrade(self, trade_date: date) -> dict:
+        """按日期获取股东增减持写入 raw 表。"""
+        from app.data.tushare import TushareClient
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_stk_holdertrade(ann_date=td_str)
+        counts = {"stk_holdertrade": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["stk_holdertrade"] = await self._upsert_raw(
+                    session, RawTushareStkHoldertrade.__table__, raw_data
+                )
+            await session.commit()
+        logger.info("[sync_raw_stk_holdertrade] %s: %d", trade_date, counts["stk_holdertrade"])
+        return counts
+
+    # --- P5 ETL 方法 ---
+
+    async def etl_suspend(self, trade_date: date) -> dict:
+        """从 raw 表读取停复牌数据，清洗后写入 suspend_info 业务表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"suspend_info": int}
+        """
+        td_str = trade_date.strftime("%Y%m%d")
+
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(RawTushareSuspendD).where(
+                    RawTushareSuspendD.suspend_date == td_str
+                )
+            )
+            raw_rows = [
+                {c.key: getattr(r, c.key) for c in RawTushareSuspendD.__table__.columns if c.key != "fetched_at"}
+                for r in result.scalars().all()
+            ]
+
+        cleaned = transform_tushare_suspend_d(raw_rows)
+        counts = {"suspend_info": 0}
+
+        async with self._session_factory() as session:
+            if cleaned:
+                counts["suspend_info"] = await batch_insert(
+                    session, SuspendInfo.__table__, cleaned
+                )
+
+        logger.info("[etl_suspend] %s: %d", trade_date, counts["suspend_info"])
+        return counts
+
+    async def etl_limit_list(self, trade_date: date) -> dict:
+        """从 raw 表读取涨跌停统计数据，清洗后写入 limit_list_daily 业务表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"limit_list_daily": int}
+        """
+        td_str = trade_date.strftime("%Y%m%d")
+
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(RawTushareLimitListD).where(
+                    RawTushareLimitListD.trade_date == td_str
+                )
+            )
+            raw_rows = [
+                {c.key: getattr(r, c.key) for c in RawTushareLimitListD.__table__.columns if c.key != "fetched_at"}
+                for r in result.scalars().all()
+            ]
+
+        cleaned = transform_tushare_limit_list_d(raw_rows)
+        counts = {"limit_list_daily": 0}
+
+        async with self._session_factory() as session:
+            if cleaned:
+                counts["limit_list_daily"] = await batch_insert(
+                    session, LimitListDaily.__table__, cleaned
+                )
+
+        logger.info("[etl_limit_list] %s: %d", trade_date, counts["limit_list_daily"])
+        return counts
+
+    # --- P5 聚合入口 ---
+
+    async def sync_p5_core(self, trade_date: date) -> dict:
+        """P5 核心数据聚合同步：按频率分组调用所有 P5 同步和 ETL 方法。
+
+        - 日频（13 张表 + 2 个 ETL）：每个交易日执行
+        - 周频（weekly）：仅周五执行
+        - 月频（monthly）：仅月末最后一个交易日执行
+        - 季度（股东数据 4 张表）：每个交易日尝试获取（接口按公告日期返回）
+        - 静态（stock_company, margin_target）：每季度首个交易日执行
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            各步骤结果汇总
+        """
+        import calendar
+        import time
+        import traceback
+
+        start = time.monotonic()
+        results: dict = {}
+
+        # --- 日频 raw 同步（13 张表） ---
+        daily_methods = [
+            ("suspend_d", self.sync_raw_suspend_d),
+            ("limit_list_d", self.sync_raw_limit_list_d),
+            ("margin", self.sync_raw_margin),
+            ("margin_detail", self.sync_raw_margin_detail),
+            ("block_trade", self.sync_raw_block_trade),
+            ("daily_share", self.sync_raw_daily_share),
+            ("stk_factor", self.sync_raw_stk_factor),
+            ("stk_factor_pro", self.sync_raw_stk_factor_pro),
+            ("hm_board", self.sync_raw_hm_board),
+            ("hm_list", self.sync_raw_hm_list),
+            ("ths_hot", self.sync_raw_ths_hot),
+            ("dc_hot", self.sync_raw_dc_hot),
+            ("ths_limit", self.sync_raw_ths_limit),
+        ]
+        for name, method in daily_methods:
+            try:
+                r = await method(trade_date)
+                results[name] = r
+            except Exception:
+                logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
+                results[name] = {"error": True}
+
+        # --- 日频 ETL（停复牌 + 涨跌停） ---
+        for name, method in [("etl_suspend", self.etl_suspend), ("etl_limit_list", self.etl_limit_list)]:
+            try:
+                r = await method(trade_date)
+                results[name] = r
+            except Exception:
+                logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
+                results[name] = {"error": True}
+
+        # --- 周频：仅周五执行 ---
+        if trade_date.weekday() == 4:  # 周五
+            try:
+                r = await self.sync_raw_weekly(trade_date)
+                results["weekly"] = r
+            except Exception:
+                logger.warning("[sync_p5_core] weekly 失败\n%s", traceback.format_exc())
+                results["weekly"] = {"error": True}
+
+        # --- 月频：仅月末最后一个交易日执行 ---
+        last_day = calendar.monthrange(trade_date.year, trade_date.month)[1]
+        if trade_date.day == last_day or (last_day - trade_date.day <= 3 and trade_date.weekday() == 4):
+            # 月末当天或月末前最后一个周五（兜底）
+            try:
+                r = await self.sync_raw_monthly(trade_date)
+                results["monthly"] = r
+            except Exception:
+                logger.warning("[sync_p5_core] monthly 失败\n%s", traceback.format_exc())
+                results["monthly"] = {"error": True}
+
+        # --- 季度数据：每个交易日尝试获取（按公告日期） ---
+        quarterly_methods = [
+            ("top10_holders", self.sync_raw_top10_holders),
+            ("top10_floatholders", self.sync_raw_top10_floatholders),
+            ("stk_holdernumber", self.sync_raw_stk_holdernumber),
+            ("stk_holdertrade", self.sync_raw_stk_holdertrade),
+        ]
+        for name, method in quarterly_methods:
+            try:
+                r = await method(trade_date)
+                results[name] = r
+            except Exception:
+                logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
+                results[name] = {"error": True}
+
+        # --- 静态数据：每季度首个交易日执行（1/1, 4/1, 7/1, 10/1 附近） ---
+        if trade_date.day <= 3 and trade_date.month in (1, 4, 7, 10):
+            for name, method in [("stock_company", self.sync_raw_stock_company), ("margin_target", self.sync_raw_margin_target)]:
+                try:
+                    r = await method()
+                    results[name] = r
+                except Exception:
+                    logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
+                    results[name] = {"error": True}
+
+        elapsed = time.monotonic() - start
+        error_count = sum(1 for v in results.values() if isinstance(v, dict) and v.get("error"))
+        logger.info(
+            "[sync_p5_core] %s 完成：%d 步骤，%d 失败，耗时 %.1fs",
+            trade_date, len(results), error_count, elapsed,
+        )
+        return results
 
