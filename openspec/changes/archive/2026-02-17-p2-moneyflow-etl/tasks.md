@@ -59,5 +59,5 @@
 
 ## 7. 文档更新
 
-- [ ] 7.1 更新 `docs/design/99-实施范围-V1与V2划分.md`，将 P2 资金流向标记为"✅ V1 已实施"（含 ETL 和数据同步）
-- [ ] 7.2 更新 `README.md` 和 `CLAUDE.md`，说明 P2 资金流向 ETL 已完成
+- [x] 7.1 更新 `docs/design/99-实施范围-V1与V2划分.md`，将 P2 资金流向标记为"✅ V1 已实施"（含 ETL 和数据同步）
+- [x] 7.2 更新 `README.md` 和 `CLAUDE.md`，说明 P2 资金流向 ETL 已完成
