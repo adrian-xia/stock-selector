@@ -108,7 +108,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 2. ~~**p3-index-etl** - P3 指数数据 ETL 实施~~ ✅ 已完成
 3. ~~**p4-concept-etl** - P4 板块数据 ETL 实施~~ ✅ 已完成
 4. ~~**p5-core-data-etl** - P5 核心扩展数据 ETL 实施~~ ✅ 已完成
-5. **data-validation-tests** - 数据校验测试补全（2-3 天）
+5. ~~**data-validation-tests** - 数据校验测试补全~~ ✅ 已完成
 
 **预计总工作量：** 13-18 天
 
@@ -197,22 +197,17 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 5: `data-validation-tests` — 数据校验测试补全
+### Change 5: `data-validation-tests` — 数据校验测试补全 ✅ 已完成
 
-**目标：** 补全 P0-P5 全部数据校验测试，确保数据质量可量化验证
+**完成日期：** 2026-02-17
 
-**范围：**
-- P0 核心数据校验（6 个测试用例）：stock_basic, trade_cal, daily, adj_factor, daily_basic, stk_limit
-- P1 财务数据校验（5 个测试用例）：fina_indicator, income, balancesheet, cashflow, dividend
-- P2 资金流向数据校验（5 个测试用例）：moneyflow, top_list 等
-- P3 指数数据校验（6 个测试用例）：index_daily, index_weight 等
-- P4 板块数据校验（6 个测试用例）：ths_index, ths_daily 等
-- P5 扩展数据校验（6 个测试用例）：suspend_d, margin 等
-- 综合数据校验（8 个测试用例）：跨表一致性、时间连续性
-
-**依赖：** Change 1-4 完成后执行（需要实际数据）
-**涉及文件：** `tests/integration/test_p*_data_validation.py`
-**设计文档：** `docs/design/99-实施范围-V1与V2划分.md` §3.7
+**实施内容：**
+- P2 资金流向校验：raw_tushare_moneyflow 记录数、ETL 字段映射、money_flow 非空率、dragon_tiger 匹配度
+- P3 指数数据校验：核心指数覆盖、index_daily ETL 转换、index_weight 权重、index_basic 静态数据、industry_classify 行业分类
+- P4 板块数据校验：concept_index 数量、concept_daily 记录数、concept_member 成分股、ETL 转换
+- P5 扩展数据校验：suspend_d/limit_list_d raw 校验、ETL 匹配度、日频 raw 表基础校验
+- 综合跨表校验：时间连续性、交易日一致性、ts_code 一致性、三表 JOIN 完整性、数据新鲜度
+- 新增 5 个集成测试文件，约 30 个测试用例
 
 ---
 
