@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     gemini_timeout: int = 30                    # 请求超时（秒）
     gemini_max_retries: int = 2                 # 瞬态错误重试次数
     ai_daily_budget_usd: float = 1.0            # 每日预算上限（V1 仅日志告警）
+    ai_daily_call_limit: int = 5                 # 每日 AI 调用上限（0 表示不限制）
 
     # --- Cache (Redis) ---
     cache_tech_ttl: int = 90000                 # 技术指标缓存 TTL（秒），默认 25 小时

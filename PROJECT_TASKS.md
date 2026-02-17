@@ -108,12 +108,12 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 2. ~~**p3-index-etl** - P3 指数数据 ETL 实施~~ ✅ 已完成
 3. ~~**p4-concept-etl** - P4 板块数据 ETL 实施~~ ✅ 已完成
 4. ~~**p5-core-data-etl** - P5 核心扩展数据 ETL 实施~~ ✅ 已完成
-5. **data-validation-tests** - 数据校验测试补全（2-3 天）
+5. ~~**data-validation-tests** - 数据校验测试补全~~ ✅ 已完成
 
 **预计总工作量：** 13-18 天
 
 ### 第二批：AI 与策略增强（核心功能）
-6. **ai-analysis-system** - AI 智能分析系统（3-5 天）
+6. ~~**ai-analysis-system** - AI 智能分析系统~~ ✅ 已完成
 7. **strategy-expansion-tech** - 技术面策略扩展（5-7 天）
 8. **strategy-expansion-fundamental** - 基本面策略扩展（5-7 天）
 9. **parameter-optimization** - 参数优化模块（5-7 天）
@@ -213,21 +213,18 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### 第二批：AI 与策略增强
 
-### Change 6: `ai-analysis` — AI 智能分析系统
+### Change 6: `ai-analysis` — AI 智能分析系统 ✅ 已完成
 
-**目标：** 实现 Gemini Flash AI 辅助选股分析，集成到盘后链路和前端展示
+**完成日期：** 2026-02-17
 
-**范围：**
-- 后端：`AIManager` 类（Gemini Flash 调用 + API Key/ADC 双认证 + 重试超时）
-- Prompt 模板管理（YAML 格式，Git 管版本）
-- 盘后链路集成：策略管道后触发 AI 分析 Top 30 候选股，失败不阻断
-- 结果存储：新增 `ai_analysis_results` 表
-- 前端：选股工作台展示 AI 分析结果、评分可视化
-- 降级与成本控制：失败跳过 + 每日调用上限 + Token 用量记录
-
-**依赖：** Gemini API Key 配置
-**涉及文件：** `app/ai/`, `app/scheduler/jobs.py`, `web/src/pages/workbench/`
-**设计文档：** `docs/design/03-详细设计-AI与回测.md` §1, `docs/design/99-实施范围-V1与V2划分.md` 四§1
+**实施内容：**
+- 新增 `ai_analysis_results` 数据库表 + Alembic 迁移，持久化 AI 分析结果
+- YAML Prompt 模板管理（`app/ai/prompts/stock_analysis_v1.yaml`），替代硬编码
+- AIManager 增强：结果写入/查询方法、每日调用上限（Redis 计数）、Token 用量记录
+- 盘后链路集成：策略管道后自动分析 Top 30 候选股（步骤 5.5），失败不阻断
+- 新增 `GET /api/v1/ai/analysis` API 端点查询 AI 分析结果
+- 前端 ResultTable 增强：AI 信号颜色映射完善、展开行显示 AI 摘要
+- 配置项：`AI_DAILY_CALL_LIMIT`（默认 5）
 
 ---
 

@@ -2,7 +2,15 @@ import { Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { StockPick } from '../../types'
 
-const { Text } = Typography
+const { Text, Paragraph } = Typography
+
+const signalColorMap: Record<string, string> = {
+  STRONG_BUY: 'red',
+  BUY: 'volcano',
+  HOLD: 'default',
+  SELL: 'green',
+  STRONG_SELL: 'cyan',
+}
 
 interface Props {
   picks: StockPick[]
@@ -59,16 +67,29 @@ export default function ResultTable({ picks, loading, aiEnabled, onRowClick }: P
           {
             title: 'AI 信号',
             dataIndex: 'ai_signal' as const,
-            width: 90,
+            width: 110,
             render: (v: string | null) => {
               if (!v) return '-'
-              const color = v === 'BUY' ? 'red' : v === 'SELL' ? 'green' : 'default'
+              const color = signalColorMap[v] ?? 'default'
               return <Tag color={color}>{v}</Tag>
             },
           },
         ]
       : []),
   ]
+
+  // AI 摘要展开行
+  const expandable = aiEnabled
+    ? {
+        expandedRowRender: (record: StockPick) =>
+          record.ai_summary ? (
+            <Paragraph style={{ margin: 0 }}>{record.ai_summary}</Paragraph>
+          ) : (
+            <Text type="secondary">暂无 AI 分析摘要</Text>
+          ),
+        rowExpandable: (record: StockPick) => !!record.ai_score,
+      }
+    : undefined
 
   return (
     <Table<StockPick>
@@ -78,6 +99,7 @@ export default function ResultTable({ picks, loading, aiEnabled, onRowClick }: P
       loading={loading}
       size="small"
       pagination={{ pageSize: 20, showSizeChanger: false }}
+      expandable={expandable}
       onRow={(record) => ({
         onClick: () => onRowClick(record),
         style: { cursor: 'pointer' },
