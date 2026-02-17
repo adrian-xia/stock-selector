@@ -618,3 +618,82 @@ def transform_tushare_top_inst(raw_rows: list[dict]) -> list[dict]:
         })
     return cleaned
 
+
+# ---------------------------------------------------------------------------
+# P5 扩展数据 ETL
+# ---------------------------------------------------------------------------
+
+
+def transform_tushare_suspend_d(raw_rows: list[dict]) -> list[dict]:
+    """清洗停复牌数据（raw_tushare_suspend_d → suspend_info）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    if not raw_rows:
+        return []
+
+    cleaned: list[dict] = []
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+        trade_date = parse_date(raw.get("suspend_date"))
+        if trade_date is None:
+            continue
+
+        cleaned.append({
+            "ts_code": ts_code,
+            "trade_date": trade_date,
+            "suspend_timing": _safe_str(raw.get("suspend_timing")) or None,
+            "suspend_type": _safe_str(raw.get("reason_type")) or None,
+            "suspend_reason": _safe_str(raw.get("suspend_reason")) or None,
+            "resume_date": parse_date(raw.get("resume_date")),
+            "data_source": "tushare",
+        })
+    return cleaned
+
+
+def transform_tushare_limit_list_d(raw_rows: list[dict]) -> list[dict]:
+    """清洗涨跌停统计数据（raw_tushare_limit_list_d → limit_list_daily）。
+
+    Args:
+        raw_rows: 原始数据行列表
+
+    Returns:
+        清洗后的数据行列表
+    """
+    if not raw_rows:
+        return []
+
+    cleaned: list[dict] = []
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+        trade_date = parse_date(raw.get("trade_date"))
+        if trade_date is None:
+            continue
+
+        cleaned.append({
+            "ts_code": ts_code,
+            "trade_date": trade_date,
+            "name": _safe_str(raw.get("name")) or None,
+            "close": parse_decimal(raw.get("close")),
+            "pct_chg": parse_decimal(raw.get("pct_chg")),
+            "amp": parse_decimal(raw.get("amp")),
+            "fc_ratio": parse_decimal(raw.get("fc_ratio")),
+            "fl_ratio": parse_decimal(raw.get("fl_ratio")),
+            "fd_amount": parse_decimal(raw.get("fd_amount")),
+            "first_time": _safe_str(raw.get("first_time")) or None,
+            "last_time": _safe_str(raw.get("last_time")) or None,
+            "open_times": int(raw["open_times"]) if raw.get("open_times") is not None else None,
+            "up_stat": _safe_str(raw.get("up_stat")) or None,
+            "limit_times": int(raw["limit_times"]) if raw.get("limit_times") is not None else None,
+            "data_source": "tushare",
+        })
+    return cleaned
+
