@@ -108,7 +108,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 2. ~~**p3-index-etl** - P3 指数数据 ETL 实施~~ ✅ 已完成
 3. ~~**p4-concept-etl** - P4 板块数据 ETL 实施~~ ✅ 已完成
 4. ~~**p5-core-data-etl** - P5 核心扩展数据 ETL 实施~~ ✅ 已完成
-5. ~~**data-validation-tests** - 数据校验测试补全~~ ✅ 已完成
+5. **data-validation-tests** - 数据校验测试补全（2-3 天）
 
 **预计总工作量：** 13-18 天
 
