@@ -124,6 +124,22 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 time.monotonic() - index_start, traceback.format_exc(),
             )
 
+        # 步骤 3.7：板块数据同步（非关键，失败不阻断）
+        concept_start = time.monotonic()
+        try:
+            td_str = target.strftime("%Y%m%d")
+            concept_daily = await manager.sync_concept_daily(trade_date=td_str)
+            concept_tech = await manager.update_concept_indicators(target)
+            logger.info(
+                "[板块数据同步] 完成：daily=%s, tech=%s，耗时 %.1fs",
+                concept_daily, concept_tech, time.monotonic() - concept_start,
+            )
+        except Exception:
+            logger.warning(
+                "[板块数据同步] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - concept_start, traceback.format_exc(),
+            )
+
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 

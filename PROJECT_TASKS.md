@@ -93,8 +93,8 @@
 ## V2 详细实施计划
 
 > **基于设计文档：** `docs/design/99-实施范围-V1与V2划分.md`
-> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2+P3 完整，P4-P5 仅建表）、策略引擎、回测系统、智能数据自动更新
-> **V2 目标：** 完成数据采集体系（P4-P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
+> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2+P3+P4 完整，P5 仅建表）、策略引擎、回测系统、智能数据自动更新
+> **V2 目标：** 完成数据采集体系（P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
 > **实施方式：** 每个变更使用 OpenSpec 工作流管理，独立实施和归档
 
 ---
@@ -106,7 +106,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 ### 第一批：数据采集体系完善（数据基础）
 1. ~~**p2-moneyflow-etl** - P2 资金流向数据 ETL 实施~~ ✅ 已完成
 2. ~~**p3-index-etl** - P3 指数数据 ETL 实施~~ ✅ 已完成
-3. **p4-concept-etl** - P4 板块数据 ETL 实施（3-4 天）
+3. ~~**p4-concept-etl** - P4 板块数据 ETL 实施~~ ✅ 已完成
 4. **p5-core-data-etl** - P5 核心扩展数据 ETL 实施（3-4 天）
 5. **data-validation-tests** - 数据校验测试补全（2-3 天）
 
@@ -168,19 +168,16 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 3: `p4-concept-etl` — P4 板块数据 ETL
+### Change 3: `p4-concept-etl` — P4 板块数据 ETL ✅ 已完成
 
-**目标：** 完成 P4 板块 8 张 raw 表的 ETL 清洗，新增板块业务表，支持概念板块分析
+**完成日期：** 2026-02-17
 
-**范围：**
-- ETL 清洗函数：`transform_tushare_ths_index`、`transform_tushare_ths_daily` 等
-- DataManager 方法：`sync_raw_concept`、`etl_concept`
-- 新增业务表：`concept_index`、`concept_daily`、`concept_member`、`concept_technical_daily`（需 Alembic 迁移）
-- 涉及 raw 表（8 张）：ths_index, ths_daily, ths_member, dc_index, dc_member, dc_hot_new, tdx_index（复用P3）, tdx_member（复用P3）
-
-**依赖：** 建议在 Change 2 之后（复用 P3 的 tdx_index/tdx_member ETL）
-**涉及文件：** `app/data/etl.py`, `app/data/manager.py`, `app/models/`, `alembic/`
-**设计文档：** `docs/design/01-详细设计-数据采集.md` §3.5, `docs/design/99-实施范围-V1与V2划分.md` §3.5
+**实施内容：**
+- ETL 清洗函数：3 个 transform 函数（concept_index、concept_daily、concept_member）
+- DataManager 方法：sync_concept_index/daily/member + update_concept_indicators（V1 已实现）
+- 业务表：concept_index、concept_daily、concept_member、concept_technical_daily（V1 已建表）
+- 盘后链路集成：步骤 3.7，同步同花顺板块日线行情 + 计算技术指标，失败不阻断后续链路
+- 单元测试：3 个 transform 函数测试覆盖
 
 ---
 
