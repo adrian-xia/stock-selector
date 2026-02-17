@@ -161,3 +161,113 @@ class TestTransformTushareTopList:
     def test_empty(self):
         from app.data.etl import transform_tushare_top_list
         assert transform_tushare_top_list([]) == []
+
+
+class TestTransformTushareIndexDaily:
+    """transform_tushare_index_daily 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_index_daily
+
+        raw = [{"ts_code": "000001.SH", "trade_date": "20260217",
+                "open": 3200.5, "high": 3250.0, "low": 3180.0,
+                "close": 3240.0, "pre_close": 3200.0,
+                "change": 40.0, "pct_chg": 1.25,
+                "vol": 300000000.0, "amount": 350000000.0}]
+        result = transform_tushare_index_daily(raw)
+        assert len(result) == 1
+        assert result[0]["ts_code"] == "000001.SH"
+        assert result[0]["trade_date"] == date(2026, 2, 17)
+        assert result[0]["close"] == Decimal("3240.0")
+        assert result[0]["vol"] == Decimal("300000000.0")
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_index_daily
+        assert transform_tushare_index_daily([]) == []
+
+
+class TestTransformTushareIndexWeight:
+    """transform_tushare_index_weight 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_index_weight
+
+        raw = [{"index_code": "000300.SH", "con_code": "600519.SH",
+                "trade_date": "20260217", "weight": 3.52}]
+        result = transform_tushare_index_weight(raw)
+        assert len(result) == 1
+        assert result[0]["index_code"] == "000300.SH"
+        assert result[0]["con_code"] == "600519.SH"
+        assert result[0]["trade_date"] == date(2026, 2, 17)
+        assert result[0]["weight"] == Decimal("3.52")
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_index_weight
+        assert transform_tushare_index_weight([]) == []
+
+
+class TestTransformTushareIndexBasic:
+    """transform_tushare_index_basic 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_index_basic
+
+        raw = [{"ts_code": "000001.SH", "name": "上证综指",
+                "fullname": "上证综合指数", "market": "SSE",
+                "publisher": "上交所", "index_type": "综合指数",
+                "category": "综合", "base_date": "19901219",
+                "base_point": 100.0, "list_date": "19910715",
+                "weight_rule": "总市值加权", "desc": None, "exp_date": None}]
+        result = transform_tushare_index_basic(raw)
+        assert len(result) == 1
+        assert result[0]["ts_code"] == "000001.SH"
+        assert result[0]["name"] == "上证综指"
+        assert result[0]["base_date"] == date(1990, 12, 19)
+        assert result[0]["base_point"] == Decimal("100.0")
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_index_basic
+        assert transform_tushare_index_basic([]) == []
+
+
+class TestTransformTushareIndexTechnical:
+    """transform_tushare_index_technical 测试。"""
+
+    def test_normal(self):
+        from app.data.etl import transform_tushare_index_technical
+
+        raw = [{"ts_code": "000001.SH", "trade_date": "20260217",
+                "ma5": 3200.0, "ma10": 3180.0, "ma20": 3150.0,
+                "ma60": 3100.0, "ma120": 3050.0, "ma250": 3000.0,
+                "macd_dif": 15.5, "macd_dea": 12.3, "macd": 6.4,
+                "kdj_k": 75.0, "kdj_d": 68.0, "kdj_j": 89.0,
+                "rsi6": 62.0, "rsi12": 58.0, "rsi24": 55.0,
+                "boll_upper": 3300.0, "boll_mid": 3200.0, "boll_lower": 3100.0,
+                "atr": 45.0, "cci": 120.0, "wr": -25.0}]
+        result = transform_tushare_index_technical(raw)
+        assert len(result) == 1
+        assert result[0]["ts_code"] == "000001.SH"
+        assert result[0]["trade_date"] == date(2026, 2, 17)
+        assert result[0]["ma5"] == Decimal("3200.0")
+        assert result[0]["macd_hist"] == Decimal("6.4")  # raw macd → macd_hist
+        assert result[0]["atr14"] == Decimal("45.0")  # raw atr → atr14
+
+    def test_empty(self):
+        from app.data.etl import transform_tushare_index_technical
+        assert transform_tushare_index_technical([]) == []
+
+    def test_nan_fields(self):
+        from app.data.etl import transform_tushare_index_technical
+
+        raw = [{"ts_code": "000001.SH", "trade_date": "20260217",
+                "ma5": None, "ma10": float("nan"), "ma20": None,
+                "ma60": None, "ma120": None, "ma250": None,
+                "macd_dif": None, "macd_dea": None, "macd": None,
+                "kdj_k": None, "kdj_d": None, "kdj_j": None,
+                "rsi6": None, "rsi12": None, "rsi24": None,
+                "boll_upper": None, "boll_mid": None, "boll_lower": None,
+                "atr": None, "cci": None, "wr": None}]
+        result = transform_tushare_index_technical(raw)
+        assert len(result) == 1
+        assert result[0]["ma5"] is None
+        assert result[0]["ma10"] is None  # NaN → None

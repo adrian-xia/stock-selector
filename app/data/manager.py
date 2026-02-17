@@ -11,6 +11,12 @@ from app.data.etl import (
     batch_insert,
     transform_tushare_daily,
     transform_tushare_fina_indicator,
+    transform_tushare_index_basic,
+    transform_tushare_index_daily,
+    transform_tushare_index_technical,
+    transform_tushare_index_weight,
+    transform_tushare_industry_classify,
+    transform_tushare_industry_member,
     transform_tushare_moneyflow,
     transform_tushare_stock_basic,
     transform_tushare_top_list,
@@ -19,12 +25,26 @@ from app.data.etl import (
 from app.exceptions import DataSyncError
 from app.models.finance import FinanceIndicator
 from app.models.flow import DragonTiger, MoneyFlow
+from app.models.index import (
+    IndexBasic,
+    IndexDaily,
+    IndexTechnicalDaily,
+    IndexWeight,
+    IndustryClassify,
+    IndustryMember,
+)
 from app.models.market import Stock, StockDaily, StockSyncProgress, TradeCalendar
 from app.models.raw import (
     RawTushareAdjFactor,
     RawTushareDaily,
     RawTushareDailyBasic,
     RawTushareFinaIndicator,
+    RawTushareIndexBasic,
+    RawTushareIndexClassify,
+    RawTushareIndexDaily,
+    RawTushareIndexFactorPro,
+    RawTushareIndexMemberAll,
+    RawTushareIndexWeight,
     RawTushareMoneyflow,
     RawTushareTopInst,
     RawTushareTopList,
@@ -32,6 +52,20 @@ from app.models.raw import (
 from app.models.technical import TechnicalDaily
 
 logger = logging.getLogger(__name__)
+
+# 核心指数列表：盘后链路每日同步这些指数的日线行情、成分股权重和技术因子
+CORE_INDEX_LIST = [
+    "000001.SH",  # 上证综指
+    "399001.SZ",  # 深证成指
+    "399006.SZ",  # 创业板指
+    "000300.SH",  # 沪深300
+    "000905.SH",  # 中证500
+    "000852.SH",  # 中证1000
+    "399303.SZ",  # 国证2000
+    "000688.SH",  # 科创50
+    "000016.SH",  # 上证50
+    "399673.SZ",  # 创业板50
+]
 
 
 class DataManager:
@@ -411,6 +445,289 @@ class DataManager:
         logger.info(
             "[etl_moneyflow] %s: money_flow=%d, dragon_tiger=%d",
             trade_date, counts["money_flow"], counts["dragon_tiger"],
+        )
+        return counts
+
+    # --- P3 指数数据同步 ---
+
+    async def sync_raw_index_daily(self, trade_date: date) -> dict:
+        """按日期获取核心指数日线行情写入 raw 表。
+
+        遍历 CORE_INDEX_LIST，逐个调用 Tushare index_daily 接口。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"index_daily": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+
+        all_rows: list[dict] = []
+        for ts_code in CORE_INDEX_LIST:
+            rows = await client.fetch_raw_index_daily(ts_code, td_str, td_str)
+            all_rows.extend(rows)
+
+        counts = {"index_daily": 0}
+        async with self._session_factory() as session:
+            if all_rows:
+                counts["index_daily"] = await self._upsert_raw(
+                    session, RawTushareIndexDaily.__table__, all_rows
+                )
+            await session.commit()
+
+        logger.info("[sync_raw_index_daily] %s: index_daily=%d", trade_date, counts["index_daily"])
+        return counts
+
+    async def sync_raw_index_weight(self, trade_date: date) -> dict:
+        """按日期获取核心指数成分股权重写入 raw 表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"index_weight": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+
+        all_rows: list[dict] = []
+        for ts_code in CORE_INDEX_LIST:
+            rows = await client.fetch_raw_index_weight(ts_code, td_str, td_str)
+            all_rows.extend(rows)
+
+        counts = {"index_weight": 0}
+        async with self._session_factory() as session:
+            if all_rows:
+                counts["index_weight"] = await self._upsert_raw(
+                    session, RawTushareIndexWeight.__table__, all_rows
+                )
+            await session.commit()
+
+        logger.info("[sync_raw_index_weight] %s: index_weight=%d", trade_date, counts["index_weight"])
+        return counts
+
+    async def sync_raw_index_technical(self, trade_date: date) -> dict:
+        """按日期获取核心指数技术因子写入 raw 表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"index_factor_pro": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        td_str = trade_date.strftime("%Y%m%d")
+
+        all_rows: list[dict] = []
+        for ts_code in CORE_INDEX_LIST:
+            rows = await client.fetch_raw_index_factor_pro(ts_code, td_str, td_str)
+            all_rows.extend(rows)
+
+        counts = {"index_factor_pro": 0}
+        async with self._session_factory() as session:
+            if all_rows:
+                counts["index_factor_pro"] = await self._upsert_raw(
+                    session, RawTushareIndexFactorPro.__table__, all_rows
+                )
+            await session.commit()
+
+        logger.info("[sync_raw_index_technical] %s: index_factor_pro=%d", trade_date, counts["index_factor_pro"])
+        return counts
+
+    # --- P3 指数静态数据同步 ---
+
+    async def sync_raw_index_basic(self) -> dict:
+        """全量获取指数基础信息写入 raw 表。
+
+        Returns:
+            {"index_basic": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        raw_rows = await client.fetch_raw_index_basic()
+
+        counts = {"index_basic": 0}
+        async with self._session_factory() as session:
+            if raw_rows:
+                counts["index_basic"] = await self._upsert_raw(
+                    session, RawTushareIndexBasic.__table__, raw_rows
+                )
+            await session.commit()
+
+        logger.info("[sync_raw_index_basic] index_basic=%d", counts["index_basic"])
+        return counts
+
+    async def sync_raw_industry_classify(self) -> dict:
+        """全量获取行业分类写入 raw 表。
+
+        Returns:
+            {"index_classify": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        raw_rows = await client.fetch_raw_index_classify()
+
+        counts = {"index_classify": 0}
+        async with self._session_factory() as session:
+            if raw_rows:
+                counts["index_classify"] = await self._upsert_raw(
+                    session, RawTushareIndexClassify.__table__, raw_rows
+                )
+            await session.commit()
+
+        logger.info("[sync_raw_industry_classify] index_classify=%d", counts["index_classify"])
+        return counts
+
+    async def sync_raw_industry_member(self) -> dict:
+        """全量获取行业成分股写入 raw 表。
+
+        Returns:
+            {"index_member_all": int}
+        """
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        raw_rows = await client.fetch_raw_index_member_all()
+
+        counts = {"index_member_all": 0}
+        async with self._session_factory() as session:
+            if raw_rows:
+                counts["index_member_all"] = await self._upsert_raw(
+                    session, RawTushareIndexMemberAll.__table__, raw_rows
+                )
+            await session.commit()
+
+        logger.info("[sync_raw_industry_member] index_member_all=%d", counts["index_member_all"])
+        return counts
+
+    # --- P3 指数数据 ETL ---
+
+    async def etl_index(self, trade_date: date) -> dict:
+        """从 raw 表清洗指数日线、成分股权重和技术因子写入业务表。
+
+        Args:
+            trade_date: 交易日期
+
+        Returns:
+            {"index_daily": int, "index_weight": int, "index_technical_daily": int}
+        """
+        td_str = trade_date.strftime("%Y%m%d")
+
+        async with self._session_factory() as session:
+            # 读取 raw_tushare_index_daily
+            id_result = await session.execute(
+                select(RawTushareIndexDaily).where(RawTushareIndexDaily.trade_date == td_str)
+            )
+            raw_id = [
+                {c.key: getattr(r, c.key) for c in RawTushareIndexDaily.__table__.columns if c.key != "fetched_at"}
+                for r in id_result.scalars().all()
+            ]
+
+            # 读取 raw_tushare_index_weight
+            iw_result = await session.execute(
+                select(RawTushareIndexWeight).where(RawTushareIndexWeight.trade_date == td_str)
+            )
+            raw_iw = [
+                {c.key: getattr(r, c.key) for c in RawTushareIndexWeight.__table__.columns if c.key != "fetched_at"}
+                for r in iw_result.scalars().all()
+            ]
+
+            # 读取 raw_tushare_index_factor_pro
+            it_result = await session.execute(
+                select(RawTushareIndexFactorPro).where(RawTushareIndexFactorPro.trade_date == td_str)
+            )
+            raw_it = [
+                {c.key: getattr(r, c.key) for c in RawTushareIndexFactorPro.__table__.columns if c.key != "fetched_at"}
+                for r in it_result.scalars().all()
+            ]
+
+        # ETL 清洗
+        cleaned_id = transform_tushare_index_daily(raw_id)
+        cleaned_iw = transform_tushare_index_weight(raw_iw)
+        cleaned_it = transform_tushare_index_technical(raw_it)
+
+        counts = {"index_daily": 0, "index_weight": 0, "index_technical_daily": 0}
+        async with self._session_factory() as session:
+            if cleaned_id:
+                counts["index_daily"] = await batch_insert(
+                    session, IndexDaily.__table__, cleaned_id
+                )
+            if cleaned_iw:
+                counts["index_weight"] = await batch_insert(
+                    session, IndexWeight.__table__, cleaned_iw
+                )
+            if cleaned_it:
+                counts["index_technical_daily"] = await batch_insert(
+                    session, IndexTechnicalDaily.__table__, cleaned_it
+                )
+
+        logger.info(
+            "[etl_index] %s: index_daily=%d, index_weight=%d, index_technical_daily=%d",
+            trade_date, counts["index_daily"], counts["index_weight"], counts["index_technical_daily"],
+        )
+        return counts
+
+    async def etl_index_static(self) -> dict:
+        """从 raw 表清洗指数基础信息、行业分类和行业成分股写入业务表。
+
+        Returns:
+            {"index_basic": int, "industry_classify": int, "industry_member": int}
+        """
+        async with self._session_factory() as session:
+            # 读取 raw_tushare_index_basic
+            ib_result = await session.execute(select(RawTushareIndexBasic))
+            raw_ib = [
+                {c.key: getattr(r, c.key) for c in RawTushareIndexBasic.__table__.columns if c.key != "fetched_at"}
+                for r in ib_result.scalars().all()
+            ]
+
+            # 读取 raw_tushare_index_classify
+            ic_result = await session.execute(select(RawTushareIndexClassify))
+            raw_ic = [
+                {c.key: getattr(r, c.key) for c in RawTushareIndexClassify.__table__.columns if c.key != "fetched_at"}
+                for r in ic_result.scalars().all()
+            ]
+
+            # 读取 raw_tushare_index_member_all
+            im_result = await session.execute(select(RawTushareIndexMemberAll))
+            raw_im = [
+                {c.key: getattr(r, c.key) for c in RawTushareIndexMemberAll.__table__.columns if c.key != "fetched_at"}
+                for r in im_result.scalars().all()
+            ]
+
+        # ETL 清洗
+        cleaned_ib = transform_tushare_index_basic(raw_ib)
+        cleaned_ic = transform_tushare_industry_classify(raw_ic)
+        cleaned_im = transform_tushare_industry_member(raw_im)
+
+        counts = {"index_basic": 0, "industry_classify": 0, "industry_member": 0}
+        async with self._session_factory() as session:
+            if cleaned_ib:
+                counts["index_basic"] = await batch_insert(
+                    session, IndexBasic.__table__, cleaned_ib
+                )
+            if cleaned_ic:
+                counts["industry_classify"] = await batch_insert(
+                    session, IndustryClassify.__table__, cleaned_ic
+                )
+            if cleaned_im:
+                counts["industry_member"] = await batch_insert(
+                    session, IndustryMember.__table__, cleaned_im
+                )
+
+        logger.info(
+            "[etl_index_static] index_basic=%d, industry_classify=%d, industry_member=%d",
+            counts["index_basic"], counts["industry_classify"], counts["industry_member"],
         )
         return counts
 

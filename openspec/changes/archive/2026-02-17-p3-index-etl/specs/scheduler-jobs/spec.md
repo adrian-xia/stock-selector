@@ -1,12 +1,5 @@
 ## MODIFIED Requirements
 
-### Requirement: _build_manager 使用 TushareClient
-_build_manager() SHALL 创建 TushareClient 实例替代 BaoStockClient + AKShareClient，不再需要 BaoStock 连接池。
-
-#### Scenario: 构建 DataManager
-- **WHEN** 调用 _build_manager()
-- **THEN** 返回使用 TushareClient 的 DataManager 实例，primary="tushare"
-
 ### Requirement: 盘后链路适配按日期同步
 run_post_market_chain SHALL 使用按日期全市场同步模式：sync_raw_daily(target) → etl_daily(target)，替代原有的逐只股票 process_stocks_batch。在批量数据拉取（步骤 3）之后、缓存刷新（步骤 4）之前，增加资金流向同步步骤（步骤 3.5）和指数数据同步步骤（步骤 3.6）。资金流向和指数数据同步失败不阻断后续链路。
 

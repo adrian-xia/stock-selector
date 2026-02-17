@@ -93,8 +93,8 @@
 ## V2 详细实施计划
 
 > **基于设计文档：** `docs/design/99-实施范围-V1与V2划分.md`
-> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2 完整，P3-P5 仅建表）、策略引擎、回测系统、智能数据自动更新
-> **V2 目标：** 完成数据采集体系（P3-P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
+> **V1 完成状态：** 核心功能已实施，包括数据采集（P0+P1+P2+P3 完整，P4-P5 仅建表）、策略引擎、回测系统、智能数据自动更新
+> **V2 目标：** 完成数据采集体系（P4-P5 ETL）、增强 AI 分析能力、扩展策略库、优化系统性能
 > **实施方式：** 每个变更使用 OpenSpec 工作流管理，独立实施和归档
 
 ---
@@ -105,7 +105,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### 第一批：数据采集体系完善（数据基础）
 1. ~~**p2-moneyflow-etl** - P2 资金流向数据 ETL 实施~~ ✅ 已完成
-2. **p3-index-etl** - P3 指数数据 ETL 实施（3-4 天）
+2. ~~**p3-index-etl** - P3 指数数据 ETL 实施~~ ✅ 已完成
 3. **p4-concept-etl** - P4 板块数据 ETL 实施（3-4 天）
 4. **p5-core-data-etl** - P5 核心扩展数据 ETL 实施（3-4 天）
 5. **data-validation-tests** - 数据校验测试补全（2-3 天）
@@ -154,19 +154,17 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 2: `p3-index-etl` — P3 指数数据 ETL
+### Change 2: `p3-index-etl` — P3 指数数据 ETL ✅ 已完成
 
-**目标：** 完成 P3 指数 18 张 raw 表的 ETL 清洗，新增指数业务表，支持指数分析和行业轮动
+**完成日期：** 2026-02-17
 
-**范围：**
-- ETL 清洗函数：`transform_tushare_index_daily`、`transform_tushare_index_weight` 等
-- DataManager 方法：`sync_raw_index`、`etl_index`
-- 新增业务表：`index_daily`、`index_technical_daily`（需 Alembic 迁移）
-- 涉及 raw 表（18 张）：index_basic, index_daily, index_weekly, index_monthly, index_dailybasic, index_weight, index_member_all, index_classify, sw_daily, ci_index_member, ci_daily, index_factor_pro, tdx_index, tdx_daily, tdx_member, index_global, daily_info, sz_daily_info
-
-**依赖：** 无（V1 已完成建表和 ORM 模型）
-**涉及文件：** `app/data/etl.py`, `app/data/manager.py`, `app/models/`, `alembic/`
-**设计文档：** `docs/design/01-详细设计-数据采集.md` §3.4, `docs/design/99-实施范围-V1与V2划分.md` §3.4
+**实施内容：**
+- ETL 清洗函数：6 个 transform 函数（index_basic, index_daily, index_weight, industry_classify, industry_member, index_technical）
+- DataManager 日常同步：sync_raw_index_daily/weight/technical + etl_index
+- DataManager 静态同步：sync_raw_index_basic/industry_classify/industry_member + etl_index_static
+- 核心指数列表：10 个主流指数（上证综指、深证成指、创业板指、沪深300、中证500、中证1000 等）
+- 盘后链路集成：步骤 3.6，失败不阻断后续链路
+- 单元测试：4 个 transform 函数测试覆盖
 
 ---
 

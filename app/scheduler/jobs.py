@@ -107,6 +107,23 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 time.monotonic() - moneyflow_start, traceback.format_exc(),
             )
 
+        # 步骤 3.6：指数数据同步（非关键，失败不阻断）
+        index_start = time.monotonic()
+        try:
+            idx_daily = await manager.sync_raw_index_daily(target)
+            idx_weight = await manager.sync_raw_index_weight(target)
+            idx_tech = await manager.sync_raw_index_technical(target)
+            idx_etl = await manager.etl_index(target)
+            logger.info(
+                "[指数数据同步] 完成：daily=%s, weight=%s, tech=%s, etl=%s，耗时 %.1fs",
+                idx_daily, idx_weight, idx_tech, idx_etl, time.monotonic() - index_start,
+            )
+        except Exception:
+            logger.warning(
+                "[指数数据同步] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - index_start, traceback.format_exc(),
+            )
+
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 
