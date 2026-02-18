@@ -1,5 +1,5 @@
 import { Layout, Menu } from 'antd'
-import { ExperimentOutlined, LineChartOutlined } from '@ant-design/icons'
+import { ExperimentOutlined, LineChartOutlined, ControlOutlined } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const { Sider, Content } = Layout
@@ -15,6 +15,11 @@ const menuItems = [
     icon: <LineChartOutlined />,
     label: '回测中心',
   },
+  {
+    key: '/optimization',
+    icon: <ControlOutlined />,
+    label: '参数优化',
+  },
 ]
 
 export default function AppLayout() {
@@ -22,7 +27,9 @@ export default function AppLayout() {
   const location = useLocation()
 
   // 根据当前路径确定选中的菜单项
-  const selectedKey = location.pathname.startsWith('/backtest')
+  const selectedKey = location.pathname.startsWith('/optimization')
+    ? '/optimization'
+    : location.pathname.startsWith('/backtest')
     ? '/backtest'
     : '/workbench'
 

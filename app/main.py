@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.ai import router as ai_router
 from app.api.backtest import router as backtest_router
 from app.api.data import router as data_router
+from app.api.optimization import router as optimization_router
 from app.api.strategy import router as strategy_router
 from app.cache.redis_client import close_redis, get_redis, init_redis
 from app.cache.tech_cache import warmup_cache
@@ -120,6 +121,7 @@ app.include_router(strategy_router)
 app.include_router(backtest_router)
 app.include_router(data_router)
 app.include_router(ai_router)
+app.include_router(optimization_router)
 
 
 @app.get("/health")

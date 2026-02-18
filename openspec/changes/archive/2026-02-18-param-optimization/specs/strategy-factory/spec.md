@@ -24,14 +24,3 @@ The `param_space` format for each parameter:
 #### Scenario: Get param space for strategy
 - **WHEN** `StrategyFactory.get_meta("ma-cross")` is called
 - **THEN** the returned `StrategyMeta` SHALL include a non-empty `param_space` dict
-
-### Requirement: StrategyFactory.get_by_category filtering
-The `StrategyFactory` SHALL provide a `get_by_category(category)` class method.
-
-#### Scenario: Filter technical strategies
-- **WHEN** `StrategyFactory.get_by_category("technical")` is called
-- **THEN** it SHALL return a list of 16 `StrategyMeta` entries (all technical strategies)
-
-#### Scenario: Filter fundamental strategies
-- **WHEN** `StrategyFactory.get_by_category("fundamental")` is called
-- **THEN** it SHALL return a list of 12 `StrategyMeta` entries

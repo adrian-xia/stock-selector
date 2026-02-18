@@ -44,8 +44,9 @@ docs/design/
 - 策略引擎：28 种核心策略（16 种技术面 + 12 种基本面），扁平继承，单模式接口
 - AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
-- 前端：选股工作台 + 回测结果页，轮询（无 WebSocket）
-- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张仅建表） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results）
+- 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
+- 前端：选股工作台 + 回测中心 + 参数优化页面，轮询（无 WebSocket）
+- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张仅建表） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results）
 - 不做：用户权限、实时监控、新闻舆情、高手跟投
 
 ## 技术栈
@@ -287,6 +288,11 @@ stock-selector/
 │   │   ├── strategy.py       # AStockStrategy 基类
 │   │   ├── price_limit.py    # 涨跌停检查
 │   │   └── writer.py         # 结果写入
+│   ├── optimization/          # 参数优化模块
+│   │   ├── base.py            # BaseOptimizer 抽象基类
+│   │   ├── param_space.py     # 参数空间工具函数
+│   │   ├── grid_search.py     # 网格搜索优化器
+│   │   └── genetic.py         # 遗传算法优化器
 │   ├── ai/                   # AI 分析
 │   │   ├── clients/          # Gemini 客户端
 │   │   └── manager.py        # AIManager
@@ -304,6 +310,7 @@ stock-selector/
 │   └── api/                  # HTTP API
 │       ├── strategy.py       # 策略 API（未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
+│       ├── optimization.py   # 参数优化 API
 │       └── data.py           # 数据查询 API
 ├── web/                      # 前端（React + TypeScript）
 │   ├── src/
@@ -311,7 +318,8 @@ stock-selector/
 │   │   ├── layouts/          # 布局组件（AppLayout + Sider）
 │   │   ├── pages/
 │   │   │   ├── workbench/    # 选股工作台页面
-│   │   │   └── backtest/     # 回测中心页面
+│   │   │   ├── backtest/     # 回测中心页面
+│   │   │   └── optimization/ # 参数优化页面
 │   │   └── types/            # TypeScript 类型定义
 │   └── vite.config.ts        # Vite 配置（含 /api 代理）
 ├── tests/

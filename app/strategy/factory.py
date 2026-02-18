@@ -18,6 +18,7 @@ class StrategyMeta:
     description: str                   # 一句话描述
     strategy_cls: type[BaseStrategy]   # 策略类引用
     default_params: dict = field(default_factory=dict)
+    param_space: dict = field(default_factory=dict)  # 可优化参数空间
 
 
 # 策略注册表：name -> StrategyMeta
@@ -143,6 +144,11 @@ _register(StrategyMeta(
     description="短期均线上穿长期均线，且成交量放大",
     strategy_cls=MACrossStrategy,
     default_params={"fast": 5, "slow": 10, "vol_ratio": 1.5},
+    param_space={
+        "fast": {"type": "int", "min": 3, "max": 20, "step": 1},
+        "slow": {"type": "int", "min": 10, "max": 60, "step": 5},
+        "vol_ratio": {"type": "float", "min": 1.0, "max": 3.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="macd-golden",
@@ -158,6 +164,11 @@ _register(StrategyMeta(
     description="RSI从超卖区域回升，发出反弹买入信号",
     strategy_cls=RSIOversoldStrategy,
     default_params={"period": 6, "oversold": 20, "bounce": 30},
+    param_space={
+        "period": {"type": "int", "min": 3, "max": 14, "step": 1},
+        "oversold": {"type": "int", "min": 10, "max": 30, "step": 5},
+        "bounce": {"type": "int", "min": 25, "max": 50, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="kdj-golden",
@@ -166,6 +177,9 @@ _register(StrategyMeta(
     description="KDJ K线上穿D线，且J值处于超卖区域",
     strategy_cls=KDJGoldenStrategy,
     default_params={"oversold_j": 20},
+    param_space={
+        "oversold_j": {"type": "int", "min": 0, "max": 30, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="boll-breakthrough",
@@ -181,6 +195,10 @@ _register(StrategyMeta(
     description="价格创近期新高且成交量显著放大",
     strategy_cls=VolumeBreakoutStrategy,
     default_params={"high_period": 20, "min_vol_ratio": 2.0},
+    param_space={
+        "high_period": {"type": "int", "min": 10, "max": 60, "step": 5},
+        "min_vol_ratio": {"type": "float", "min": 1.5, "max": 4.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="ma-long-arrange",
@@ -196,6 +214,9 @@ _register(StrategyMeta(
     description="价格创近期新低但MACD DIF未创新低，下跌动能减弱",
     strategy_cls=MACDDivergenceStrategy,
     default_params={"lookback": 20},
+    param_space={
+        "lookback": {"type": "int", "min": 10, "max": 40, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="donchian-breakout",
@@ -204,6 +225,9 @@ _register(StrategyMeta(
     description="价格突破 20 日唐奇安通道上轨",
     strategy_cls=DonchianBreakoutStrategy,
     default_params={"period": 20},
+    param_space={
+        "period": {"type": "int", "min": 10, "max": 40, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="atr-breakout",
@@ -212,6 +236,9 @@ _register(StrategyMeta(
     description="价格突破 MA20 + ATR14 波动带上轨",
     strategy_cls=ATRBreakoutStrategy,
     default_params={"atr_multiplier": 1.5},
+    param_space={
+        "atr_multiplier": {"type": "float", "min": 1.0, "max": 3.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="cci-oversold",
@@ -220,6 +247,10 @@ _register(StrategyMeta(
     description="CCI 从超卖区（<-100）反弹至 -80 以上",
     strategy_cls=CCIOverboughtOversoldStrategy,
     default_params={"oversold": -100, "bounce": -80},
+    param_space={
+        "oversold": {"type": "int", "min": -200, "max": -50, "step": 25},
+        "bounce": {"type": "int", "min": -100, "max": -50, "step": 10},
+    },
 ))
 _register(StrategyMeta(
     name="williams-r",
@@ -228,6 +259,10 @@ _register(StrategyMeta(
     description="Williams %R 从超卖区（<-80）反弹至 -50 以上",
     strategy_cls=WilliamsRStrategy,
     default_params={"oversold": -80, "bounce": -50},
+    param_space={
+        "oversold": {"type": "int", "min": -95, "max": -70, "step": 5},
+        "bounce": {"type": "int", "min": -60, "max": -30, "step": 10},
+    },
 ))
 _register(StrategyMeta(
     name="bias-oversold",
@@ -236,6 +271,9 @@ _register(StrategyMeta(
     description="BIAS 乖离率达到超卖极值（<-6%），预期均值回归",
     strategy_cls=BIASStrategy,
     default_params={"oversold_bias": -6.0},
+    param_space={
+        "oversold_bias": {"type": "float", "min": -10.0, "max": -3.0, "step": 1.0},
+    },
 ))
 _register(StrategyMeta(
     name="volume-contraction-pullback",
@@ -244,6 +282,10 @@ _register(StrategyMeta(
     description="上升趋势中缩量回调至 MA20 支撑位",
     strategy_cls=VolumeContractionPullbackStrategy,
     default_params={"max_vol_ratio": 0.6, "ma_tolerance": 0.02},
+    param_space={
+        "max_vol_ratio": {"type": "float", "min": 0.3, "max": 0.8, "step": 0.1},
+        "ma_tolerance": {"type": "float", "min": 0.01, "max": 0.05, "step": 0.01},
+    },
 ))
 _register(StrategyMeta(
     name="volume-price-divergence",
@@ -252,6 +294,9 @@ _register(StrategyMeta(
     description="价格接近近期低点但成交量显著萎缩",
     strategy_cls=VolumePriceDivergenceStrategy,
     default_params={"lookback": 20},
+    param_space={
+        "lookback": {"type": "int", "min": 10, "max": 40, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="obv-breakthrough",
@@ -260,6 +305,9 @@ _register(StrategyMeta(
     description="OBV 突破近期高点且价格上涨确认",
     strategy_cls=OBVBreakthroughStrategy,
     default_params={"lookback": 20},
+    param_space={
+        "lookback": {"type": "int", "min": 10, "max": 40, "step": 5},
+    },
 ))
 
 # --- 基本面策略注册 ---
@@ -270,6 +318,11 @@ _register(StrategyMeta(
     description="市盈率低于30，ROE高于15%，利润同比增长超20%",
     strategy_cls=LowPEHighROEStrategy,
     default_params={"pe_max": 30, "roe_min": 15, "profit_growth_min": 20},
+    param_space={
+        "pe_max": {"type": "int", "min": 15, "max": 50, "step": 5},
+        "roe_min": {"type": "int", "min": 8, "max": 25, "step": 1},
+        "profit_growth_min": {"type": "int", "min": 10, "max": 40, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="high-dividend",
@@ -278,6 +331,10 @@ _register(StrategyMeta(
     description="股息率高于3%，市盈率低于20",
     strategy_cls=HighDividendStrategy,
     default_params={"min_dividend_yield": 3.0, "pe_max": 20},
+    param_space={
+        "min_dividend_yield": {"type": "float", "min": 1.0, "max": 6.0, "step": 0.5},
+        "pe_max": {"type": "int", "min": 10, "max": 30, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="growth-stock",
@@ -286,6 +343,10 @@ _register(StrategyMeta(
     description="营收和利润同比增长均超过20%",
     strategy_cls=GrowthStockStrategy,
     default_params={"revenue_growth_min": 20, "profit_growth_min": 20},
+    param_space={
+        "revenue_growth_min": {"type": "int", "min": 10, "max": 50, "step": 5},
+        "profit_growth_min": {"type": "int", "min": 10, "max": 50, "step": 5},
+    },
 ))
 _register(StrategyMeta(
     name="financial-safety",
@@ -294,6 +355,10 @@ _register(StrategyMeta(
     description="资产负债率低于60%，流动比率高于1.5",
     strategy_cls=FinancialSafetyStrategy,
     default_params={"debt_ratio_max": 60, "current_ratio_min": 1.5},
+    param_space={
+        "debt_ratio_max": {"type": "int", "min": 30, "max": 70, "step": 5},
+        "current_ratio_min": {"type": "float", "min": 1.0, "max": 3.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="pb-value",
@@ -302,6 +367,9 @@ _register(StrategyMeta(
     description="市净率低于2倍，适合重资产行业价值投资",
     strategy_cls=PBValueStrategy,
     default_params={"pb_max": 2.0},
+    param_space={
+        "pb_max": {"type": "float", "min": 0.5, "max": 5.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="peg-value",
@@ -310,6 +378,9 @@ _register(StrategyMeta(
     description="PEG低于1，成长性被低估",
     strategy_cls=PEGValueStrategy,
     default_params={"peg_max": 1.0},
+    param_space={
+        "peg_max": {"type": "float", "min": 0.5, "max": 2.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="ps-value",
@@ -318,6 +389,9 @@ _register(StrategyMeta(
     description="市销率低于3倍，适合高成长公司",
     strategy_cls=PSValueStrategy,
     default_params={"ps_max": 3.0},
+    param_space={
+        "ps_max": {"type": "float", "min": 1.0, "max": 6.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="gross-margin-up",
@@ -326,6 +400,9 @@ _register(StrategyMeta(
     description="毛利率高于30%，盈利能力强",
     strategy_cls=GrossMarginUpStrategy,
     default_params={"gross_margin_min": 30.0},
+    param_space={
+        "gross_margin_min": {"type": "float", "min": 15.0, "max": 50.0, "step": 5.0},
+    },
 ))
 _register(StrategyMeta(
     name="cashflow-quality",
@@ -334,6 +411,9 @@ _register(StrategyMeta(
     description="每股经营现金流大于每股收益，现金流质量高",
     strategy_cls=CashflowQualityStrategy,
     default_params={"ocf_eps_ratio_min": 1.0},
+    param_space={
+        "ocf_eps_ratio_min": {"type": "float", "min": 0.5, "max": 2.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="profit-continuous-growth",
@@ -342,6 +422,9 @@ _register(StrategyMeta(
     description="利润同比增长率持续为正，成长性好",
     strategy_cls=ProfitContinuousGrowthStrategy,
     default_params={"profit_growth_min": 5.0},
+    param_space={
+        "profit_growth_min": {"type": "float", "min": 0.0, "max": 20.0, "step": 5.0},
+    },
 ))
 _register(StrategyMeta(
     name="cashflow-coverage",
@@ -350,6 +433,10 @@ _register(StrategyMeta(
     description="经营现金流充裕且流动比率达标",
     strategy_cls=CashflowCoverageStrategy,
     default_params={"ocf_min": 0.5, "current_ratio_min": 1.0},
+    param_space={
+        "ocf_min": {"type": "float", "min": 0.0, "max": 2.0, "step": 0.5},
+        "current_ratio_min": {"type": "float", "min": 0.5, "max": 2.5, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="quality-score",
@@ -358,4 +445,7 @@ _register(StrategyMeta(
     description="ROE+成长+安全+估值多因子加权评分",
     strategy_cls=QualityScoreStrategy,
     default_params={"score_min": 60.0},
+    param_space={
+        "score_min": {"type": "float", "min": 40.0, "max": 80.0, "step": 5.0},
+    },
 ))

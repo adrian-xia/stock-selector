@@ -116,7 +116,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 6. ~~**ai-analysis-system** - AI 智能分析系统~~ ✅ 已完成
 7. ~~**strategy-expansion-tech** - 技术面策略扩展~~ ✅ 已完成
 8. ~~**strategy-expansion-fundamental** - 基本面策略扩展~~ ✅ 已完成
-9. **parameter-optimization** - 参数优化模块（5-7 天）
+9. ~~**parameter-optimization** - 参数优化模块~~ ✅ 已完成
 
 **预计总工作量：** 18-26 天
 
@@ -253,20 +253,17 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 9: `param-optimization` — 参数优化模块
+### Change 9: `param-optimization` — 参数优化模块 ✅ 已完成
 
-**目标：** 自动寻找最优策略参数，提升策略收益
+**完成日期：** 2026-02-18
 
-**范围：**
-- 网格搜索优化器：定义参数空间、批量回测、按夏普比率排序
-- 遗传算法优化器：适应度函数、交叉/变异/选择算子、多目标优化
-- 优化任务管理：新增 `optimization_tasks` 表、任务状态和结果记录
-- 前端：参数优化页面（选择策略/参数范围、提交任务、查看进度）
-- 结果可视化：参数热力图、最优参数推荐、回测结果对比
-
-**依赖：** 回测引擎（V1 已实施）
-**涉及文件：** `app/optimization/`, `app/models/`, `web/src/pages/`, `alembic/`
-**设计文档：** `docs/design/00-概要设计-v2.md` §3 模块5
+**实施内容：**
+- 新增 `app/optimization/` 模块：BaseOptimizer 抽象基类、GridSearchOptimizer（网格搜索）、GeneticOptimizer（遗传算法）、参数空间工具函数
+- StrategyMeta 新增 `param_space` 字段，28 种策略均定义了可优化参数范围
+- 新增 `optimization_tasks` + `optimization_results` 数据库表 + Alembic 迁移
+- 新增 4 个 API 端点：提交优化任务、查询结果、任务列表、参数空间查询
+- 新增前端参数优化页面（策略选择、参数范围配置、任务列表、结果详情）
+- 单元测试：39 个测试（参数空间、网格搜索、遗传算法、策略参数空间验证）
 
 ---
 
