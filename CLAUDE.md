@@ -45,9 +45,10 @@ docs/design/
 - AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
-- 前端：选股工作台 + 回测中心 + 参数优化页面，轮询（无 WebSocket）
-- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张仅建表） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results）
-- 不做：用户权限、实时监控、新闻舆情、高手跟投
+- 新闻舆情：✅ V2 已实施，东方财富/淘股吧/雪球三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
+- 前端：选股工作台 + 回测中心 + 参数优化页面 + 新闻舆情页面，轮询（无 WebSocket）
+- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张仅建表） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily）
+- 不做：用户权限、实时监控、高手跟投
 
 ## 技术栈
 
@@ -276,7 +277,12 @@ stock-selector/
 │   │   ├── probe.py          # 数据嗅探（检测数据是否就绪）
 │   │   ├── etl.py            # ETL 清洗（transform_tushare_*）
 │   │   ├── cli.py            # 数据管理 CLI（含 backfill-daily 断点续传命令）
-│   │   └── manager.py        # DataManager（sync_raw_daily + etl_daily）
+│   │   ├── manager.py        # DataManager（sync_raw_daily + etl_daily）
+│   │   └── sources/          # 新闻数据源采集
+│   │       ├── eastmoney.py  # 东方财富公告采集
+│   │       ├── taoguba.py    # 淘股吧讨论采集
+│   │       ├── xueqiu.py     # 雪球讨论采集
+│   │       └── fetcher.py    # 统一采集入口（并行调用 3 个爬虫）
 │   ├── strategy/             # 策略引擎
 │   │   ├── base.py           # BaseStrategy
 │   │   ├── technical/        # 技术面策略
@@ -295,6 +301,8 @@ stock-selector/
 │   │   └── genetic.py         # 遗传算法优化器
 │   ├── ai/                   # AI 分析
 │   │   ├── clients/          # Gemini 客户端
+│   │   ├── prompts/          # Prompt 模板（YAML）
+│   │   ├── news_analyzer.py  # 新闻情感分析器
 │   │   └── manager.py        # AIManager
 │   ├── cache/                # Redis 缓存
 │   │   ├── redis_client.py   # 连接管理（init/get/close）
@@ -311,6 +319,7 @@ stock-selector/
 │       ├── strategy.py       # 策略 API（未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
 │       ├── optimization.py   # 参数优化 API
+│       ├── news.py           # 新闻舆情 API
 │       └── data.py           # 数据查询 API
 ├── web/                      # 前端（React + TypeScript）
 │   ├── src/
@@ -319,7 +328,8 @@ stock-selector/
 │   │   ├── pages/
 │   │   │   ├── workbench/    # 选股工作台页面
 │   │   │   ├── backtest/     # 回测中心页面
-│   │   │   └── optimization/ # 参数优化页面
+│   │   │   ├── optimization/ # 参数优化页面
+│   │   │   └── news/         # 新闻舆情页面
 │   │   └── types/            # TypeScript 类型定义
 │   └── vite.config.ts        # Vite 配置（含 /api 代理）
 ├── tests/

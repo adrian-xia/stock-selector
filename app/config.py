@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     ai_daily_budget_usd: float = 1.0            # 每日预算上限（V1 仅日志告警）
     ai_daily_call_limit: int = 5                 # 每日 AI 调用上限（0 表示不限制）
 
+    # --- News Crawl (新闻舆情采集) ---
+    news_crawl_enabled: bool = True              # 是否启用新闻采集
+    news_crawl_timeout: int = 30                 # 单次采集超时（秒）
+    news_crawl_max_pages: int = 5                # 每个数据源最大采集页数
+    news_sentiment_batch_size: int = 10           # 情感分析批次大小
+
     # --- Cache (Redis) ---
     cache_tech_ttl: int = 90000                 # 技术指标缓存 TTL（秒），默认 25 小时
     cache_pipeline_result_ttl: int = 172800     # 选股结果缓存 TTL（秒），默认 48 小时

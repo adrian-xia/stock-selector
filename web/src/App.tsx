@@ -5,6 +5,7 @@ import BacktestListPage from './pages/backtest/BacktestListPage'
 import BacktestNewPage from './pages/backtest/BacktestNewPage'
 import BacktestDetailPage from './pages/backtest/BacktestDetailPage'
 import OptimizationPage from './pages/optimization'
+import NewsPage from './pages/news'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/backtest/new" element={<BacktestNewPage />} />
         <Route path="/backtest/:taskId" element={<BacktestDetailPage />} />
         <Route path="/optimization" element={<OptimizationPage />} />
+        <Route path="/news" element={<NewsPage />} />
       </Route>
     </Routes>
   )

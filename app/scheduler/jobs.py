@@ -154,6 +154,61 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 time.monotonic() - p5_start, traceback.format_exc(),
             )
 
+        # 步骤 3.9：新闻采集与情感分析（受 news_crawl_enabled 控制，失败不阻断）
+        if settings.news_crawl_enabled:
+            news_start = time.monotonic()
+            try:
+                from app.ai.news_analyzer import (
+                    NewsSentimentAnalyzer,
+                    aggregate_daily_sentiment,
+                    save_announcements,
+                    save_daily_sentiment,
+                )
+                from app.data.sources.fetcher import fetch_all_news
+
+                # 获取活跃股票代码（取前 100 只热门股票）
+                from sqlalchemy import text as sa_text
+                async with async_session_factory() as session:
+                    rows = await session.execute(
+                        sa_text(
+                            "SELECT ts_code FROM stocks "
+                            "WHERE is_active = true "
+                            "ORDER BY ts_code LIMIT 100"
+                        )
+                    )
+                    active_codes = [r.ts_code for r in rows]
+
+                if active_codes:
+                    # 采集新闻
+                    raw_news = await fetch_all_news(active_codes, target)
+                    logger.info("[新闻采集] 采集到 %d 条新闻", len(raw_news))
+
+                    # 情感分析
+                    analyzer = NewsSentimentAnalyzer()
+                    analyzed = await analyzer.analyze(raw_news)
+
+                    # 保存公告
+                    saved_ann = await save_announcements(analyzed, async_session_factory)
+
+                    # 聚合并保存每日情感
+                    daily = aggregate_daily_sentiment(analyzed, target)
+                    saved_daily = await save_daily_sentiment(daily, async_session_factory)
+
+                    logger.info(
+                        "[新闻舆情] 完成：采集 %d 条，保存公告 %d 条，每日聚合 %d 条，耗时 %.1fs",
+                        len(raw_news), saved_ann, saved_daily,
+                        time.monotonic() - news_start,
+                    )
+                else:
+                    logger.info("[新闻舆情] 无活跃股票，跳过")
+            except Exception:
+                logger.warning(
+                    "[新闻舆情] 失败（继续执行），耗时 %.1fs\n%s",
+                    time.monotonic() - news_start, traceback.format_exc(),
+                )
+        else:
+            logger.info("[新闻舆情] 未启用（news_crawl_enabled=false），跳过")
+
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 

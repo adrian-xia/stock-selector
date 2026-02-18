@@ -269,20 +269,22 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### 第三批：数据源与功能扩展
 
-### Change 10: `news-sentiment` — 新闻舆情监控
+### Change 10: `news-sentiment` — 新闻舆情监控 ✅ 已完成
 
 **目标：** 采集新闻舆情数据，结合 AI 情感分析辅助投资决策
 
 **范围：**
-- 数据采集：东方财富公告、淘股吧情绪、雪球情绪
-- 新增表：`announcements`、`sentiment_data`
-- 定时任务集成：每日 17:00-18:00 分步采集
-- AI 情感分析：Gemini 分析公告内容、计算情感得分（-1 到 +1）
-- 前端：新闻仪表盘页面、个股新闻详情、情感趋势图表
+- 数据采集：东方财富公告、淘股吧讨论、雪球讨论（3 个异步爬虫 + 统一采集入口）
+- 新增表：`announcements`、`sentiment_daily`
+- AI 情感分析：复用 Gemini Flash，情感评分 -1.0~+1.0，分类利好/利空/中性/重大事件
+- 每日情感聚合：按股票汇总正面/负面/中性计数 + 来源分布
+- 盘后链路集成：步骤 3.9 新闻采集与情感分析（受 news_crawl_enabled 控制，失败不阻断）
+- API 端点：新闻列表（分页筛选）、情感趋势、每日摘要
+- 前端：新闻仪表盘页面（新闻列表 + 情感趋势图 + 每日摘要）
+- 单元测试：27 个测试（爬虫 + 分析器 + API）
 
-**依赖：** Change 6（AI 分析系统，复用 AIManager）
-**风险：** 数据源反爬虫、API 限流
-**涉及文件：** `app/data/sources/`, `app/scheduler/jobs.py`, `web/src/pages/`
+**依赖：** Change 6（AI 分析系统，复用 GeminiClient）
+**涉及文件：** `app/data/sources/`, `app/ai/news_analyzer.py`, `app/api/news.py`, `app/scheduler/jobs.py`, `web/src/pages/news/`
 **设计文档：** `docs/design/00-概要设计-v2.md` §3 模块8
 
 ---
