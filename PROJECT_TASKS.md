@@ -121,7 +121,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 **预计总工作量：** 18-26 天
 
 ### 第三批：数据源扩展（增值功能）
-10. **news-sentiment-monitor** - 新闻舆情监控（7-10 天）
+10. ~~**news-sentiment-monitor** - 新闻舆情监控~~ ✅ 已完成
 11. **p5-extended-data-etl** - P5 扩展数据 ETL 实施（5-7 天）
 
 **预计总工作量：** 12-17 天
@@ -271,21 +271,18 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### Change 10: `news-sentiment` — 新闻舆情监控 ✅ 已完成
 
-**目标：** 采集新闻舆情数据，结合 AI 情感分析辅助投资决策
+**完成日期：** 2026-02-18
 
-**范围：**
+**实施内容：**
 - 数据采集：东方财富公告、淘股吧讨论、雪球讨论（3 个异步爬虫 + 统一采集入口）
-- 新增表：`announcements`、`sentiment_daily`
+- 新增表：`announcements`、`sentiment_daily` + Alembic 迁移
 - AI 情感分析：复用 Gemini Flash，情感评分 -1.0~+1.0，分类利好/利空/中性/重大事件
 - 每日情感聚合：按股票汇总正面/负面/中性计数 + 来源分布
 - 盘后链路集成：步骤 3.9 新闻采集与情感分析（受 news_crawl_enabled 控制，失败不阻断）
 - API 端点：新闻列表（分页筛选）、情感趋势、每日摘要
 - 前端：新闻仪表盘页面（新闻列表 + 情感趋势图 + 每日摘要）
+- 配置项：`NEWS_CRAWL_ENABLED`、`NEWS_CRAWL_TIMEOUT`、`NEWS_CRAWL_MAX_PAGES`、`NEWS_SENTIMENT_BATCH_SIZE`
 - 单元测试：27 个测试（爬虫 + 分析器 + API）
-
-**依赖：** Change 6（AI 分析系统，复用 GeminiClient）
-**涉及文件：** `app/data/sources/`, `app/ai/news_analyzer.py`, `app/api/news.py`, `app/scheduler/jobs.py`, `web/src/pages/news/`
-**设计文档：** `docs/design/00-概要设计-v2.md` §3 模块8
 
 ---
 
