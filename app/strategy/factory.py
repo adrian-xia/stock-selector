@@ -120,12 +120,20 @@ from app.strategy.technical.volume_price_divergence import VolumePriceDivergence
 from app.strategy.technical.obv_breakthrough import OBVBreakthroughStrategy  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# 策略注册：基本面（4 种）
+# 策略注册：基本面（12 种）
 # ---------------------------------------------------------------------------
 from app.strategy.fundamental.low_pe_high_roe import LowPEHighROEStrategy  # noqa: E402
 from app.strategy.fundamental.high_dividend import HighDividendStrategy  # noqa: E402
 from app.strategy.fundamental.growth_stock import GrowthStockStrategy  # noqa: E402
 from app.strategy.fundamental.financial_safety import FinancialSafetyStrategy  # noqa: E402
+from app.strategy.fundamental.pb_value import PBValueStrategy  # noqa: E402
+from app.strategy.fundamental.peg_value import PEGValueStrategy  # noqa: E402
+from app.strategy.fundamental.ps_value import PSValueStrategy  # noqa: E402
+from app.strategy.fundamental.gross_margin_up import GrossMarginUpStrategy  # noqa: E402
+from app.strategy.fundamental.cashflow_quality import CashflowQualityStrategy  # noqa: E402
+from app.strategy.fundamental.profit_continuous_growth import ProfitContinuousGrowthStrategy  # noqa: E402
+from app.strategy.fundamental.cashflow_coverage import CashflowCoverageStrategy  # noqa: E402
+from app.strategy.fundamental.quality_score import QualityScoreStrategy  # noqa: E402
 
 # --- 技术面策略注册 ---
 _register(StrategyMeta(
@@ -286,4 +294,68 @@ _register(StrategyMeta(
     description="资产负债率低于60%，流动比率高于1.5",
     strategy_cls=FinancialSafetyStrategy,
     default_params={"debt_ratio_max": 60, "current_ratio_min": 1.5},
+))
+_register(StrategyMeta(
+    name="pb-value",
+    display_name="PB低估值",
+    category="fundamental",
+    description="市净率低于2倍，适合重资产行业价值投资",
+    strategy_cls=PBValueStrategy,
+    default_params={"pb_max": 2.0},
+))
+_register(StrategyMeta(
+    name="peg-value",
+    display_name="PEG估值",
+    category="fundamental",
+    description="PEG低于1，成长性被低估",
+    strategy_cls=PEGValueStrategy,
+    default_params={"peg_max": 1.0},
+))
+_register(StrategyMeta(
+    name="ps-value",
+    display_name="市销率低估值",
+    category="fundamental",
+    description="市销率低于3倍，适合高成长公司",
+    strategy_cls=PSValueStrategy,
+    default_params={"ps_max": 3.0},
+))
+_register(StrategyMeta(
+    name="gross-margin-up",
+    display_name="毛利率提升",
+    category="fundamental",
+    description="毛利率高于30%，盈利能力强",
+    strategy_cls=GrossMarginUpStrategy,
+    default_params={"gross_margin_min": 30.0},
+))
+_register(StrategyMeta(
+    name="cashflow-quality",
+    display_name="现金流质量",
+    category="fundamental",
+    description="每股经营现金流大于每股收益，现金流质量高",
+    strategy_cls=CashflowQualityStrategy,
+    default_params={"ocf_eps_ratio_min": 1.0},
+))
+_register(StrategyMeta(
+    name="profit-continuous-growth",
+    display_name="净利润连续增长",
+    category="fundamental",
+    description="利润同比增长率持续为正，成长性好",
+    strategy_cls=ProfitContinuousGrowthStrategy,
+    default_params={"profit_growth_min": 5.0},
+))
+_register(StrategyMeta(
+    name="cashflow-coverage",
+    display_name="经营现金流覆盖",
+    category="fundamental",
+    description="经营现金流充裕且流动比率达标",
+    strategy_cls=CashflowCoverageStrategy,
+    default_params={"ocf_min": 0.5, "current_ratio_min": 1.0},
+))
+_register(StrategyMeta(
+    name="quality-score",
+    display_name="综合质量评分",
+    category="fundamental",
+    description="ROE+成长+安全+估值多因子加权评分",
+    strategy_cls=QualityScoreStrategy,
+    default_params={"score_min": 60.0},
 ))

@@ -413,9 +413,9 @@ class TestStrategyFactoryExpanded:
     """测试策略工厂注册表包含 20 个策略。"""
 
     def test_total_count(self):
-        """验证注册表共 20 个策略。"""
+        """验证注册表共 28 个策略。"""
         all_strategies = StrategyFactory.get_all()
-        assert len(all_strategies) == 20
+        assert len(all_strategies) == 28
 
     def test_technical_count(self):
         """验证技术面策略 16 个。"""
@@ -423,9 +423,9 @@ class TestStrategyFactoryExpanded:
         assert len(tech) == 16
 
     def test_fundamental_count(self):
-        """验证基本面策略 4 个。"""
+        """验证基本面策略 12 个。"""
         fund = StrategyFactory.get_by_category("fundamental")
-        assert len(fund) == 4
+        assert len(fund) == 12
 
     def test_new_strategies_registered(self):
         """验证 8 个新策略都已注册。"""

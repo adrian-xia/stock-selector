@@ -9,19 +9,19 @@ from app.strategy.base import BaseStrategy
 class TestStrategyRegistry:
     """测试策略注册表。"""
 
-    def test_registry_has_20_strategies(self) -> None:
-        """注册表应包含 20 种策略。"""
-        assert len(STRATEGY_REGISTRY) == 20
+    def test_registry_has_28_strategies(self) -> None:
+        """注册表应包含 28 种策略。"""
+        assert len(STRATEGY_REGISTRY) == 28
 
     def test_16_technical_strategies(self) -> None:
         """应有 16 种技术面策略。"""
         technical = [m for m in STRATEGY_REGISTRY.values() if m.category == "technical"]
         assert len(technical) == 16
 
-    def test_4_fundamental_strategies(self) -> None:
-        """应有 4 种基本面策略。"""
+    def test_12_fundamental_strategies(self) -> None:
+        """应有 12 种基本面策略。"""
         fundamental = [m for m in STRATEGY_REGISTRY.values() if m.category == "fundamental"]
-        assert len(fundamental) == 4
+        assert len(fundamental) == 12
 
 
 class TestStrategyFactoryGetStrategy:
@@ -49,7 +49,7 @@ class TestStrategyFactoryGetAll:
 
     def test_returns_all(self) -> None:
         result = StrategyFactory.get_all()
-        assert len(result) == 20
+        assert len(result) == 28
         assert all(isinstance(m, StrategyMeta) for m in result)
 
 
@@ -63,7 +63,7 @@ class TestStrategyFactoryGetByCategory:
 
     def test_filter_fundamental(self) -> None:
         result = StrategyFactory.get_by_category("fundamental")
-        assert len(result) == 4
+        assert len(result) == 12
         assert all(m.category == "fundamental" for m in result)
 
     def test_filter_empty_category(self) -> None:

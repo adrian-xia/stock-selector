@@ -254,6 +254,51 @@ async def _enrich_finance_data(
         fin_df = pd.DataFrame(rows, columns=fin_columns)
         df = df.merge(fin_df, on="ts_code", how="left")
 
+    # 从 raw_tushare_daily_basic 补充每日估值指标（pe_ttm、pb、ps_ttm、dividend_yield 等）
+    # daily_basic 的估值数据比 finance_indicator 更实时（每日更新），优先使用
+    daily_basic_sql = text(f"""
+        SELECT
+            ts_code,
+            pe_ttm AS db_pe_ttm,
+            pb AS db_pb,
+            ps_ttm AS db_ps_ttm,
+            dv_ttm AS dividend_yield,
+            total_mv AS db_total_mv,
+            circ_mv AS db_circ_mv
+        FROM raw_tushare_daily_basic
+        WHERE trade_date = :trade_date_str
+          AND ts_code IN ({codes_placeholder})
+    """)
+
+    # raw_tushare_daily_basic 的 trade_date 是 String(8) 格式
+    trade_date_str = target_date.strftime("%Y%m%d")
+    db_result = await session.execute(
+        daily_basic_sql, {"trade_date_str": trade_date_str, **code_params}
+    )
+    db_rows = db_result.fetchall()
+
+    if db_rows:
+        db_columns = [
+            "ts_code", "db_pe_ttm", "db_pb", "db_ps_ttm",
+            "dividend_yield", "db_total_mv", "db_circ_mv",
+        ]
+        db_df = pd.DataFrame(db_rows, columns=db_columns)
+        df = df.merge(db_df, on="ts_code", how="left")
+
+        # daily_basic 的估值指标覆盖 finance_indicator 的（更实时）
+        for col, db_col in [
+            ("pe_ttm", "db_pe_ttm"), ("pb", "db_pb"),
+            ("ps_ttm", "db_ps_ttm"), ("total_mv", "db_total_mv"),
+            ("circ_mv", "db_circ_mv"),
+        ]:
+            if db_col in df.columns:
+                if col in df.columns:
+                    # 用 daily_basic 的值填充 finance_indicator 中的 NULL
+                    df[col] = df[col].fillna(df[db_col])
+                else:
+                    df[col] = df[db_col]
+                df.drop(columns=[db_col], inplace=True)
+
     logger.info("财务数据补充完成：%d 只股票", len(df))
     return df
 

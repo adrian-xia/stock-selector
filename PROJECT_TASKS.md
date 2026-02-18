@@ -115,7 +115,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 ### 第二批：AI 与策略增强（核心功能）
 6. ~~**ai-analysis-system** - AI 智能分析系统~~ ✅ 已完成
 7. ~~**strategy-expansion-tech** - 技术面策略扩展~~ ✅ 已完成
-8. **strategy-expansion-fundamental** - 基本面策略扩展（5-7 天）
+8. ~~**strategy-expansion-fundamental** - 基本面策略扩展~~ ✅ 已完成
 9. **parameter-optimization** - 参数优化模块（5-7 天）
 
 **预计总工作量：** 18-26 天
@@ -241,19 +241,15 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 8: `strategy-fundamental` — 基本面策略扩展
+### Change 8: `strategy-fundamental` — 基本面策略扩展 ✅ 已完成
 
-**目标：** 基于 P1 财务数据实现基本面选股策略，支持价值投资和成长投资
+**完成日期：** 2026-02-18
 
-**范围：**
-- 财务数据 ETL 到 `finance_indicator` 业务表（如尚未完成）
-- 基本面策略实现：低市盈率、高 ROE、现金流充裕、业绩增长
-- 组合策略：技术面 + 基本面多因子组合、动态权重、因子有效性回测
-- 行业轮动策略：行业强弱排序、行业龙头选股（依赖 P3 指数数据）
-
-**依赖：** P1 财务数据已同步；行业轮动依赖 Change 2（P3 指数 ETL）
-**涉及文件：** `app/strategy/fundamental/`, `app/strategy/factory.py`
-**设计文档：** `docs/design/02-详细设计-策略引擎.md` §3
+**实施内容：**
+- 策略管道 `_enrich_finance_data()` 新增从 `raw_tushare_daily_basic` 查询估值指标（pe_ttm、pb、ps_ttm、dividend_yield、total_mv、circ_mv）
+- 新增 8 种基本面策略：PB 低估值、PEG 估值、市销率低估值、毛利率提升、现金流质量、净利润连续增长、经营现金流覆盖、综合质量评分
+- 策略注册到 factory（总计 28 种：16 技术面 + 12 基本面）
+- 单元测试：37 个策略测试 + 工厂注册验证
 
 ---
 
