@@ -52,6 +52,14 @@ class TechnicalDaily(Base):
     # Other
     atr14: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
 
+    # Extended indicators (V2 策略扩展)
+    wr: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)  # Williams %R (14)
+    cci: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)  # CCI (14)
+    bias: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)  # BIAS (基于 MA20)
+    obv: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)  # OBV 能量潮
+    donchian_upper: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # 唐奇安上轨 (20)
+    donchian_lower: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # 唐奇安下轨 (20)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

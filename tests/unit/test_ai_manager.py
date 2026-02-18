@@ -19,6 +19,7 @@ def _make_settings(api_key: str = "test-key", use_adc: bool = False) -> MagicMoc
     s.gemini_max_tokens = 4000
     s.gemini_timeout = 30
     s.gemini_max_retries = 2
+    s.ai_daily_call_limit = 5
     return s
 
 

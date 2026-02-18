@@ -68,7 +68,7 @@ class TestComputeSingleStockIndicators:
     """测试 compute_single_stock_indicators 主函数。"""
 
     def test_returns_all_indicator_columns(self):
-        """验证返回的 DataFrame 包含全部 23 个指标列。"""
+        """验证返回的 DataFrame 包含全部 29 个指标列。"""
         df = _make_daily_df(days=300)
         result = compute_single_stock_indicators(df)
 
@@ -80,6 +80,8 @@ class TestComputeSingleStockIndicators:
             "boll_upper", "boll_mid", "boll_lower",
             "vol_ma5", "vol_ma10", "vol_ratio",
             "atr14",
+            "wr", "cci", "bias", "obv",
+            "donchian_upper", "donchian_lower",
         ]
         for col in expected_cols:
             assert col in result.columns, f"缺少指标列: {col}"
@@ -310,3 +312,188 @@ class TestEdgeCases:
         assert len(result) == 1
         # 所有指标应为 NaN（数据不足）
         assert pd.isna(result["ma5"].iloc[0])
+
+
+# ============================================================
+# 新增指标计算函数测试
+# ============================================================
+
+from app.data.indicator import (
+    _compute_wr,
+    _compute_cci,
+    _compute_bias,
+    _compute_obv,
+    _compute_donchian,
+)
+
+
+class TestComputeWR:
+    """测试 Williams %R 计算。"""
+
+    def test_wr_range(self):
+        """验证 WR 值在 [-100, 0] 范围内。"""
+        df = _make_daily_df(days=30)
+        wr = _compute_wr(df["high"], df["low"], df["close"], period=14)
+        valid = wr.dropna()
+        assert (valid >= -100).all()
+        assert (valid <= 0).all()
+
+    def test_wr_nan_for_insufficient_data(self):
+        """验证数据不足时 WR 为 NaN。"""
+        df = _make_daily_df(days=20)
+        wr = _compute_wr(df["high"], df["low"], df["close"], period=14)
+        # 前 13 行应为 NaN
+        assert pd.isna(wr.iloc[12])
+        assert pd.notna(wr.iloc[13])
+
+    def test_wr_flat_price(self):
+        """验证价格不变时 WR 为 -50。"""
+        prices = [10.0] * 20
+        df = _make_daily_df(prices=prices)
+        df["high"] = 10.0
+        df["low"] = 10.0
+        wr = _compute_wr(df["high"], df["low"], df["close"], period=14)
+        valid = wr.dropna()
+        assert (valid == -50.0).all()
+
+    def test_wr_at_high(self):
+        """验证收盘价等于最高价时 WR 为 0。"""
+        # 构造收盘价始终等于区间最高价的场景
+        prices = list(range(1, 21))  # 单调递增
+        df = _make_daily_df(prices=[float(p) for p in prices])
+        df["high"] = df["close"]
+        df["low"] = df["close"] * 0.9
+        wr = _compute_wr(df["high"], df["low"], df["close"], period=14)
+        # 最后一行：close == highest_high，WR 应为 0
+        assert wr.iloc[-1] == pytest.approx(0.0, abs=0.01)
+
+
+class TestComputeCCI:
+    """测试 CCI 计算。"""
+
+    def test_cci_nan_for_insufficient_data(self):
+        """验证数据不足时 CCI 为 NaN。"""
+        df = _make_daily_df(days=20)
+        cci = _compute_cci(df["high"], df["low"], df["close"], period=14)
+        assert pd.isna(cci.iloc[12])
+        assert pd.notna(cci.iloc[13])
+
+    def test_cci_flat_price_is_zero(self):
+        """验证价格不变时 CCI 为 0（MAD=0 时设为 0）。"""
+        prices = [10.0] * 20
+        df = _make_daily_df(prices=prices)
+        df["high"] = 10.0
+        df["low"] = 10.0
+        cci = _compute_cci(df["high"], df["low"], df["close"], period=14)
+        valid = cci.dropna()
+        assert (valid == 0.0).all()
+
+    def test_cci_positive_for_uptrend(self):
+        """验证上涨趋势中 CCI 为正。"""
+        prices = [10.0 + i * 0.5 for i in range(30)]
+        df = _make_daily_df(prices=prices)
+        cci = _compute_cci(df["high"], df["low"], df["close"], period=14)
+        # 最后几行应为正值
+        assert cci.iloc[-1] > 0
+
+
+class TestComputeBIAS:
+    """测试 BIAS 乖离率计算。"""
+
+    def test_bias_zero_when_close_equals_ma(self):
+        """验证收盘价等于 MA20 时 BIAS 为 0。"""
+        close = pd.Series([10.0] * 5)
+        ma20 = pd.Series([10.0] * 5)
+        bias = _compute_bias(close, ma20)
+        assert (bias == 0.0).all()
+
+    def test_bias_positive_when_above_ma(self):
+        """验证收盘价高于 MA20 时 BIAS 为正。"""
+        close = pd.Series([11.0])
+        ma20 = pd.Series([10.0])
+        bias = _compute_bias(close, ma20)
+        # (11 - 10) / 10 * 100 = 10.0
+        assert bias.iloc[0] == pytest.approx(10.0, abs=0.01)
+
+    def test_bias_negative_when_below_ma(self):
+        """验证收盘价低于 MA20 时 BIAS 为负。"""
+        close = pd.Series([9.0])
+        ma20 = pd.Series([10.0])
+        bias = _compute_bias(close, ma20)
+        # (9 - 10) / 10 * 100 = -10.0
+        assert bias.iloc[0] == pytest.approx(-10.0, abs=0.01)
+
+    def test_bias_nan_when_ma_zero(self):
+        """验证 MA20 为 0 时 BIAS 为 NaN。"""
+        close = pd.Series([10.0])
+        ma20 = pd.Series([0.0])
+        bias = _compute_bias(close, ma20)
+        assert pd.isna(bias.iloc[0])
+
+    def test_bias_nan_when_ma_nan(self):
+        """验证 MA20 为 NaN 时 BIAS 为 NaN。"""
+        close = pd.Series([10.0])
+        ma20 = pd.Series([np.nan])
+        bias = _compute_bias(close, ma20)
+        assert pd.isna(bias.iloc[0])
+
+
+class TestComputeOBV:
+    """测试 OBV 能量潮计算。"""
+
+    def test_obv_basic(self):
+        """验证 OBV 基本计算逻辑。"""
+        close = pd.Series([10.0, 11.0, 10.5, 11.5, 12.0])
+        vol = pd.Series([100.0, 200.0, 150.0, 300.0, 250.0])
+        obv = _compute_obv(close, vol)
+        # day0: 0 (cumsum starts, first diff is NaN → fillna(0))
+        # day1: +200 (price up)
+        # day2: +200 - 150 = 50 (price down)
+        # day3: 50 + 300 = 350 (price up)
+        # day4: 350 + 250 = 600 (price up)
+        assert obv.iloc[-1] == pytest.approx(600.0, abs=0.01)
+
+    def test_obv_flat_price(self):
+        """验证价格不变时 OBV 不变（vol 贡献为 0）。"""
+        close = pd.Series([10.0, 10.0, 10.0])
+        vol = pd.Series([100.0, 200.0, 300.0])
+        obv = _compute_obv(close, vol)
+        # 价格不变，direction=0，OBV 始终为 0
+        assert obv.iloc[-1] == pytest.approx(0.0, abs=0.01)
+
+    def test_obv_all_down(self):
+        """验证单调下跌时 OBV 为负。"""
+        close = pd.Series([10.0, 9.0, 8.0, 7.0])
+        vol = pd.Series([100.0, 100.0, 100.0, 100.0])
+        obv = _compute_obv(close, vol)
+        # day0: 0, day1: -100, day2: -200, day3: -300
+        assert obv.iloc[-1] == pytest.approx(-300.0, abs=0.01)
+
+
+class TestComputeDonchian:
+    """测试唐奇安通道计算。"""
+
+    def test_donchian_nan_for_insufficient_data(self):
+        """验证数据不足时唐奇安通道为 NaN。"""
+        df = _make_daily_df(days=25)
+        upper, lower = _compute_donchian(df["high"], df["low"], period=20)
+        # shift(1) + rolling(20) 需要 21 行数据
+        assert pd.isna(upper.iloc[19])
+        assert pd.notna(upper.iloc[20])
+
+    def test_donchian_excludes_current_day(self):
+        """验证唐奇安通道不含当日数据。"""
+        # 构造最后一天 high 特别高的数据
+        prices = [10.0] * 24 + [20.0]
+        df = _make_daily_df(prices=prices)
+        upper, lower = _compute_donchian(df["high"], df["low"], period=20)
+        # 最后一行的 upper 不应包含当日的 high（20*1.02）
+        # 应该是前 20 天的最高价 = 10.0 * 1.02
+        assert upper.iloc[-1] == pytest.approx(10.0 * 1.02, abs=0.1)
+
+    def test_donchian_upper_gte_lower(self):
+        """验证 upper >= lower。"""
+        df = _make_daily_df(days=30)
+        upper, lower = _compute_donchian(df["high"], df["low"], period=20)
+        valid = upper.dropna() >= lower.dropna()
+        assert valid.all()

@@ -7,7 +7,7 @@
 
 支持单标的计算、全市场批量计算和增量更新。
 
-指标列表（共 23 个）：
+指标列表（共 29 个）：
 - 均线：MA5, MA10, MA20, MA60, MA120, MA250
 - MACD：DIF, DEA, HIST
 - KDJ：K, D, J
@@ -15,6 +15,7 @@
 - 布林带：BOLL_UPPER, BOLL_MID, BOLL_LOWER
 - 成交量：VOL_MA5, VOL_MA10, VOL_RATIO
 - 波动率：ATR14
+- 扩展指标：WR, CCI, BIAS, OBV, DONCHIAN_UPPER, DONCHIAN_LOWER
 """
 
 import logging
@@ -243,6 +244,127 @@ def _compute_vol_indicators(vol: pd.Series) -> tuple[pd.Series, pd.Series, pd.Se
     return vol_ma5, vol_ma10, vol_ratio
 
 
+def _compute_wr(
+    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
+) -> pd.Series:
+    """计算 Williams %R 指标。
+
+    公式：WR = (HH(N) - close) / (HH(N) - LL(N)) * -100
+    值域 [-100, 0]，低于 -80 为超卖，高于 -20 为超买。
+    当最高价等于最低价时，WR 设为 -50。
+
+    Args:
+        high: 最高价序列
+        low: 最低价序列
+        close: 收盘价序列
+        period: 回看周期，默认 14
+
+    Returns:
+        Williams %R 序列
+    """
+    highest_high = high.rolling(window=period, min_periods=period).max()
+    lowest_low = low.rolling(window=period, min_periods=period).min()
+    price_range = highest_high - lowest_low
+    wr = pd.Series(
+        np.where(price_range == 0, -50.0, (highest_high - close) / price_range * -100.0),
+        index=close.index,
+    )
+    # 数据不足时保持 NaN
+    wr = wr.where(highest_high.notna(), np.nan)
+    return wr
+
+
+def _compute_cci(
+    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
+) -> pd.Series:
+    """计算 CCI（商品通道指标）。
+
+    公式：
+    TP = (high + low + close) / 3
+    CCI = (TP - SMA(TP, N)) / (0.015 * MAD(TP, N))
+
+    当 MAD 为 0 时，CCI 设为 0。
+
+    Args:
+        high: 最高价序列
+        low: 最低价序列
+        close: 收盘价序列
+        period: 回看周期，默认 14
+
+    Returns:
+        CCI 序列
+    """
+    tp = (high + low + close) / 3.0
+    tp_sma = tp.rolling(window=period, min_periods=period).mean()
+    # 平均绝对偏差 (MAD)
+    mad = tp.rolling(window=period, min_periods=period).apply(
+        lambda x: np.abs(x - x.mean()).mean(), raw=True
+    )
+    cci = (tp - tp_sma) / (0.015 * mad)
+    # MAD 为 0 时 CCI 设为 0
+    cci = cci.where(mad != 0, 0.0)
+    return cci
+
+
+def _compute_bias(close: pd.Series, ma20: pd.Series) -> pd.Series:
+    """计算 BIAS 乖离率（基于 MA20）。
+
+    公式：BIAS = (close - MA20) / MA20 * 100
+
+    当 MA20 为 NaN 或 0 时，BIAS 为 NaN。
+
+    Args:
+        close: 收盘价序列
+        ma20: 20 日均线序列
+
+    Returns:
+        BIAS 序列
+    """
+    ma20_safe = ma20.replace(0, np.nan)
+    return (close - ma20_safe) / ma20_safe * 100.0
+
+
+def _compute_obv(close: pd.Series, vol: pd.Series) -> pd.Series:
+    """计算 OBV（能量潮）。
+
+    公式：OBV(t) = OBV(t-1) + sign(close(t) - close(t-1)) * vol(t)
+    OBV(0) = 0，价格不变时 vol 贡献为 0。
+
+    Args:
+        close: 收盘价序列
+        vol: 成交量序列
+
+    Returns:
+        OBV 序列
+    """
+    price_change = close.diff()
+    direction = np.sign(price_change)
+    obv = (direction * vol).fillna(0).cumsum()
+    return obv
+
+
+def _compute_donchian(
+    high: pd.Series, low: pd.Series, period: int = 20
+) -> tuple[pd.Series, pd.Series]:
+    """计算唐奇安通道（不含当日）。
+
+    donchian_upper = 过去 N 日最高价（不含当日）
+    donchian_lower = 过去 N 日最低价（不含当日）
+
+    Args:
+        high: 最高价序列
+        low: 最低价序列
+        period: 回看周期，默认 20
+
+    Returns:
+        (donchian_upper, donchian_lower) 二元组
+    """
+    # shift(1) 排除当日，然后取 N 日窗口
+    donchian_upper = high.shift(1).rolling(window=period, min_periods=period).max()
+    donchian_lower = low.shift(1).rolling(window=period, min_periods=period).min()
+    return donchian_upper, donchian_lower
+
+
 def _compute_atr(
     high: pd.Series, low: pd.Series, close: pd.Series
 ) -> pd.Series:
@@ -299,6 +421,8 @@ def compute_indicators_generic(df: pd.DataFrame) -> pd.DataFrame:
             "boll_upper", "boll_mid", "boll_lower",
             "vol_ma5", "vol_ma10", "vol_ratio",
             "atr14",
+            "wr", "cci", "bias", "obv",
+            "donchian_upper", "donchian_lower",
         ]
         for col in indicator_cols:
             df[col] = pd.Series(dtype="float64")
@@ -350,12 +474,40 @@ def compute_indicators_generic(df: pd.DataFrame) -> pd.DataFrame:
     result["atr14"] = _compute_atr(high, low, close)
     indicator_times["ATR"] = time.time() - atr_start
 
+    # --- Williams %R ---
+    wr_start = time.time()
+    result["wr"] = _compute_wr(high, low, close, period=14)
+    indicator_times["WR"] = time.time() - wr_start
+
+    # --- CCI ---
+    cci_start = time.time()
+    result["cci"] = _compute_cci(high, low, close, period=14)
+    indicator_times["CCI"] = time.time() - cci_start
+
+    # --- BIAS（依赖 MA20，需在均线之后计算） ---
+    bias_start = time.time()
+    result["bias"] = _compute_bias(close, result["ma20"])
+    indicator_times["BIAS"] = time.time() - bias_start
+
+    # --- OBV ---
+    obv_start = time.time()
+    result["obv"] = _compute_obv(close, vol)
+    indicator_times["OBV"] = time.time() - obv_start
+
+    # --- 唐奇安通道 ---
+    donchian_start = time.time()
+    result["donchian_upper"], result["donchian_lower"] = _compute_donchian(high, low, period=20)
+    indicator_times["DONCHIAN"] = time.time() - donchian_start
+
     # 记录总耗时和慢速指标（DEBUG 级别）
     total_time = sum(indicator_times.values())
     logger.debug(
-        "[compute_indicators] 总耗时=%.3fs, MA=%.3fs, MACD=%.3fs, KDJ=%.3fs, RSI=%.3fs, BOLL=%.3fs, VOL=%.3fs, ATR=%.3fs",
+        "[compute_indicators] 总耗时=%.3fs, MA=%.3fs, MACD=%.3fs, KDJ=%.3fs, RSI=%.3fs, "
+        "BOLL=%.3fs, VOL=%.3fs, ATR=%.3fs, WR=%.3fs, CCI=%.3fs, BIAS=%.3fs, OBV=%.3fs, DONCHIAN=%.3fs",
         total_time, indicator_times["MA"], indicator_times["MACD"], indicator_times["KDJ"],
         indicator_times["RSI"], indicator_times["BOLL"], indicator_times["VOL"], indicator_times["ATR"],
+        indicator_times["WR"], indicator_times["CCI"], indicator_times["BIAS"],
+        indicator_times["OBV"], indicator_times["DONCHIAN"],
     )
 
     # 检测慢速指标（>0.1 秒）
@@ -405,6 +557,8 @@ INDICATOR_COLUMNS = [
     "boll_upper", "boll_mid", "boll_lower",
     "vol_ma5", "vol_ma10", "vol_ratio",
     "atr14",
+    "wr", "cci", "bias", "obv",
+    "donchian_upper", "donchian_lower",
 ]
 
 

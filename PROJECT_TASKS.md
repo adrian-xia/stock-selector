@@ -114,7 +114,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### 第二批：AI 与策略增强（核心功能）
 6. ~~**ai-analysis-system** - AI 智能分析系统~~ ✅ 已完成
-7. **strategy-expansion-tech** - 技术面策略扩展（5-7 天）
+7. ~~**strategy-expansion-tech** - 技术面策略扩展~~ ✅ 已完成
 8. **strategy-expansion-fundamental** - 基本面策略扩展（5-7 天）
 9. **parameter-optimization** - 参数优化模块（5-7 天）
 
@@ -228,20 +228,16 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 7: `strategy-tech-expansion` — 技术面策略扩展
+### Change 7: `strategy-tech-expansion` — 技术面策略扩展 ✅ 已完成
 
-**目标：** 扩充技术面策略到 20+ 种，覆盖趋势跟踪、震荡指标、量价分析
+**完成日期：** 2026-02-18
 
-**范围：**
-- 趋势跟踪策略：海龟交易法则、唐奇安通道突破、ATR 波动率突破
-- 震荡指标策略：CCI 超买超卖、Williams %R、Stochastic 随机指标
-- 量价策略：放量突破、缩量回调、量价背离
-- 策略注册到 factory + 前端策略列表更新
-- 对应的单元测试和回测验证
-
-**依赖：** 无
-**涉及文件：** `app/strategy/technical/`, `app/strategy/factory.py`, `tests/unit/`
-**设计文档：** `docs/design/02-详细设计-策略引擎.md` §3
+**实施内容：**
+- 新增 6 个技术指标字段：WR、CCI、BIAS、OBV、donchian_upper、donchian_lower（Alembic migration + 模型更新）
+- 新增 5 个指标计算函数：_compute_wr、_compute_cci、_compute_bias、_compute_obv、_compute_donchian
+- 新增 8 种技术面策略：唐奇安通道突破、ATR 波动率突破、CCI 超买超卖、Williams %R 超卖反弹、BIAS 乖离率、缩量回调、量价背离、OBV 能量潮突破
+- 策略注册到 factory（总计 20 种：16 技术面 + 4 基本面）
+- 单元测试：18 个指标计算测试 + 35 个策略测试（含工厂注册验证）
 
 ---
 

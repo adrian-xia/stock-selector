@@ -100,7 +100,7 @@ def _register(meta: StrategyMeta) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 策略注册：技术面（8 种）
+# 策略注册：技术面（16 种）
 # ---------------------------------------------------------------------------
 from app.strategy.technical.ma_cross import MACrossStrategy  # noqa: E402
 from app.strategy.technical.macd_golden import MACDGoldenStrategy  # noqa: E402
@@ -110,6 +110,14 @@ from app.strategy.technical.boll_breakthrough import BollBreakthroughStrategy  #
 from app.strategy.technical.volume_breakout import VolumeBreakoutStrategy  # noqa: E402
 from app.strategy.technical.ma_long_arrange import MALongArrangeStrategy  # noqa: E402
 from app.strategy.technical.macd_divergence import MACDDivergenceStrategy  # noqa: E402
+from app.strategy.technical.donchian_breakout import DonchianBreakoutStrategy  # noqa: E402
+from app.strategy.technical.atr_breakout import ATRBreakoutStrategy  # noqa: E402
+from app.strategy.technical.cci_oversold import CCIOverboughtOversoldStrategy  # noqa: E402
+from app.strategy.technical.williams_r import WilliamsRStrategy  # noqa: E402
+from app.strategy.technical.bias_oversold import BIASStrategy  # noqa: E402
+from app.strategy.technical.volume_contraction import VolumeContractionPullbackStrategy  # noqa: E402
+from app.strategy.technical.volume_price_divergence import VolumePriceDivergenceStrategy  # noqa: E402
+from app.strategy.technical.obv_breakthrough import OBVBreakthroughStrategy  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 策略注册：基本面（4 种）
@@ -179,6 +187,70 @@ _register(StrategyMeta(
     category="technical",
     description="价格创近期新低但MACD DIF未创新低，下跌动能减弱",
     strategy_cls=MACDDivergenceStrategy,
+    default_params={"lookback": 20},
+))
+_register(StrategyMeta(
+    name="donchian-breakout",
+    display_name="唐奇安通道突破",
+    category="technical",
+    description="价格突破 20 日唐奇安通道上轨",
+    strategy_cls=DonchianBreakoutStrategy,
+    default_params={"period": 20},
+))
+_register(StrategyMeta(
+    name="atr-breakout",
+    display_name="ATR波动率突破",
+    category="technical",
+    description="价格突破 MA20 + ATR14 波动带上轨",
+    strategy_cls=ATRBreakoutStrategy,
+    default_params={"atr_multiplier": 1.5},
+))
+_register(StrategyMeta(
+    name="cci-oversold",
+    display_name="CCI超买超卖",
+    category="technical",
+    description="CCI 从超卖区（<-100）反弹至 -80 以上",
+    strategy_cls=CCIOverboughtOversoldStrategy,
+    default_params={"oversold": -100, "bounce": -80},
+))
+_register(StrategyMeta(
+    name="williams-r",
+    display_name="Williams %R超卖反弹",
+    category="technical",
+    description="Williams %R 从超卖区（<-80）反弹至 -50 以上",
+    strategy_cls=WilliamsRStrategy,
+    default_params={"oversold": -80, "bounce": -50},
+))
+_register(StrategyMeta(
+    name="bias-oversold",
+    display_name="BIAS乖离率",
+    category="technical",
+    description="BIAS 乖离率达到超卖极值（<-6%），预期均值回归",
+    strategy_cls=BIASStrategy,
+    default_params={"oversold_bias": -6.0},
+))
+_register(StrategyMeta(
+    name="volume-contraction-pullback",
+    display_name="缩量回调",
+    category="technical",
+    description="上升趋势中缩量回调至 MA20 支撑位",
+    strategy_cls=VolumeContractionPullbackStrategy,
+    default_params={"max_vol_ratio": 0.6, "ma_tolerance": 0.02},
+))
+_register(StrategyMeta(
+    name="volume-price-divergence",
+    display_name="量价背离",
+    category="technical",
+    description="价格接近近期低点但成交量显著萎缩",
+    strategy_cls=VolumePriceDivergenceStrategy,
+    default_params={"lookback": 20},
+))
+_register(StrategyMeta(
+    name="obv-breakthrough",
+    display_name="OBV能量潮突破",
+    category="technical",
+    description="OBV 突破近期高点且价格上涨确认",
+    strategy_cls=OBVBreakthroughStrategy,
     default_params={"lookback": 20},
 ))
 
