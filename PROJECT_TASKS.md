@@ -286,22 +286,20 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 11: `p5-extended-data-etl` — P5 补充数据 ETL
+### Change 11: `p5-extended-data-etl` — P5 补充数据 ETL ✅ 已完成
 
-**目标：** 完成 P5 中 P3 优先级的约 28 张 raw 表的 ETL，完善数据体系
+**完成日期：** 2026-02-19
 
-**范围：**
-- 基础补充：namechange, stk_managers, stk_rewards, new_share, stk_list_his
-- 行情补充：hsgt_top10, ggt_daily
-- 市场参考：pledge_stat, pledge_detail, repurchase, share_float
-- 特色数据：report_rc, cyq_perf, cyq_chips, ccass_hold, ccass_hold_detail, hk_hold, stk_surv
-- 两融补充：slb_len
-- 打板专题：limit_step, hm_detail, stk_auction, stk_auction_o, kpl_list, kpl_concept, broker_recommend, ggt_monthly
-- ETL 清洗函数 + DataManager 同步方法（大部分直接从 raw 表查询，不需要业务表）
-
-**依赖：** Change 4 完成后（复用 P5 核心 ETL 模式）
-**涉及文件：** `app/data/etl.py`, `app/data/manager.py`
-**设计文档：** `docs/design/99-实施范围-V1与V2划分.md` §3.6
+**实施内容：**
+- 新增 28 个 DataManager sync_raw_* 方法，覆盖 P5 全部补充 raw 表
+  - 基础补充（5 张）：namechange, stk_managers, stk_rewards, new_share, stk_list_his
+  - 行情补充（2 张）：hsgt_top10, ggt_daily
+  - 市场参考（4 张）：pledge_stat, pledge_detail, repurchase, share_float
+  - 特色数据（7 张）：report_rc, cyq_perf, cyq_chips, ccass_hold, ccass_hold_detail, hk_hold, stk_surv
+  - 两融补充（1 张）：slb_len
+  - 打板专题（9 张）：limit_step, hm_detail, stk_auction, stk_auction_o, kpl_list, kpl_concept, broker_recommend, ggt_monthly
+- 扩展 sync_p5_core 聚合方法，按频率分组集成全部补充表（日频 15 张 + 月频 1 张 + 静态 12 张）
+- 单元测试：33 个测试（28 个 sync_raw 方法 + 5 个集成测试）
 
 ---
 
