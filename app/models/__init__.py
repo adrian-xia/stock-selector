@@ -1,4 +1,5 @@
 from app.models.ai import AIAnalysisResult
+from app.models.alert import AlertHistory, AlertRule
 from app.models.backtest import BacktestResult, BacktestTask
 from app.models.base import Base
 from app.models.finance import FinanceIndicator
@@ -17,6 +18,8 @@ from app.models.technical import TechnicalDaily
 
 __all__ = [
     "AIAnalysisResult",
+    "AlertHistory",
+    "AlertRule",
     "Base",
     "BacktestResult",
     "BacktestTask",

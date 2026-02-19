@@ -17,11 +17,12 @@
 - **历史回测** — 基于 Backtrader，支持 A 股佣金、印花税、涨跌停限制
 - **参数优化** — 网格搜索 + 遗传算法自动寻找策略最优参数，支持任务管理和结果可视化
 - **新闻舆情** — 东方财富/淘股吧/雪球三源采集，Gemini AI 情感分析（-1.0~+1.0），每日情感聚合，盘后链路自动执行，前端新闻仪表盘（新闻列表 + 情感趋势图 + 每日摘要）
+- **实时监控** — WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub 分发），告警规则引擎（价格预警 + 策略信号），多渠道通知（企业微信/Telegram），前端监控看板（自选股行情、告警管理、连接状态指示）
 - **定时任务** — 盘后自动执行数据同步、指标计算、缓存刷新、策略筛选、AI 分析、新闻采集全链路
 - **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
-- **前端界面** — React 18 + Ant Design 5 + ECharts，选股工作台 + 回测中心 + 参数优化 + 新闻舆情
-- **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新、P2 资金流向 ETL、P3 指数数据 ETL、P4 板块数据 ETL、P5 补充数据同步；集成测试覆盖 P0-P5 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性、综合时间连续性和数据新鲜度）
+- **前端界面** — React 18 + Ant Design 5 + ECharts，选股工作台 + 回测中心 + 参数优化 + 新闻舆情 + 实时监控
+- **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新、P2 资金流向 ETL、P3 指数数据 ETL、P4 板块数据 ETL、P5 补充数据同步、实时监控（行情采集、告警引擎、通知渠道、WebSocket、告警 API）；集成测试覆盖 P0-P5 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性、综合时间连续性和数据新鲜度）
 
 ## 技术栈
 
@@ -263,9 +264,8 @@ kill -TERM <pid>
 
 优雅关闭流程：
 1. 停止调度器，等待运行中的任务完成（最多 30 秒）
-2. 关闭 BaoStock 连接池
-3. 关闭 Redis 连接
-4. 关闭数据库连接
+2. 关闭 Redis 连接
+3. 关闭数据库连接
 
 **查看日志：**
 
@@ -374,9 +374,7 @@ stock-selector/
 │   ├── database.py             # SQLAlchemy 异步引擎
 │   ├── models/                 # ORM 模型（12 张业务表 + 90 张 raw 层表）
 │   ├── data/                   # 数据采集模块
-│   │   ├── baostock.py         #   BaoStock 客户端
-│   │   ├── akshare.py          #   AKShare 客户端
-│   │   ├── pool.py             #   BaoStock 连接池
+│   │   ├── tushare.py          #   TushareClient（令牌桶限流 + 异步包装）
 │   │   ├── batch.py            #   批量日线同步
 │   │   ├── adj_factor.py       #   复权因子批量更新
 │   │   ├── etl.py              #   ETL 清洗
@@ -406,17 +404,28 @@ stock-selector/
 │   │   ├── redis_client.py     #   连接管理（init/get/close）
 │   │   ├── tech_cache.py       #   技术指标缓存（Cache-Aside）
 │   │   └── pipeline_cache.py   #   选股结果缓存
+│   ├── notification/           # 通知报警（企业微信/Telegram）
+│   ├── realtime/               # 实时监控
+│   │   ├── collector.py        #   行情采集器（Tushare 轮询）
+│   │   ├── publisher.py        #   Redis Pub/Sub 发布器
+│   │   ├── manager.py          #   生命周期管理
+│   │   ├── indicator.py        #   盘中指标计算与信号检测
+│   │   └── alert_engine.py     #   告警规则引擎
 │   └── api/                    # HTTP API
 │       ├── strategy.py         #   策略执行 API
 │       ├── backtest.py         #   回测 API
-│       └── data.py             #   数据查询 API（K 线）
+│       ├── data.py             #   数据查询 API（K 线）
+│       ├── alert.py            #   告警规则 CRUD API
+│       ├── realtime.py         #   实时监控状态/自选股 API
+│       └── websocket.py        #   WebSocket 实时行情推送
 ├── web/                        # 前端（React + TypeScript）
 │   ├── src/
 │   │   ├── api/                #   API 请求函数
 │   │   ├── layouts/            #   布局组件
 │   │   ├── pages/
 │   │   │   ├── workbench/      #   选股工作台
-│   │   │   └── backtest/       #   回测中心
+│   │   │   ├── backtest/       #   回测中心
+│   │   │   └── monitor/        #   实时监控看板
 │   │   └── types/              #   TypeScript 类型定义
 │   └── vite.config.ts          #   Vite 配置（含 API 代理）
 ├── tests/                      # 测试

@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     news_crawl_max_pages: int = 5                # 每个数据源最大采集页数
     news_sentiment_batch_size: int = 10           # 情感分析批次大小
 
+    # --- Realtime Monitor (实时监控) ---
+    realtime_poll_interval: int = 3              # 实时行情轮询间隔（秒）
+    realtime_max_stocks: int = 50                # 最大监控股票数
+    wecom_webhook_url: str = ""                  # 企业微信 Webhook URL（为空则不启用）
+    telegram_bot_token: str = ""                 # Telegram Bot Token（为空则不启用）
+    telegram_chat_id: str = ""                   # Telegram Chat ID
+
     # --- Cache (Redis) ---
     cache_tech_ttl: int = 90000                 # 技术指标缓存 TTL（秒），默认 25 小时
     cache_pipeline_result_ttl: int = 172800     # 选股结果缓存 TTL（秒），默认 48 小时

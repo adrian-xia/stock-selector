@@ -11,7 +11,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: DataSourceClient Protocol 实现
-系统 SHALL 提供 TushareClient 作为 DataSourceClient Protocol 的唯一实现，替代原有的 BaoStockClient 和 AKShareClient。
+系统 SHALL 提供 TushareClient 作为 DataSourceClient Protocol 的唯一实现。
 
 #### Scenario: TushareClient 满足 Protocol
 - **WHEN** 检查 TushareClient 是否实现 DataSourceClient Protocol

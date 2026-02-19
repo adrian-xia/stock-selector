@@ -30,7 +30,7 @@ class MoneyFlow(Base):
     sell_elg_amount: Mapped[float | None] = mapped_column(Numeric(20, 2), default=0)
     net_mf_amount: Mapped[float | None] = mapped_column(Numeric(20, 2), default=0)
 
-    data_source: Mapped[str] = mapped_column(String(16), default="akshare")
+    data_source: Mapped[str] = mapped_column(String(16), default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -49,5 +49,5 @@ class DragonTiger(Base):
     sell_total: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
     net_buy: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
     list_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    data_source: Mapped[str] = mapped_column(String(16), default="akshare")
+    data_source: Mapped[str] = mapped_column(String(16), default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -1,6 +1,6 @@
 """复权因子批量更新。
 
-BaoStock query_adjust_factor() 只返回除权除息日的累积前复权因子。
+Tushare adj_factor 接口返回除权除息日的累积前复权因子。
 需要将每个除权日的因子填充到后续所有交易日，直到下一个除权日。
 
 例如：
@@ -36,7 +36,7 @@ async def batch_update_adj_factor(
     Args:
         session_factory: 异步数据库会话工厂
         ts_code: 股票代码
-        records: BaoStock 返回的除权日记录，按日期升序排列，
+        records: Tushare 返回的除权日记录，按日期升序排列，
                  每个 dict 含 trade_date (str) 和 adj_factor (Decimal)
 
     Returns:

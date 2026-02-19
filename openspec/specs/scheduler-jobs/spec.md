@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: _build_manager 使用 TushareClient
-_build_manager() SHALL 创建 TushareClient 实例替代 BaoStockClient + AKShareClient，不再需要 BaoStock 连接池。
+_build_manager() SHALL 创建 TushareClient 实例，无需连接池。
 
 #### Scenario: 构建 DataManager
 - **WHEN** 调用 _build_manager()

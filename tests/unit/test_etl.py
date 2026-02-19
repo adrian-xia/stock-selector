@@ -5,33 +5,18 @@ from app.data.etl import normalize_stock_code, parse_date, parse_decimal
 
 
 class TestNormalizeStockCode:
-    def test_baostock_sh(self):
-        assert normalize_stock_code("sh.600519", "baostock") == "600519.SH"
+    def test_tushare_passthrough(self):
+        """Tushare 格式直接透传。"""
+        assert normalize_stock_code("600519.SH") == "600519.SH"
 
-    def test_baostock_sz(self):
-        assert normalize_stock_code("sz.000001", "baostock") == "000001.SZ"
-
-    def test_akshare_sh(self):
-        assert normalize_stock_code("600519", "akshare") == "600519.SH"
-
-    def test_akshare_sz(self):
-        assert normalize_stock_code("000001", "akshare") == "000001.SZ"
-
-    def test_akshare_gem(self):
-        assert normalize_stock_code("300750", "akshare") == "300750.SZ"
-
-    def test_akshare_bj(self):
-        assert normalize_stock_code("830799", "akshare") == "830799.BJ"
-
-    def test_akshare_bj_4xx(self):
-        assert normalize_stock_code("430047", "akshare") == "430047.BJ"
+    def test_tushare_sz(self):
+        assert normalize_stock_code("000001.SZ") == "000001.SZ"
 
     def test_empty_string(self):
-        assert normalize_stock_code("", "baostock") == ""
+        assert normalize_stock_code("") == ""
 
     def test_already_standard(self):
-        result = normalize_stock_code("600519.SH", "baostock")
-        # Not a baostock format, returned as-is
+        result = normalize_stock_code("600519.SH", "tushare")
         assert result == "600519.SH"
 
 

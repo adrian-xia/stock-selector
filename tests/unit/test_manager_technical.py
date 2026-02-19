@@ -43,11 +43,11 @@ def _make_manager_with_mock(execute_return=None) -> DataManager:
     """构造一个带 mock session_factory 的 DataManager 实例。"""
     if execute_return is None:
         execute_return = []
-    mock_clients = {"baostock": MagicMock()}
+    mock_clients = {"tushare": MagicMock()}
     return DataManager(
         session_factory=_FakeSessionFactory(execute_return),
         clients=mock_clients,
-        primary="baostock",
+        primary="tushare",
     )
 
 

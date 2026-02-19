@@ -24,32 +24,11 @@ def _safe_str(val, default: str = "") -> str:
 
 
 def normalize_stock_code(raw_code: str, source: str = "tushare") -> str:
-    """Normalize stock codes from various sources to standard format (600519.SH)."""
+    """Normalize stock codes to standard format (600519.SH)."""
     if not raw_code:
         return raw_code
 
-    if source == "tushare":
-        # Tushare 原生格式已经是 600519.SH，直接透传
-        return raw_code
-
-    if source == "baostock":
-        # sh.600519 -> 600519.SH
-        parts = raw_code.split(".")
-        if len(parts) == 2 and parts[0] in ("sh", "sz", "bj"):
-            return f"{parts[1]}.{parts[0].upper()}"
-        return raw_code
-
-    if source == "akshare":
-        # 600519 -> 600519.SH
-        symbol = raw_code.strip()
-        if symbol.startswith(("6",)):
-            return f"{symbol}.SH"
-        if symbol.startswith(("0", "3")):
-            return f"{symbol}.SZ"
-        if symbol.startswith(("8", "4")):
-            return f"{symbol}.BJ"
-        return f"{symbol}.SZ"
-
+    # Tushare 原生格式已经是 600519.SH，直接透传
     return raw_code
 
 

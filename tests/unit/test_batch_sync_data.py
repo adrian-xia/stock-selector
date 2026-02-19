@@ -12,8 +12,8 @@ def _make_manager(session_factory=None):
     sf = session_factory or AsyncMock()
     return DataManager(
         session_factory=sf,
-        clients={"baostock": AsyncMock()},
-        primary="baostock",
+        clients={"tushare": AsyncMock()},
+        primary="tushare",
     )
 
 

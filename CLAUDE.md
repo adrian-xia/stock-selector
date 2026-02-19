@@ -46,9 +46,10 @@ docs/design/
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
 - 新闻舆情：✅ V2 已实施，东方财富/淘股吧/雪球三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
-- 前端：选股工作台 + 回测中心 + 参数优化页面 + 新闻舆情页面，轮询（无 WebSocket）
-- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily）
-- 不做：用户权限、实时监控、高手跟投
+- 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
+- 前端：选股工作台 + 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板，WebSocket 实时推送
+- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history）
+- 不做：用户权限、高手跟投
 
 ## 技术栈
 
@@ -314,12 +315,21 @@ stock-selector/
 │   │   ├── auto_update.py    # 自动数据更新任务
 │   │   └── jobs.py           # APScheduler 任务
 │   ├── notification/         # 通知报警模块
-│   │   └── __init__.py       # NotificationManager（V1 日志，V2 企业微信/钉钉）
+│   │   └── __init__.py       # NotificationManager（企业微信/Telegram/日志）
+│   ├── realtime/             # 实时监控模块
+│   │   ├── collector.py      # 行情采集器（Tushare 轮询）
+│   │   ├── publisher.py      # Redis Pub/Sub 发布器
+│   │   ├── manager.py        # 生命周期管理
+│   │   ├── indicator.py      # 盘中指标计算与信号检测
+│   │   └── alert_engine.py   # 告警规则引擎
 │   └── api/                  # HTTP API
 │       ├── strategy.py       # 策略 API（未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
 │       ├── optimization.py   # 参数优化 API
 │       ├── news.py           # 新闻舆情 API
+│       ├── alert.py          # 告警规则 CRUD API
+│       ├── realtime.py       # 实时监控状态/自选股 API
+│       ├── websocket.py      # WebSocket 实时行情推送
 │       └── data.py           # 数据查询 API
 ├── web/                      # 前端（React + TypeScript）
 │   ├── src/
@@ -329,7 +339,8 @@ stock-selector/
 │   │   │   ├── workbench/    # 选股工作台页面
 │   │   │   ├── backtest/     # 回测中心页面
 │   │   │   ├── optimization/ # 参数优化页面
-│   │   │   └── news/         # 新闻舆情页面
+│   │   │   ├── news/         # 新闻舆情页面
+│   │   │   └── monitor/      # 实时监控看板
 │   │   └── types/            # TypeScript 类型定义
 │   └── vite.config.ts        # Vite 配置（含 /api 代理）
 ├── tests/

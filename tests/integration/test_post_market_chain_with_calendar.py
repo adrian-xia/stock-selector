@@ -92,7 +92,7 @@ async def test_post_market_chain_calendar_failure_continues():
 
         async def sync_calendar_side_effect():
             call_order.append("1_sync_calendar_failed")
-            raise Exception("BaoStock API error")
+            raise Exception("Tushare API error")
 
         async def is_trade_day_side_effect(date):
             call_order.append("2_is_trade_day")

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: 数据嗅探使用 Tushare
-数据嗅探 SHALL 使用 TushareClient 检测数据是否就绪，替代原有的 BaoStock 嗅探。
+数据嗅探 SHALL 使用 TushareClient 检测数据是否就绪。
 
 #### Scenario: 嗅探当日数据就绪
 - **WHEN** 嗅探任务检测当日数据

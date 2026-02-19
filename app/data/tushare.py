@@ -134,7 +134,7 @@ class TushareClient:
         """获取单只股票日线数据（Protocol 兼容方法）。
 
         内部调用 daily + adj_factor + daily_basic 三个接口，
-        合并后返回与 BaoStockClient 兼容的格式。
+        合并后返回标准化格式。
         """
         sd = start_date.strftime("%Y%m%d")
         ed = end_date.strftime("%Y%m%d")

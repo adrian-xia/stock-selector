@@ -7,9 +7,9 @@ batch_sync_daily SHALL 改为按日期批量同步模式：给定一组交易日
 - **WHEN** 调用 batch_sync_daily(trade_dates=[date(2026,2,13), date(2026,2,14)])
 - **THEN** 逐日执行 sync_raw_daily + etl_daily，每日仅 3-4 次 API 调用
 
-#### Scenario: 不再依赖 BaoStock 连接池
+#### Scenario: 使用 TushareClient 限流
 - **WHEN** 调用 batch_sync_daily
-- **THEN** 不再需要 connection_pool 参数，使用 TushareClient 的令牌桶限流
+- **THEN** 使用 TushareClient 的令牌桶限流，无需连接池参数
 
 ## REMOVED Requirements
 

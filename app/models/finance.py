@@ -45,7 +45,7 @@ class FinanceIndicator(Base):
     # Cash flow
     ocf_per_share: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
 
-    data_source: Mapped[str] = mapped_column(String(16), default="baostock")
+    data_source: Mapped[str] = mapped_column(String(16), default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

@@ -122,12 +122,12 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### 第三批：数据源扩展（增值功能）
 10. ~~**news-sentiment-monitor** - 新闻舆情监控~~ ✅ 已完成
-11. **p5-extended-data-etl** - P5 扩展数据 ETL 实施（5-7 天）
+11. ~~**p5-extended-data-etl** - P5 扩展数据 ETL 实施~~ ✅ 已完成
 
 **预计总工作量：** 12-17 天
 
 ### 第四批：系统优化（性能与体验）
-12. **realtime-monitor-alert** - 实时监控与告警（12-17 天）
+12. ~~**realtime-monitor-alert** - 实时监控与告警~~ ✅ 已完成
 13. **performance-optimization** - 性能优化（3-5 天）
 14. **monitoring-logging** - 监控与日志增强（3-5 天）
 15. **frontend-enhancement** - 前端体验优化（4-6 天）
@@ -305,20 +305,20 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### 第四批：系统优化
 
-### Change 12: `realtime-monitor` — 实时监控与告警
+### Change 12: `realtime-monitor` — 实时监控与告警 ✅ 已完成
 
-**目标：** 盘中实时监控股票动态，及时发现交易机会并推送告警
+**完成日期：** 2026-02-19
 
-**范围：**
-- WebSocket 服务：客户端订阅、实时行情推送、心跳保活
-- 实时行情采集：AKShare 实时行情、每 3 秒更新、缓存最新数据
-- 实时指标计算：每分钟计算技术指标、检测信号触发、推送通知
-- 告警通知系统：多渠道通知（企业微信/Telegram/邮件）、告警规则配置、通知历史
-- 前端：实时监控看板、自选股行情、信号提示、WebSocket 集成
-
-**依赖：** 无（独立模块）
-**涉及文件：** `app/api/websocket.py`, `app/notification/`, `web/src/pages/`
-**设计文档：** `docs/design/00-概要设计-v2.md` §3 模块10
+**实施内容：**
+- 实时行情采集：Tushare Pro 轮询（每 3 秒）+ Redis Pub/Sub 分发，交易时段自动启停
+- WebSocket 服务：客户端订阅/取消订阅协议，50 只上限校验，30 秒心跳保活，断连清理
+- 盘中指标计算：MA5/10/20、MACD、RSI 增量计算，MA 金叉/死叉、RSI 超买/超卖信号检测
+- 告警规则引擎：价格预警 + 策略信号评估，Redis TTL 冷却防抖动，告警历史持久化
+- 多渠道通知：企业微信 Webhook + Telegram Bot API，失败记日志不重试
+- REST API：告警规则 CRUD、告警历史查询（分页）、监控状态、自选股管理
+- 前端监控看板：自选股行情表格（实时价格/涨跌幅/成交量）、告警规则管理 Modal、告警历史面板、连接状态指示器
+- 新增 ORM 模型：AlertRule、AlertHistory + Alembic 迁移
+- 单元测试 35 个（行情采集、告警引擎、通知渠道、WebSocket、告警 API）
 
 ---
 

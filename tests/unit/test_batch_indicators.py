@@ -13,8 +13,8 @@ def _make_manager_with_session(mock_session):
     sf.return_value.__aenter__.return_value = mock_session
     return DataManager(
         session_factory=sf,
-        clients={"baostock": AsyncMock()},
-        primary="baostock",
+        clients={"tushare": AsyncMock()},
+        primary="tushare",
     )
 
 

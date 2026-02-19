@@ -6,11 +6,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.ai import router as ai_router
+from app.api.alert import router as alert_router
 from app.api.backtest import router as backtest_router
 from app.api.data import router as data_router
 from app.api.news import router as news_router
 from app.api.optimization import router as optimization_router
+from app.api.realtime import router as realtime_router
 from app.api.strategy import router as strategy_router
+from app.api.websocket import router as ws_router
 from app.cache.redis_client import close_redis, get_redis, init_redis
 from app.cache.tech_cache import warmup_cache
 from app.config import settings
@@ -98,7 +101,38 @@ async def lifespan(app: FastAPI):
     skip_integrity_check = os.getenv("SKIP_INTEGRITY_CHECK", "false").lower() in ("true", "1", "yes")
     await start_scheduler(skip_integrity_check=skip_integrity_check)
 
+    # 启动实时监控
+    from app.api.realtime import set_realtime_manager
+    from app.api.websocket import set_redis_client, start_redis_listener, stop_redis_listener
+    from app.data.tushare import TushareClient
+    from app.realtime.manager import RealtimeManager
+
+    redis = get_redis()
+    realtime_mgr = None
+    try:
+        tushare_client = TushareClient()
+        realtime_mgr = RealtimeManager(tushare_client, redis)
+        set_realtime_manager(realtime_mgr)
+        if redis:
+            set_redis_client(redis)
+            await start_redis_listener()
+        await realtime_mgr.start()
+        logger.info("[启动] 实时监控已启动")
+    except Exception:
+        logger.warning("[启动] 实时监控启动失败，跳过", exc_info=True)
+
     yield
+
+    # 优雅关闭：停止实时监控
+    if realtime_mgr:
+        try:
+            await realtime_mgr.stop()
+        except Exception:
+            logger.warning("[关闭] 实时监控停止失败", exc_info=True)
+    try:
+        await stop_redis_listener()
+    except Exception:
+        pass
 
     # 优雅关闭：等待运行中的任务完成
     await _graceful_shutdown()
@@ -124,6 +158,9 @@ app.include_router(data_router)
 app.include_router(ai_router)
 app.include_router(optimization_router)
 app.include_router(news_router)
+app.include_router(alert_router)
+app.include_router(realtime_router)
+app.include_router(ws_router)
 
 
 @app.get("/health")

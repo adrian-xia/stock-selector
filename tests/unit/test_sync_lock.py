@@ -11,8 +11,8 @@ def _make_manager():
     sf = MagicMock()
     return DataManager(
         session_factory=sf,
-        clients={"baostock": AsyncMock()},
-        primary="baostock",
+        clients={"tushare": AsyncMock()},
+        primary="tushare",
     )
 
 

@@ -52,7 +52,7 @@ async def test_trade_calendar_update_failure_not_blocking():
          patch("app.scheduler.jobs.pipeline_step") as mock_pipeline:
 
         mock_manager = AsyncMock()
-        mock_manager.sync_trade_calendar.side_effect = Exception("BaoStock API error")
+        mock_manager.sync_trade_calendar.side_effect = Exception("Tushare API error")
         mock_manager.is_trade_day.return_value = True
         mock_manager.acquire_sync_lock.return_value = True
         mock_manager.sync_stock_list.return_value = {"inserted": 0, "updated": 0}

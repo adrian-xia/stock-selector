@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: DataManager 使用 TushareClient
-DataManager SHALL 使用 TushareClient 作为唯一数据源客户端，`primary` 默认值从 "baostock" 改为 "tushare"。
+DataManager SHALL 使用 TushareClient 作为唯一数据源客户端，`primary` 默认值为 "tushare"。
 
 #### Scenario: 默认使用 Tushare
 - **WHEN** 创建 DataManager 实例不指定 primary

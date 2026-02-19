@@ -326,9 +326,9 @@ async def verify_44_adj_factor() -> None:
         adj_count = row.scalar_one()
 
     if adj_count == 0:
-        print(f"  {YELLOW}⚠ adj_factor 全部为 NULL（BaoStock 不复权模式不提供复权因子）{RESET}")
+        print(f"  {YELLOW}⚠ adj_factor 全部为 NULL（不复权模式不提供复权因子）{RESET}")
         print(f"  {YELLOW}  当前回测使用不复权价格，对无除权除息的股票结果正确{RESET}")
-        print(f"  {YELLOW}  建议后续补充 BaoStock query_adjust_factor() 获取复权因子{RESET}")
+        print(f"  {YELLOW}  建议后续补充 Tushare adj_factor 获取复权因子{RESET}")
 
     # 验证 1：load_stock_data 在 adj_factor 为 NULL 时正确跳过前复权
     async with async_session_factory() as session:

@@ -1,11 +1,18 @@
-"""通知报警模块：发送数据同步失败或超时的报警通知。
+"""通知报警模块：多渠道通知分发。
 
-V1 阶段仅记录日志，V2 可接入企业微信/钉钉/邮件/短信等通知服务。
+支持渠道：
+- 日志（默认，始终启用）
+- 企业微信 Webhook
+- Telegram Bot API
 """
 
 import logging
 from enum import Enum
 from typing import Any
+
+import httpx
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,92 +20,89 @@ logger = logging.getLogger(__name__)
 class NotificationLevel(str, Enum):
     """通知级别枚举。"""
 
-    INFO = "info"  # 信息
-    WARNING = "warning"  # 警告
-    ERROR = "error"  # 错误
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class WeComChannel:
+    """企业微信 Webhook 通知渠道。"""
+
+    def __init__(self, webhook_url: str):
+        self._url = webhook_url
+
+    async def send(self, title: str, message: str) -> bool:
+        """发送企业微信 markdown 消息。"""
+        payload = {
+            "msgtype": "markdown",
+            "markdown": {"content": f"### {title}\n{message}"},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(self._url, json=payload)
+                return resp.status_code == 200
+        except Exception:
+            logger.warning("[WeComChannel] 发送失败", exc_info=True)
+            return False
+
+class TelegramChannel:
+    """Telegram Bot API 通知渠道。"""
+
+    def __init__(self, bot_token: str, chat_id: str):
+        self._url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        self._chat_id = chat_id
+
+    async def send(self, title: str, message: str) -> bool:
+        """发送 Telegram 消息。"""
+        text = f"*{title}*\n{message}"
+        payload = {"chat_id": self._chat_id, "text": text, "parse_mode": "Markdown"}
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(self._url, json=payload)
+                return resp.status_code == 200
+        except Exception:
+            logger.warning("[TelegramChannel] 发送失败", exc_info=True)
+            return False
 
 
 class NotificationManager:
-    """通知管理器（V1 暂存实现）。
+    """通知管理器：根据配置自动注册可用渠道，遍历发送。"""
 
-    V1 阶段仅记录日志，不接入实际通知服务。
-    V2 扩展点：
-    - 企业微信：通过 Webhook 发送群消息
-    - 钉钉：通过 Webhook 发送群消息
-    - 邮件：通过 SMTP 发送邮件
-    - 短信：通过短信网关发送短信
-    """
+    def __init__(self):
+        self._channels: list = []
+        # 根据配置自动注册渠道
+        if settings.wecom_webhook_url:
+            self._channels.append(WeComChannel(settings.wecom_webhook_url))
+            logger.info("[NotificationManager] 已注册企业微信渠道")
+        if settings.telegram_bot_token and settings.telegram_chat_id:
+            self._channels.append(TelegramChannel(settings.telegram_bot_token, settings.telegram_chat_id))
+            logger.info("[NotificationManager] 已注册 Telegram 渠道")
 
     async def send(
         self,
-        level: NotificationLevel,
+        level: NotificationLevel | str,
         title: str,
         message: str,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """发送通知。
-
-        V1 实现：仅记录日志
-        V2 实现：根据配置调用实际通知服务
-
-        Args:
-            level: 通知级别（INFO/WARNING/ERROR）
-            title: 通知标题
-            message: 通知消息
-            metadata: 附加元数据（可选）
-
-        Examples:
-            >>> manager = NotificationManager()
-            >>> await manager.send(
-            ...     level=NotificationLevel.ERROR,
-            ...     title="数据同步超时",
-            ...     message="2026-02-10 数据嗅探超时，18:00 仍无数据",
-            ...     metadata={"date": "2026-02-10", "probe_count": 12},
-            ... )
-        """
-        # V1 实现：记录日志
+        """发送通知到所有已注册渠道。失败记日志不重试。"""
+        # 始终记录日志
         log_message = f"[通知报警] {title}: {message}"
         if metadata:
             log_message += f" | 元数据: {metadata}"
 
-        if level == NotificationLevel.ERROR:
+        level_str = level.value if isinstance(level, NotificationLevel) else level
+        if level_str == "error":
             logger.error(log_message)
-        elif level == NotificationLevel.WARNING:
+        elif level_str == "warning":
             logger.warning(log_message)
         else:
             logger.info(log_message)
 
-        # V2 扩展点：接入实际通知服务
-        # 示例代码（V2 实现时取消注释）：
-        #
-        # if self._wechat_webhook:
-        #     await self._send_wechat(title, message, metadata)
-        #
-        # if self._dingtalk_webhook:
-        #     await self._send_dingtalk(title, message, metadata)
-        #
-        # if self._email_config:
-        #     await self._send_email(title, message, metadata)
+        # 遍历渠道发送（fire-and-forget，失败不重试）
+        for channel in self._channels:
+            try:
+                await channel.send(title, message)
+            except Exception:
+                logger.warning("[NotificationManager] 渠道发送失败: %s", type(channel).__name__, exc_info=True)
 
-    # V2 扩展方法示例（暂未实现）：
-    #
-    # async def _send_wechat(
-    #     self, title: str, message: str, metadata: dict[str, Any] | None
-    # ) -> None:
-    #     """发送企业微信通知。"""
-    #     # 实现企业微信 Webhook 调用
-    #     pass
-    #
-    # async def _send_dingtalk(
-    #     self, title: str, message: str, metadata: dict[str, Any] | None
-    # ) -> None:
-    #     """发送钉钉通知。"""
-    #     # 实现钉钉 Webhook 调用
-    #     pass
-    #
-    # async def _send_email(
-    #     self, title: str, message: str, metadata: dict[str, Any] | None
-    # ) -> None:
-    #     """发送邮件通知。"""
-    #     # 实现 SMTP 邮件发送
-    #     pass

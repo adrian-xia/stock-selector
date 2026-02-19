@@ -102,7 +102,7 @@ The system SHALL provide a CLI command `sync-adj-factor` for importing adjustmen
 #### Scenario: Run adj factor import via CLI
 - **WHEN** `python -m app.data.cli sync-adj-factor` is executed
 - **THEN** it SHALL iterate over all listed stocks
-- **AND** fetch adjustment factors from BaoStock for each stock
+- **AND** fetch adjustment factors from Tushare for each stock
 - **AND** batch update `stock_daily.adj_factor` for matching rows
 - **AND** log progress every 100 stocks
 - **AND** print a final summary with success/failed counts

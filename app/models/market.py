@@ -65,7 +65,7 @@ class StockDaily(Base):
     adj_factor: Mapped[float | None] = mapped_column(Numeric(16, 6), nullable=True)
     turnover_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     trade_status: Mapped[str] = mapped_column(String(4), default="1")
-    data_source: Mapped[str] = mapped_column(String(16), default="baostock")
+    data_source: Mapped[str] = mapped_column(String(16), default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -87,7 +87,7 @@ class StockMin(Base):
     close: Mapped[float] = mapped_column(Numeric(10, 2))
     vol: Mapped[float] = mapped_column(Numeric(20, 2), default=0)
     amount: Mapped[float] = mapped_column(Numeric(20, 2), default=0)
-    data_source: Mapped[str] = mapped_column(String(16), default="baostock")
+    data_source: Mapped[str] = mapped_column(String(16), default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
