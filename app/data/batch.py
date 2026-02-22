@@ -25,11 +25,23 @@ from app.data.tushare import TushareClient
 
 logger = logging.getLogger(__name__)
 
+# 全量导入时需要管理索引的表
+_FULL_IMPORT_TABLES = [
+    "stock_daily",
+    "technical_daily",
+    "money_flow",
+    "dragon_tiger",
+    "index_daily",
+    "index_weight",
+    "index_technical_daily",
+]
+
 
 async def batch_sync_daily(
     session_factory: async_sessionmaker,
     trade_dates: list[date],
     manager: DataManager | None = None,
+    full_import: bool = False,
 ) -> dict[str, Any]:
     """按日期批量同步全市场日线数据（sync_raw_daily + etl_daily）。
 
@@ -37,6 +49,7 @@ async def batch_sync_daily(
         session_factory: 数据库会话工厂
         trade_dates: 交易日期列表
         manager: DataManager 实例（可选，传入则复用）
+        full_import: 是否为全量导入模式（启用索引管理）
 
     Returns:
         dict 包含同步结果统计
@@ -52,8 +65,29 @@ async def batch_sync_daily(
             primary="tushare",
         )
 
-    logger.info("[批量同步] 开始：共 %d 个交易日", total)
+    logger.info(
+        "[批量同步] 开始：共 %d 个交易日%s",
+        total,
+        "（全量导入模式，启用索引管理）" if full_import else "",
+    )
 
+    if full_import:
+        from app.data.index_mgmt import with_index_management
+        from app.database import engine
+
+        async with with_index_management(engine, _FULL_IMPORT_TABLES):
+            return await _sync_loop(manager, trade_dates, start_time)
+    else:
+        return await _sync_loop(manager, trade_dates, start_time)
+
+
+async def _sync_loop(
+    manager: DataManager,
+    trade_dates: list[date],
+    start_time: float,
+) -> dict[str, Any]:
+    """执行逐日同步循环。"""
+    total = len(trade_dates)
     success_count = 0
     failed_count = 0
     failed_dates: list[date] = []

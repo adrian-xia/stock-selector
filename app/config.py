@@ -25,8 +25,8 @@ class Settings(BaseSettings):
 
     # --- Database ---
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selector"
-    db_pool_size: int = 5
-    db_max_overflow: int = 10
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
     db_echo: bool = False
 
     # --- Redis ---
@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     wecom_webhook_url: str = ""                  # 企业微信 Webhook URL（为空则不启用）
     telegram_bot_token: str = ""                 # Telegram Bot Token（为空则不启用）
     telegram_chat_id: str = ""                   # Telegram Chat ID
+
+    # --- TimescaleDB (可选) ---
+    timescale_enabled: bool = True               # 是否启用 TimescaleDB（未安装时自动降级）
+    timescale_compress_after_days: int = 30      # 压缩阈值天数（超过此天数的 chunk 自动压缩）
 
     # --- Cache (Redis) ---
     cache_tech_ttl: int = 90000                 # 技术指标缓存 TTL（秒），默认 25 小时

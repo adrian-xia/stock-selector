@@ -163,19 +163,38 @@ async def batch_insert(
     table: Table,
     rows: list[dict],
     batch_size: int = settings.etl_batch_size,
+    use_copy: bool = True,
 ) -> int:
-    """Batch insert rows using INSERT ... ON CONFLICT DO NOTHING.
+    """Batch insert rows, 优先使用 COPY 协议，失败降级到 INSERT。
 
     自动根据列数调整 batch_size，确保不超过 asyncpg 32767 参数限制。
+
+    Args:
+        session: 数据库会话
+        table: 目标表
+        rows: 待写入数据
+        batch_size: INSERT 模式的批量大小
+        use_copy: 是否优先使用 COPY 协议（默认 True）
 
     Returns the total number of rows processed.
     """
     if not rows:
         return 0
 
-    # asyncpg 参数上限 32767，根据列数动态调整 batch_size
+    # 优先尝试 COPY 协议
+    if use_copy:
+        try:
+            from app.data.copy_writer import copy_insert
+            return await copy_insert(table, rows, conflict="nothing")
+        except Exception as e:
+            logger.warning(
+                "[batch_insert] COPY 协议写入 %s 失败，降级到 INSERT: %s",
+                table.name, e,
+            )
+
+    # Fallback: 原有 INSERT ... ON CONFLICT DO NOTHING
     num_columns = len(rows[0])
-    max_batch = 32000 // num_columns  # 留一点余量
+    max_batch = 32000 // num_columns
     batch_size = min(batch_size, max_batch)
 
     total = 0

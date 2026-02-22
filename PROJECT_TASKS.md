@@ -322,19 +322,19 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 13: `perf-optimization` — 性能优化
+### Change 13: `perf-optimization` — 性能优化 ✅ 已完成
 
 **目标：** 提升数据写入和查询性能，优化存储空间
 
-**范围：**
-- PostgreSQL COPY 协议替代 INSERT（写入速度提升 10 倍）
-- 全量导入前删除索引，导入后重建（速度提升 3-5 倍）
-- TimescaleDB 超表迁移：`stock_daily` 转 Hypertable + 数据压缩 + 保留策略
-- 查询优化：添加复合索引、优化慢查询、实现查询缓存
-- 数据库分区策略
+**已实施：**
+- ✅ PostgreSQL COPY 协议替代 INSERT（临时表+COPY+UPSERT 三步法，自动降级到 INSERT）
+- ✅ 全量导入前删除索引，导入后重建（with_index_management 上下文管理器）
+- ✅ TimescaleDB 超表迁移：stock_daily/technical_daily 转 Hypertable + 压缩策略（可选依赖）
+- ✅ 查询优化：P0-P3 raw 表补充 (ts_code, trade_date) 复合索引
+- ✅ 连接池调优：pool_size=10, max_overflow=20
 
 **依赖：** 无
-**涉及文件：** `app/data/manager.py`, `app/data/batch.py`, `alembic/`
+**涉及文件：** `app/data/copy_writer.py`, `app/data/index_mgmt.py`, `app/data/etl.py`, `app/data/manager.py`, `app/data/batch.py`, `app/database.py`, `app/config.py`, `alembic/`
 **设计文档：** `docs/design/99-实施范围-V1与V2划分.md` §10.11
 
 ---

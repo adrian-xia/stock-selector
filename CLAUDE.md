@@ -35,7 +35,7 @@ docs/design/
 ## V1 范围（当前阶段）
 
 - 数据采集：Tushare Pro API，引入 raw 层作为数据缓冲（原始表），解耦数据获取和清洗逻辑，按日期批量获取全市场数据；已实施 P0（基础行情 6 张表）、P1（财务数据 10 张表，使用 VIP 接口按季度批量获取）、P2（资金流向 10 张表）、P3（指数数据 18 张表，含日常同步和静态数据同步）、P4（板块数据 8 张表，含盘后链路集成）和 P5（全部 48 张表数据同步 + 2 张业务表 suspend_info/limit_list_daily + ETL 清洗 + 盘后链路步骤 3.8 集成，含 28 张补充表按频率分组同步）
-- 性能优化：令牌桶限流（400 QPS），全链路性能日志支持瓶颈分析
+- 性能优化：令牌桶限流（400 QPS），全链路性能日志支持瓶颈分析；COPY 协议批量写入（临时表+COPY+UPSERT 三步法，自动降级），全量导入索引管理（删除→导入→重建），TimescaleDB 超表迁移（stock_daily/technical_daily，可选依赖），raw 表复合索引优化，连接池调优（pool_size=10, max_overflow=20）
 - 自动数据更新：每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警（V1 记录日志，V2 接入企业微信/钉钉），基于 Redis 的任务状态管理；每日自动更新交易日历（获取未来 90 天数据，周末任务作为兜底）
 - 数据完整性：基于累积进度表（`stock_sync_progress`）的断点续传，启动时自动恢复未完成同步，按 365 天/批分批处理数据和指标，退市智能过滤，失败自动重试（每日 20:00），完整性门控（完成率 >= 95% 才执行策略），Redis 分布式锁防并发，环境隔离（APP_ENV_FILE）
 - 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → 日线数据 → 技术指标）
@@ -56,7 +56,7 @@ docs/design/
 - **后端：** Python 3.12 + FastAPI + SQLAlchemy + Pydantic
 - **数据源：** Tushare Pro API（令牌桶限流 400 QPS）
 - **回测：** Backtrader
-- **数据库：** PostgreSQL（普通表，不用 TimescaleDB）
+- **数据库：** PostgreSQL（普通表 + TimescaleDB 超表可选）
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
 - **性能优化：** 按日期批量获取全市场数据 + 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
 - **自动更新：** 数据嗅探 + 智能重试 + 任务状态管理（Redis）+ 通知报警（V1 日志，V2 企业微信/钉钉）+ 交易日历自动更新（每日获取未来 90 天数据）
@@ -277,6 +277,8 @@ stock-selector/
 │   │   ├── batch.py          # 批量日线同步（按日期批量模式）
 │   │   ├── probe.py          # 数据嗅探（检测数据是否就绪）
 │   │   ├── etl.py            # ETL 清洗（transform_tushare_*）
+│   │   ├── copy_writer.py    # COPY 协议批量写入（临时表+COPY+UPSERT）
+│   │   ├── index_mgmt.py     # 索引生命周期管理（全量导入时删除/重建）
 │   │   ├── cli.py            # 数据管理 CLI（含 backfill-daily 断点续传命令）
 │   │   ├── manager.py        # DataManager（sync_raw_daily + etl_daily）
 │   │   └── sources/          # 新闻数据源采集

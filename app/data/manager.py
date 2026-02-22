@@ -788,16 +788,24 @@ class DataManager:
     async def _upsert_raw(
         session: AsyncSession, table, rows: list[dict], batch_size: int = 5000
     ) -> int:
-        """批量 UPSERT 原始数据到 raw 表（ON CONFLICT DO UPDATE）。"""
+        """批量 UPSERT 原始数据到 raw 表，优先使用 COPY 协议。"""
         if not rows:
             return 0
 
-        # 获取主键列名
+        # 优先尝试 COPY 协议
+        try:
+            from app.data.copy_writer import copy_insert
+            return await copy_insert(table, rows, conflict="update")
+        except Exception as e:
+            logger.warning(
+                "[_upsert_raw] COPY 协议写入 %s 失败，降级到 INSERT: %s",
+                table.name, e,
+            )
+
+        # Fallback: 原有 INSERT ... ON CONFLICT DO UPDATE
         pk_cols = [c.name for c in table.primary_key.columns]
-        # 非主键列用于 UPDATE
         update_cols = [c.name for c in table.columns if c.name not in pk_cols and c.name != "fetched_at"]
 
-        # asyncpg 参数上限 32767
         num_columns = len(rows[0])
         max_batch = 32000 // max(num_columns, 1)
         batch_size = min(batch_size, max_batch)

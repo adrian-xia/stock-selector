@@ -11,12 +11,6 @@ batch_sync_daily SHALL 改为按日期批量同步模式：给定一组交易日
 - **WHEN** 调用 batch_sync_daily
 - **THEN** 使用 TushareClient 的令牌桶限流，无需连接池参数
 
-## REMOVED Requirements
-
-### Requirement: BaoStock 连接池参数
-**Reason**: BaoStock 已移除，不再需要连接池
-**Migration**: TushareClient 使用无状态 HTTP API，通过令牌桶限流
-
 ## ADDED Requirements
 
 ### Requirement: 全量导入集成索引管理
