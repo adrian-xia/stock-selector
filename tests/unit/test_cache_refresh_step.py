@@ -52,6 +52,7 @@ class TestCacheRefreshStep:
 class TestPostMarketChainWithCache:
     """测试盘后链路中缓存刷新步骤的集成。"""
 
+    @patch("app.scheduler.jobs._task_logger", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
@@ -60,6 +61,7 @@ class TestPostMarketChainWithCache:
         mock_build: AsyncMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
+        mock_task_logger: AsyncMock,
     ) -> None:
         """缓存刷新应在策略管道之前执行。"""
         mock_mgr = AsyncMock()
@@ -82,6 +84,7 @@ class TestPostMarketChainWithCache:
         mock_cache.assert_called_once_with(target)
         mock_pipeline.assert_called_once_with(target)
 
+    @patch("app.scheduler.jobs._task_logger", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
@@ -90,6 +93,7 @@ class TestPostMarketChainWithCache:
         mock_build: AsyncMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
+        mock_task_logger: AsyncMock,
     ) -> None:
         """缓存刷新失败不应阻断策略管道。"""
         mock_mgr = AsyncMock()

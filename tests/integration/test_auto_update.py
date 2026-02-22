@@ -4,7 +4,7 @@
 """
 
 import pytest
-from datetime import date
+from datetime import date, time
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.scheduler.auto_update import auto_update_job, probe_and_sync_job
@@ -65,7 +65,7 @@ async def test_scenario_2_trading_day_data_not_ready():
     with patch("app.scheduler.auto_update._build_manager") as mock_build_manager, \
          patch("app.scheduler.auto_update.get_redis") as mock_get_redis, \
          patch("app.scheduler.auto_update.probe_daily_data") as mock_probe, \
-         patch("app.scheduler.auto_update._scheduler") as mock_scheduler:
+         patch("app.scheduler.core._scheduler") as mock_scheduler:
 
         # 模拟交易日
         mock_manager = AsyncMock()
@@ -121,9 +121,9 @@ async def test_scenario_3_probe_timeout():
 
         # 模拟当前时间超过 18:00
         mock_now = MagicMock()
-        mock_now.time.return_value = MagicMock(hour=18, minute=30)
+        mock_now.time.return_value = time(18, 30)
         mock_datetime.now.return_value = mock_now
-        mock_datetime.strptime.return_value = MagicMock(time=lambda: MagicMock(hour=18, minute=0))
+        mock_datetime.strptime.return_value = MagicMock(time=lambda: time(18, 0))
 
         # 模拟通知管理器
         mock_notifier = AsyncMock()
@@ -196,9 +196,9 @@ async def test_scenario_5_probe_success_after_retry():
 
         # 模拟当前时间未超时
         mock_now = MagicMock()
-        mock_now.time.return_value = MagicMock(hour=16, minute=0)
+        mock_now.time.return_value = time(16, 0)
         mock_datetime.now.return_value = mock_now
-        mock_datetime.strptime.return_value = MagicMock(time=lambda: MagicMock(hour=18, minute=0))
+        mock_datetime.strptime.return_value = MagicMock(time=lambda: time(18, 0))
 
         # 模拟盘后链路成功
         mock_run_chain.return_value = None

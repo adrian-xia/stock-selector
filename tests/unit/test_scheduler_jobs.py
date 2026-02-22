@@ -8,12 +8,17 @@ import pytest
 from app.scheduler.jobs import run_post_market_chain, retry_failed_stocks_job
 
 
+# 所有调用 run_post_market_chain 的测试都需要 mock _task_logger（避免真实数据库写入）
+_mock_task_logger = patch("app.scheduler.jobs._task_logger", new_callable=AsyncMock)
+
+
 class TestRunPostMarketChain:
     """测试盘后链路。"""
 
+    @_mock_task_logger
     @patch("app.scheduler.jobs._build_manager")
     async def test_skip_non_trading_day(
-        self, mock_build: MagicMock
+        self, mock_build: MagicMock, mock_tl: AsyncMock
     ) -> None:
         """非交易日应跳过整个链路。"""
         mock_mgr = AsyncMock()
@@ -26,6 +31,7 @@ class TestRunPostMarketChain:
         # 不应获取同步锁
         mock_mgr.acquire_sync_lock.assert_not_called()
 
+    @_mock_task_logger
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
@@ -34,6 +40,7 @@ class TestRunPostMarketChain:
         mock_build: MagicMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
+        mock_tl: AsyncMock,
     ) -> None:
         """交易日应按顺序执行全部步骤（含完整性门控通过）。"""
         mock_mgr = AsyncMock()
@@ -61,9 +68,10 @@ class TestRunPostMarketChain:
         mock_pipeline.assert_called_once_with(target)
         mock_mgr.release_sync_lock.assert_called_once()
 
+    @_mock_task_logger
     @patch("app.scheduler.jobs._build_manager")
     async def test_skip_when_lock_occupied(
-        self, mock_build: MagicMock
+        self, mock_build: MagicMock, mock_tl: AsyncMock
     ) -> None:
         """同步锁被占用时应跳过。"""
         mock_mgr = AsyncMock()
@@ -77,6 +85,7 @@ class TestRunPostMarketChain:
         # 不应执行后续步骤
         mock_mgr.reset_stale_status.assert_not_called()
 
+    @_mock_task_logger
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
@@ -85,6 +94,7 @@ class TestRunPostMarketChain:
         mock_build: MagicMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
+        mock_tl: AsyncMock,
     ) -> None:
         """完成率低于阈值时应跳过策略执行。"""
         mock_mgr = AsyncMock()

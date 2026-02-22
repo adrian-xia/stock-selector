@@ -6,9 +6,13 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.scheduler.jobs import run_post_market_chain
 
+# 所有调用 run_post_market_chain 的测试都需要 mock _task_logger
+_mock_task_logger = patch("app.scheduler.jobs._task_logger", new_callable=AsyncMock)
 
+
+@_mock_task_logger
 @pytest.mark.asyncio
-async def test_trade_calendar_update_success():
+async def test_trade_calendar_update_success(mock_tl):
     """测试交易日历更新成功场景。"""
     target = date(2026, 2, 10)
 
@@ -42,8 +46,9 @@ async def test_trade_calendar_update_success():
         mock_manager.is_trade_day.assert_called_once_with(target)
 
 
+@_mock_task_logger
 @pytest.mark.asyncio
-async def test_trade_calendar_update_failure_not_blocking():
+async def test_trade_calendar_update_failure_not_blocking(mock_tl):
     """测试交易日历更新失败时不阻断后续步骤。"""
     target = date(2026, 2, 10)
 
@@ -79,8 +84,9 @@ async def test_trade_calendar_update_failure_not_blocking():
         mock_pipeline.assert_called_once()
 
 
+@_mock_task_logger
 @pytest.mark.asyncio
-async def test_trade_calendar_update_before_trade_day_check():
+async def test_trade_calendar_update_before_trade_day_check(mock_tl):
     """测试交易日历更新在交易日校验之前执行。"""
     target = date(2026, 2, 10)
     call_order = []
