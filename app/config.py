@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     performance_log_level: str = "INFO"  # 性能日志级别：DEBUG/INFO/WARNING
+    log_format: str = ""                 # 日志格式：text/json（空值根据 app_env 自动选择）
+    log_file_max_bytes: int = 52428800   # 单个日志文件最大字节数（默认 50MB）
+    log_file_backup_count: int = 5       # 日志文件保留备份数
     api_prefix: str = "/api/v1"
+    api_slow_request_threshold_ms: int = 1000  # 慢请求阈值（毫秒）
+    health_check_timeout: int = 3              # 健康检查超时（秒）
 
     # --- Database ---
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selector"

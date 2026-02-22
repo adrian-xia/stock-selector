@@ -9,10 +9,13 @@ from app.api.ai import router as ai_router
 from app.api.alert import router as alert_router
 from app.api.backtest import router as backtest_router
 from app.api.data import router as data_router
+from app.api.health import router as health_router
+from app.api.middleware import RequestPerformanceMiddleware
 from app.api.news import router as news_router
 from app.api.optimization import router as optimization_router
 from app.api.realtime import router as realtime_router
 from app.api.strategy import router as strategy_router
+from app.api.task_log import router as task_log_router
 from app.api.websocket import router as ws_router
 from app.cache.redis_client import close_redis, get_redis, init_redis
 from app.cache.tech_cache import warmup_cache
@@ -151,7 +154,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 请求性能监控中间件
+app.add_middleware(RequestPerformanceMiddleware)
+
 # 注册路由
+app.include_router(health_router)
 app.include_router(strategy_router)
 app.include_router(backtest_router)
 app.include_router(data_router)
@@ -160,9 +167,5 @@ app.include_router(optimization_router)
 app.include_router(news_router)
 app.include_router(alert_router)
 app.include_router(realtime_router)
+app.include_router(task_log_router)
 app.include_router(ws_router)
-
-
-@app.get("/health")
-async def health_check() -> dict:
-    return {"status": "ok"}

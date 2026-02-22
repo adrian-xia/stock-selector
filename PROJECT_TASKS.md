@@ -339,18 +339,18 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 14: `monitoring-logging` — 监控与日志增强
+### Change 14: `monitoring-logging` — 监控与日志增强 ✅ 已完成
 
 **目标：** 提升系统可观测性，实现结构化日志和健康检查
 
-**范围：**
-- 结构化日志：JSON 格式、日志分级和轮转、错误日志聚合分析
-- 性能监控：接口响应时间统计、数据库查询性能分析、任务执行耗时
-- 健康检查端点：数据库连接、Redis 连接、Tushare API 可用性
-- 任务执行日志表（替代文件日志）
+**已实施：**
+- ✅ 结构化日志：JSONFormatter + 环境感知格式切换（development=text, production=json）+ 日志轮转（50MB×5 + 错误日志 20MB×10）
+- ✅ API 性能中间件：RequestPerformanceMiddleware 记录请求响应时间，慢请求告警（可配置阈值）
+- ✅ 深度健康检查：/health 端点检测数据库、Redis、Tushare，返回 healthy/degraded/unhealthy 状态
+- ✅ 任务执行日志：task_execution_log 表 + TaskLogger（start/finish/track）+ 盘后链路集成 + 查询 API
 
 **依赖：** 无
-**涉及文件：** `app/logger.py`, `app/api/`, `app/models/`
+**涉及文件：** `app/logger.py`, `app/api/health.py`, `app/api/middleware.py`, `app/api/task_log.py`, `app/scheduler/task_logger.py`, `app/scheduler/jobs.py`, `app/config.py`, `app/main.py`, `alembic/`
 **设计文档：** `docs/design/00-概要设计-v2.md` §6
 
 ---

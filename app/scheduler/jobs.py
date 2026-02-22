@@ -11,10 +11,14 @@ from app.config import settings
 from app.data.manager import DataManager
 from app.data.tushare import TushareClient
 from app.database import async_session_factory
+from app.scheduler.task_logger import TaskLogger
 from app.strategy.factory import StrategyFactory
 from app.strategy.pipeline import execute_pipeline
 
 logger = logging.getLogger(__name__)
+
+# 全局 TaskLogger 实例
+_task_logger = TaskLogger(async_session_factory)
 
 
 def _build_manager() -> DataManager:
@@ -40,6 +44,9 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     logger.info("===== [盘后链路] 开始：%s =====", target)
 
     manager = _build_manager()
+
+    # 记录任务开始
+    log_id = await _task_logger.start("post_market_pipeline", trade_date=target)
 
     # 步骤 0：交易日历更新（非关键，失败不阻断）
     calendar_start = time.monotonic()
@@ -278,6 +285,13 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     logger.info(
         "===== [盘后链路] 完成：%s，总耗时 %d分%d秒 (%.1fs) =====",
         target, elapsed_minutes, elapsed_seconds, elapsed,
+    )
+
+    # 记录任务完成
+    await _task_logger.finish(
+        log_id,
+        status="success",
+        result_summary={"elapsed_seconds": round(elapsed, 1)},
     )
 
 

@@ -47,8 +47,9 @@ docs/design/
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
 - 新闻舆情：✅ V2 已实施，东方财富/淘股吧/雪球三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
+- 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
 - 前端：选股工作台 + 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板，WebSocket 实时推送
-- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history）
+- 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log）
 - 不做：用户权限、高手跟投
 
 ## 技术栈
@@ -314,6 +315,7 @@ stock-selector/
 │   ├── scheduler/            # 定时任务
 │   │   ├── core.py           # APScheduler 配置（含启动时数据完整性检查）
 │   │   ├── state.py          # 任务状态管理（基于 Redis）
+│   │   ├── task_logger.py    # 任务执行日志记录器（持久化到数据库）
 │   │   ├── auto_update.py    # 自动数据更新任务
 │   │   └── jobs.py           # APScheduler 任务
 │   ├── notification/         # 通知报警模块
@@ -331,6 +333,9 @@ stock-selector/
 │       ├── news.py           # 新闻舆情 API
 │       ├── alert.py          # 告警规则 CRUD API
 │       ├── realtime.py       # 实时监控状态/自选股 API
+│       ├── health.py         # 深度健康检查端点
+│       ├── middleware.py     # API 请求性能中间件
+│       ├── task_log.py       # 任务执行日志查询 API
 │       ├── websocket.py      # WebSocket 实时行情推送
 │       └── data.py           # 数据查询 API
 ├── web/                      # 前端（React + TypeScript）
