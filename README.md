@@ -22,7 +22,7 @@
 - **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
 - **监控与日志** — 结构化日志（JSON/文本自动切换）、日志轮转、API 请求性能中间件（慢请求告警）、深度健康检查（数据库/Redis/Tushare）、任务执行日志持久化与查询 API
-- **前端界面** — React 18 + Ant Design 5 + ECharts，选股工作台 + 回测中心 + 参数优化 + 新闻舆情 + 实时监控
+- **前端界面** — React 19 + Ant Design 6 + ECharts 6，选股工作台（含 K 线图）+ 回测中心 + 参数优化 + 新闻舆情 + 实时监控；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割、React Query 统一数据获取
 - **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新、P2 资金流向 ETL、P3 指数数据 ETL、P4 板块数据 ETL、P5 补充数据同步、实时监控（行情采集、告警引擎、通知渠道、WebSocket、告警 API）；集成测试覆盖 P0-P5 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性、综合时间连续性和数据新鲜度）
 
 ## 技术栈
@@ -38,10 +38,10 @@
 | AI 分析 | Google Gemini Flash (`google-genai`) |
 | 定时任务 | APScheduler |
 | 包管理 | uv |
-| 前端框架 | React 18 + TypeScript |
-| UI 组件库 | Ant Design 5 |
-| 图表 | ECharts |
-| 前端构建 | Vite 6 + pnpm |
+| 前端框架 | React 19 + TypeScript |
+| UI 组件库 | Ant Design 6 |
+| 图表 | ECharts 6 |
+| 前端构建 | Vite 7 + pnpm |
 | 数据请求 | TanStack React Query + Axios |
 
 ## 快速开始
@@ -422,13 +422,20 @@ stock-selector/
 ├── web/                        # 前端（React + TypeScript）
 │   ├── src/
 │   │   ├── api/                #   API 请求函数
+│   │   ├── components/
+│   │   │   ├── common/         #   公共组件（ErrorBoundary、PageLoading、QueryErrorAlert）
+│   │   │   └── charts/         #   图表组件（KlineChart）
+│   │   ├── hooks/              #   自定义 Hooks（useWebSocket）
 │   │   ├── layouts/            #   布局组件
 │   │   ├── pages/
-│   │   │   ├── workbench/      #   选股工作台
+│   │   │   ├── workbench/      #   选股工作台（含 K 线图）
 │   │   │   ├── backtest/       #   回测中心
-│   │   │   └── monitor/        #   实时监控看板
+│   │   │   ├── optimization/   #   参数优化
+│   │   │   ├── news/           #   新闻舆情
+│   │   │   └── monitor/        #   实时监控看板（拆分子组件）
+│   │   ├── utils/              #   工具函数（chartTheme）
 │   │   └── types/              #   TypeScript 类型定义
-│   └── vite.config.ts          #   Vite 配置（含 API 代理）
+│   └── vite.config.ts          #   Vite 配置（含 API 代理 + 代码分割）
 ├── tests/                      # 测试
 │   ├── unit/                   #   单元测试
 │   └── integration/            #   集成测试

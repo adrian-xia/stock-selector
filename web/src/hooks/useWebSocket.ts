@@ -35,7 +35,7 @@ export function useWebSocket() {
   const [quotes, setQuotes] = useState<Map<string, RealtimeQuote>>(new Map())
   const wsRef = useRef<WebSocket | null>(null)
   const subscribedRef = useRef<Set<string>>(new Set())
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return

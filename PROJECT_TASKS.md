@@ -355,14 +355,16 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ---
 
-### Change 15: `frontend-enhancement` — 前端体验优化
+### Change 15: `frontend-enhancement` — 前端体验优化 ✅ 已完成
 
 **目标：** 提升前端用户体验和数据可视化能力
 
 **范围：**
-- UX 优化：加载状态、错误提示友好化、响应式布局
-- 数据可视化增强：更多图表类型（分时图）、技术指标叠加显示、交互式图表
-- 前端性能：组件懒加载、数据缓存优化
+- ✅ UX 优化：全局 ErrorBoundary 错误边界、统一加载/错误 UI 组件（PageLoading、QueryErrorAlert）
+- ✅ 数据可视化增强：K 线图组件（蜡烛图 + 成交量 + MA 均线 + dataZoom）、ECharts 公共主题配置
+- ✅ 前端性能：路由级 React.lazy 懒加载、Vite 手动 chunk 分割（vendor-react/antd/echarts）
+- ✅ React Query 统一：news/optimization/monitor 三个页面迁移到 React Query
+- ✅ MonitorPage 拆分为 WatchlistTable + AlertRulePanel + AlertHistoryPanel 子组件
 
 **依赖：** 无
 **涉及文件：** `web/src/`

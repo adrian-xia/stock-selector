@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Button, Card, DatePicker, Form, InputNumber, message, Modal,
   Progress, Select, Space, Table, Tag, Tooltip,
 } from 'antd'
 import { PlayCircleOutlined, EyeOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import dayjs from 'dayjs'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   runOptimization,
   fetchOptimizationList,
@@ -13,6 +13,7 @@ import {
   fetchParamSpace,
 } from '../../api/optimization'
 import { fetchStrategyList } from '../../api/strategy'
+import QueryErrorAlert from '../../components/common/QueryErrorAlert'
 import type {
   OptimizationListItem,
   OptimizationResultItem,
@@ -24,46 +25,41 @@ const { RangePicker } = DatePicker
 
 export default function OptimizationPage() {
   const [form] = Form.useForm()
-  const [strategies, setStrategies] = useState<{ name: string; display_name: string }[]>([])
   const [paramSpace, setParamSpace] = useState<ParamSpace>({})
-  const [taskList, setTaskList] = useState<OptimizationListItem[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [resultModal, setResultModal] = useState<OptimizationResultResponse | null>(null)
+  const queryClient = useQueryClient()
 
-  // 加载策略列表
-  useEffect(() => {
-    fetchStrategyList().then((res) => {
-      const list = (res.strategies ?? res).map((s: any) => ({
-        name: s.name,
-        display_name: s.display_name ?? s.name,
-      }))
-      setStrategies(list)
-    })
-  }, [])
+  // 策略列表
+  const strategiesQuery = useQuery({
+    queryKey: ['strategy-list'],
+    queryFn: () => fetchStrategyList(),
+    staleTime: 60_000,
+    select: (res: any) => (res.strategies ?? res).map((s: any) => ({
+      name: s.name, display_name: s.display_name ?? s.name,
+    })),
+  })
 
-  // 加载任务列表
-  const loadTasks = async (p = page) => {
-    setLoading(true)
-    try {
-      const res = await fetchOptimizationList(p)
-      setTaskList(res.items)
-      setTotal(res.total)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { loadTasks() }, [page])
+  // 任务列表
+  const tasksQuery = useQuery({
+    queryKey: ['optimization-list', page],
+    queryFn: () => fetchOptimizationList(page),
+  })
+  // 提交优化任务
+  const submitMutation = useMutation({
+    mutationFn: runOptimization,
+    onSuccess: () => {
+      message.success('优化任务已提交')
+      setPage(1)
+      queryClient.invalidateQueries({ queryKey: ['optimization-list'] })
+    },
+  })
 
   // 策略选择变化时加载参数空间
   const onStrategyChange = async (name: string) => {
     try {
       const res = await fetchParamSpace(name)
       setParamSpace(res.param_space)
-      // 自动填充参数范围到表单
       const psFields: Record<string, any> = {}
       for (const [key, spec] of Object.entries(res.param_space)) {
         psFields[`ps_${key}_min`] = spec.min
@@ -76,36 +72,28 @@ export default function OptimizationPage() {
     }
   }
 
-  // 提交优化任务
-  const onSubmit = async (values: any) => {
-    setSubmitting(true)
-    try {
-      const ps: ParamSpace = {}
-      for (const key of Object.keys(paramSpace)) {
-        ps[key] = {
-          type: paramSpace[key].type,
-          min: values[`ps_${key}_min`],
-          max: values[`ps_${key}_max`],
-          step: values[`ps_${key}_step`],
-        }
+  // 提交表单
+  const onSubmit = (values: any) => {
+    const ps: ParamSpace = {}
+    for (const key of Object.keys(paramSpace)) {
+      ps[key] = {
+        type: paramSpace[key].type,
+        min: values[`ps_${key}_min`],
+        max: values[`ps_${key}_max`],
+        step: values[`ps_${key}_step`],
       }
-      const [startDate, endDate] = values.dateRange
-      await runOptimization({
-        strategy_name: values.strategy_name,
-        algorithm: values.algorithm,
-        param_space: ps,
-        stock_codes: values.stock_codes.split(/[,，\s]+/).filter(Boolean),
-        start_date: startDate.format('YYYY-MM-DD'),
-        end_date: endDate.format('YYYY-MM-DD'),
-        initial_capital: values.initial_capital ?? 1000000,
-        top_n: values.top_n ?? 20,
-      })
-      message.success('优化任务已提交')
-      loadTasks(1)
-      setPage(1)
-    } finally {
-      setSubmitting(false)
     }
+    const [startDate, endDate] = values.dateRange
+    submitMutation.mutate({
+      strategy_name: values.strategy_name,
+      algorithm: values.algorithm,
+      param_space: ps,
+      stock_codes: values.stock_codes.split(/[,，\s]+/).filter(Boolean),
+      start_date: startDate.format('YYYY-MM-DD'),
+      end_date: endDate.format('YYYY-MM-DD'),
+      initial_capital: values.initial_capital ?? 1000000,
+      top_n: values.top_n ?? 20,
+    })
   }
 
   // 查看结果
@@ -117,7 +105,6 @@ export default function OptimizationPage() {
   const statusColor: Record<string, string> = {
     pending: 'default', running: 'processing', completed: 'success', failed: 'error',
   }
-
   const taskColumns: ColumnsType<OptimizationListItem> = [
     { title: 'ID', dataIndex: 'task_id', width: 60 },
     { title: '策略', dataIndex: 'strategy_name', width: 140 },
@@ -155,17 +142,21 @@ export default function OptimizationPage() {
     { title: '交易数', dataIndex: 'total_trades', width: 70 },
   ]
 
+  const strategies = strategiesQuery.data ?? []
   return (
     <div>
       <Card title="参数优化" style={{ marginBottom: 16 }}>
+        {strategiesQuery.error && (
+          <QueryErrorAlert error={strategiesQuery.error} refetch={strategiesQuery.refetch} message="策略列表加载失败" />
+        )}
         <Form form={form} layout="inline" onFinish={onSubmit}
           initialValues={{ algorithm: 'grid', initial_capital: 1000000, top_n: 20 }}
           style={{ flexWrap: 'wrap', gap: 8 }}
         >
           <Form.Item name="strategy_name" label="策略" rules={[{ required: true }]}>
-            <Select style={{ width: 160 }} placeholder="选择策略"
+            <Select style={{ width: 160 }} placeholder="选择策略" loading={strategiesQuery.isLoading}
               onChange={onStrategyChange}
-              options={strategies.map((s) => ({ value: s.name, label: s.display_name }))}
+              options={strategies.map((s: any) => ({ value: s.name, label: s.display_name }))}
             />
           </Form.Item>
           <Form.Item name="algorithm" label="算法">
@@ -189,7 +180,7 @@ export default function OptimizationPage() {
             <InputNumber min={1} max={100} style={{ width: 80 }} />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={submitting}
+            <Button type="primary" htmlType="submit" loading={submitMutation.isPending}
               icon={<PlayCircleOutlined />}>
               开始优化
             </Button>
@@ -222,17 +213,21 @@ export default function OptimizationPage() {
       </Card>
 
       <Card title="优化任务列表">
-        <Table
-          rowKey="task_id"
-          columns={taskColumns}
-          dataSource={taskList}
-          loading={loading}
-          pagination={{
-            current: page, total, pageSize: 20,
-            onChange: (p) => setPage(p),
-          }}
-          size="small"
-        />
+        {tasksQuery.error ? (
+          <QueryErrorAlert error={tasksQuery.error} refetch={tasksQuery.refetch} />
+        ) : (
+          <Table
+            rowKey="task_id"
+            columns={taskColumns}
+            dataSource={tasksQuery.data?.items ?? []}
+            loading={tasksQuery.isLoading}
+            pagination={{
+              current: page, total: tasksQuery.data?.total ?? 0, pageSize: 20,
+              onChange: (p) => setPage(p),
+            }}
+            size="small"
+          />
+        )}
       </Card>
 
       <Modal

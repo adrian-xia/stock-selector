@@ -1,81 +1,49 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-  Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, Tooltip,
+  Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import ReactECharts from 'echarts-for-react'
+import { useQuery } from '@tanstack/react-query'
 import { fetchNewsList, fetchSentimentSummary, fetchSentimentTrend } from '../../api/news'
+import { mergeChartOption } from '../../utils/chartTheme'
+import QueryErrorAlert from '../../components/common/QueryErrorAlert'
 import type {
   AnnouncementItem,
-  SentimentTrendItem,
   SentimentSummaryItem,
 } from '../../types/news'
 
 export default function NewsPage() {
-  // 新闻列表状态
-  const [newsList, setNewsList] = useState<AnnouncementItem[]>([])
-  const [newsTotal, setNewsTotal] = useState(0)
+  // 筛选状态
   const [newsPage, setNewsPage] = useState(1)
-  const [newsLoading, setNewsLoading] = useState(false)
   const [filterCode, setFilterCode] = useState<string>()
   const [filterSource, setFilterSource] = useState<string>()
-
-  // 情感趋势状态
   const [trendCode, setTrendCode] = useState('000001.SZ')
-  const [trendData, setTrendData] = useState<SentimentTrendItem[]>([])
-  const [trendLoading, setTrendLoading] = useState(false)
-
-  // 每日摘要状态
   const [summaryDate, setSummaryDate] = useState<string>()
-  const [summaryItems, setSummaryItems] = useState<SentimentSummaryItem[]>([])
-  const [summaryLoading, setSummaryLoading] = useState(false)
 
-  // 加载新闻列表
-  const loadNews = async (p = newsPage) => {
-    setNewsLoading(true)
-    try {
-      const res = await fetchNewsList({
-        page: p,
-        page_size: 20,
-        ts_code: filterCode || undefined,
-        source: filterSource || undefined,
-      })
-      setNewsList(res.items)
-      setNewsTotal(res.total)
-    } finally {
-      setNewsLoading(false)
-    }
-  }
+  // 新闻列表
+  const newsQuery = useQuery({
+    queryKey: ['news-list', newsPage, filterCode, filterSource],
+    queryFn: () => fetchNewsList({
+      page: newsPage, page_size: 20,
+      ts_code: filterCode || undefined,
+      source: filterSource || undefined,
+    }),
+  })
 
-  // 加载情感趋势
-  const loadTrend = async (code = trendCode) => {
-    if (!code) return
-    setTrendLoading(true)
-    try {
-      const res = await fetchSentimentTrend(code, 30)
-      setTrendData(res)
-    } finally {
-      setTrendLoading(false)
-    }
-  }
+  // 情感趋势
+  const trendQuery = useQuery({
+    queryKey: ['sentiment-trend', trendCode],
+    queryFn: () => fetchSentimentTrend(trendCode, 30),
+    enabled: !!trendCode,
+  })
 
-  // 加载每日摘要
-  const loadSummary = async (dt?: string) => {
-    setSummaryLoading(true)
-    try {
-      const res = await fetchSentimentSummary(dt, 20)
-      setSummaryItems(res.items)
-      if (res.trade_date && !dt) setSummaryDate(res.trade_date)
-    } finally {
-      setSummaryLoading(false)
-    }
-  }
-
-  useEffect(() => { loadNews() }, [newsPage, filterCode, filterSource])
-  useEffect(() => { loadTrend() }, [trendCode])
-  useEffect(() => { loadSummary(summaryDate) }, [summaryDate])
-
+  // 每日摘要
+  const summaryQuery = useQuery({
+    queryKey: ['sentiment-summary', summaryDate],
+    queryFn: () => fetchSentimentSummary(summaryDate, 20),
+  })
   // 情感标签颜色
   const labelColor = (label: string | null) => {
     if (label === '利好') return 'green'
@@ -84,7 +52,6 @@ export default function NewsPage() {
     return 'default'
   }
 
-  // 新闻列表列定义
   const newsColumns: ColumnsType<AnnouncementItem> = [
     { title: '股票代码', dataIndex: 'ts_code', width: 110 },
     {
@@ -104,7 +71,6 @@ export default function NewsPage() {
     },
   ]
 
-  // 摘要列定义
   const summaryColumns: ColumnsType<SentimentSummaryItem> = [
     { title: '股票代码', dataIndex: 'ts_code', width: 110 },
     {
@@ -120,44 +86,34 @@ export default function NewsPage() {
     { title: '中性', dataIndex: 'neutral_count', width: 60 },
   ]
 
-  // 情感趋势图配置
-  const trendOption = {
-    tooltip: { trigger: 'axis' as const },
+  const trendData = trendQuery.data ?? []
+  const trendOption = mergeChartOption({
+    tooltip: { trigger: 'axis' },
     legend: { data: ['平均情感', '新闻数'] },
-    xAxis: {
-      type: 'category' as const,
-      data: trendData.map((d) => d.trade_date),
-    },
+    xAxis: { type: 'category', data: trendData.map((d) => d.trade_date) },
     yAxis: [
-      { type: 'value' as const, name: '情感分数', min: -1, max: 1 },
-      { type: 'value' as const, name: '新闻数' },
+      { type: 'value', name: '情感分数', min: -1, max: 1 },
+      { type: 'value', name: '新闻数' },
     ],
     series: [
       {
-        name: '平均情感',
-        type: 'line',
-        data: trendData.map((d) => d.avg_sentiment),
-        smooth: true,
-        itemStyle: { color: '#1890ff' },
+        name: '平均情感', type: 'line', data: trendData.map((d) => d.avg_sentiment),
+        smooth: true, itemStyle: { color: '#1890ff' },
         markLine: {
           data: [
             { yAxis: 0.2, lineStyle: { color: '#52c41a', type: 'dashed' as const } },
             { yAxis: -0.2, lineStyle: { color: '#ff4d4f', type: 'dashed' as const } },
           ],
-          silent: true,
-          label: { show: false },
+          silent: true, label: { show: false },
         },
       },
       {
-        name: '新闻数',
-        type: 'bar',
-        yAxisIndex: 1,
+        name: '新闻数', type: 'bar', yAxisIndex: 1,
         data: trendData.map((d) => d.news_count),
         itemStyle: { color: '#91caff', opacity: 0.5 },
       },
     ],
-  }
-
+  })
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* 情感趋势图 + 每日摘要 */}
@@ -174,9 +130,10 @@ export default function NewsPage() {
                 allowClear
               />
             }
-            loading={trendLoading}
           >
-            {trendData.length > 0 ? (
+            {trendQuery.error ? (
+              <QueryErrorAlert error={trendQuery.error} refetch={trendQuery.refetch} />
+            ) : trendData.length > 0 ? (
               <ReactECharts option={trendOption} style={{ height: 300 }} />
             ) : (
               <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无数据</div>
@@ -195,15 +152,19 @@ export default function NewsPage() {
               />
             }
           >
-            <Table
-              columns={summaryColumns}
-              dataSource={summaryItems}
-              rowKey="ts_code"
-              size="small"
-              loading={summaryLoading}
-              pagination={false}
-              scroll={{ y: 260 }}
-            />
+            {summaryQuery.error ? (
+              <QueryErrorAlert error={summaryQuery.error} refetch={summaryQuery.refetch} />
+            ) : (
+              <Table
+                columns={summaryColumns}
+                dataSource={summaryQuery.data?.items ?? []}
+                rowKey="ts_code"
+                size="small"
+                loading={summaryQuery.isLoading}
+                pagination={false}
+                scroll={{ y: 260 }}
+              />
+            )}
           </Card>
         </Col>
       </Row>
@@ -233,20 +194,24 @@ export default function NewsPage() {
           </Space>
         }
       >
-        <Table
-          columns={newsColumns}
-          dataSource={newsList}
-          rowKey="id"
-          loading={newsLoading}
-          pagination={{
-            current: newsPage,
-            total: newsTotal,
-            pageSize: 20,
-            onChange: (p) => setNewsPage(p),
-            showTotal: (t) => `共 ${t} 条`,
-          }}
-          size="small"
-        />
+        {newsQuery.error ? (
+          <QueryErrorAlert error={newsQuery.error} refetch={newsQuery.refetch} />
+        ) : (
+          <Table
+            columns={newsColumns}
+            dataSource={newsQuery.data?.items ?? []}
+            rowKey="id"
+            loading={newsQuery.isLoading}
+            pagination={{
+              current: newsPage,
+              total: newsQuery.data?.total ?? 0,
+              pageSize: 20,
+              onChange: (p) => setNewsPage(p),
+              showTotal: (t) => `共 ${t} 条`,
+            }}
+            size="small"
+          />
+        )}
       </Card>
     </div>
   )

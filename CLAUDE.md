@@ -48,7 +48,7 @@ docs/design/
 - 新闻舆情：✅ V2 已实施，东方财富/淘股吧/雪球三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
-- 前端：选股工作台 + 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板，WebSocket 实时推送
+- 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板，WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
 - 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log）
 - 不做：用户权限、高手跟投
 
@@ -62,9 +62,9 @@ docs/design/
 - **性能优化：** 按日期批量获取全市场数据 + 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
 - **自动更新：** 数据嗅探 + 智能重试 + 任务状态管理（Redis）+ 通知报警（V1 日志，V2 企业微信/钉钉）+ 交易日历自动更新（每日获取未来 90 天数据）
 - **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
-- **前端：** React 18 + TypeScript + Ant Design 5 + ECharts
-- **前端构建：** Vite 6 + pnpm
-- **前端数据层：** TanStack React Query + Axios + Zustand
+- **前端：** React 19 + TypeScript + Ant Design 6 + ECharts 6
+- **前端构建：** Vite 7 + pnpm
+- **前端数据层：** TanStack React Query 5 + Axios + Zustand 5
 - **包管理：** uv（后端）、pnpm（前端）
 - **部署：** 直接运行（uvicorn），不用 Docker/Nginx
 
@@ -341,15 +341,20 @@ stock-selector/
 ├── web/                      # 前端（React + TypeScript）
 │   ├── src/
 │   │   ├── api/              # API 请求函数（Axios）
+│   │   ├── components/
+│   │   │   ├── common/       # 公共组件（ErrorBoundary、PageLoading、QueryErrorAlert）
+│   │   │   └── charts/       # 图表组件（KlineChart）
+│   │   ├── hooks/            # 自定义 Hooks（useWebSocket）
 │   │   ├── layouts/          # 布局组件（AppLayout + Sider）
 │   │   ├── pages/
-│   │   │   ├── workbench/    # 选股工作台页面
+│   │   │   ├── workbench/    # 选股工作台页面（含 K 线图）
 │   │   │   ├── backtest/     # 回测中心页面
 │   │   │   ├── optimization/ # 参数优化页面
 │   │   │   ├── news/         # 新闻舆情页面
-│   │   │   └── monitor/      # 实时监控看板
+│   │   │   └── monitor/      # 实时监控看板（WatchlistTable + AlertRulePanel + AlertHistoryPanel）
+│   │   ├── utils/            # 工具函数（chartTheme）
 │   │   └── types/            # TypeScript 类型定义
-│   └── vite.config.ts        # Vite 配置（含 /api 代理）
+│   └── vite.config.ts        # Vite 配置（含 /api 代理 + 代码分割）
 ├── tests/
 │   ├── fixtures/             # 测试数据
 │   ├── unit/                 # 单元测试
