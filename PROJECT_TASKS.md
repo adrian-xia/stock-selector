@@ -324,14 +324,15 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### Change 13: `perf-optimization` — 性能优化 ✅ 已完成
 
-**目标：** 提升数据写入和查询性能，优化存储空间
+**完成日期：** 2026-02-22
 
-**已实施：**
-- ✅ PostgreSQL COPY 协议替代 INSERT（临时表+COPY+UPSERT 三步法，自动降级到 INSERT）
-- ✅ 全量导入前删除索引，导入后重建（with_index_management 上下文管理器）
-- ✅ TimescaleDB 超表迁移：stock_daily/technical_daily 转 Hypertable + 压缩策略（可选依赖）
-- ✅ 查询优化：P0-P3 raw 表补充 (ts_code, trade_date) 复合索引
-- ✅ 连接池调优：pool_size=10, max_overflow=20
+**实施内容：**
+- PostgreSQL COPY 协议替代 INSERT（临时表+COPY+UPSERT 三步法，自动降级到 INSERT）
+- 全量导入前删除索引，导入后重建（with_index_management 上下文管理器）
+- TimescaleDB 超表迁移：stock_daily/technical_daily 转 Hypertable + 压缩策略（可选依赖）
+- 查询优化：P0-P3 raw 表补充 (ts_code, trade_date) 复合索引
+- 连接池调优：pool_size=10, max_overflow=20
+- 单元测试 13 个（copy_writer 7 个 + index_mgmt 6 个）
 
 **依赖：** 无
 **涉及文件：** `app/data/copy_writer.py`, `app/data/index_mgmt.py`, `app/data/etl.py`, `app/data/manager.py`, `app/data/batch.py`, `app/database.py`, `app/config.py`, `alembic/`
@@ -341,13 +342,14 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### Change 14: `monitoring-logging` — 监控与日志增强 ✅ 已完成
 
-**目标：** 提升系统可观测性，实现结构化日志和健康检查
+**完成日期：** 2026-02-22
 
-**已实施：**
-- ✅ 结构化日志：JSONFormatter + 环境感知格式切换（development=text, production=json）+ 日志轮转（50MB×5 + 错误日志 20MB×10）
-- ✅ API 性能中间件：RequestPerformanceMiddleware 记录请求响应时间，慢请求告警（可配置阈值）
-- ✅ 深度健康检查：/health 端点检测数据库、Redis、Tushare，返回 healthy/degraded/unhealthy 状态
-- ✅ 任务执行日志：task_execution_log 表 + TaskLogger（start/finish/track）+ 盘后链路集成 + 查询 API
+**实施内容：**
+- 结构化日志：JSONFormatter + 环境感知格式切换（development=text, production=json）+ 日志轮转（50MB×5 + 错误日志 20MB×10）
+- API 性能中间件：RequestPerformanceMiddleware 记录请求响应时间，慢请求告警（可配置阈值）
+- 深度健康检查：/health 端点检测数据库、Redis、Tushare，返回 healthy/degraded/unhealthy 状态
+- 任务执行日志：task_execution_log 表 + TaskLogger（start/finish/track）+ 盘后链路集成 + 查询 API
+- 单元测试 20 个（logger 9 个 + middleware 3 个 + health 4 个 + task_logger 4 个）
 
 **依赖：** 无
 **涉及文件：** `app/logger.py`, `app/api/health.py`, `app/api/middleware.py`, `app/api/task_log.py`, `app/scheduler/task_logger.py`, `app/scheduler/jobs.py`, `app/config.py`, `app/main.py`, `alembic/`
@@ -357,14 +359,14 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 
 ### Change 15: `frontend-enhancement` — 前端体验优化 ✅ 已完成
 
-**目标：** 提升前端用户体验和数据可视化能力
+**完成日期：** 2026-02-22
 
-**范围：**
-- ✅ UX 优化：全局 ErrorBoundary 错误边界、统一加载/错误 UI 组件（PageLoading、QueryErrorAlert）
-- ✅ 数据可视化增强：K 线图组件（蜡烛图 + 成交量 + MA 均线 + dataZoom）、ECharts 公共主题配置
-- ✅ 前端性能：路由级 React.lazy 懒加载、Vite 手动 chunk 分割（vendor-react/antd/echarts）
-- ✅ React Query 统一：news/optimization/monitor 三个页面迁移到 React Query
-- ✅ MonitorPage 拆分为 WatchlistTable + AlertRulePanel + AlertHistoryPanel 子组件
+**实施内容：**
+- UX 优化：全局 ErrorBoundary 错误边界、统一加载/错误 UI 组件（PageLoading、QueryErrorAlert）
+- 数据可视化增强：K 线图组件（蜡烛图 + 成交量 + MA 均线 + dataZoom）、ECharts 公共主题配置
+- 前端性能：路由级 React.lazy 懒加载、Vite 手动 chunk 分割（vendor-react/antd/echarts）
+- React Query 统一：news/optimization/monitor 三个页面迁移到 React Query
+- MonitorPage 拆分为 WatchlistTable + AlertRulePanel + AlertHistoryPanel 子组件
 
 **依赖：** 无
 **涉及文件：** `web/src/`
