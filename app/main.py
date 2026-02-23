@@ -69,8 +69,8 @@ async def _sync_strategies_to_db() -> None:
         for meta in all_meta:
             await session.execute(
                 text("""
-                    INSERT INTO strategies (name, category, description, params)
-                    VALUES (:name, :category, :description, :params)
+                    INSERT INTO strategies (name, category, description, params, is_enabled)
+                    VALUES (:name, :category, :description, :params, true)
                     ON CONFLICT (name) DO UPDATE SET
                         category = EXCLUDED.category,
                         description = EXCLUDED.description,

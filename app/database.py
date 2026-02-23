@@ -56,13 +56,13 @@ async def get_raw_connection():
     conn = await engine.raw_connection()
     try:
         # 获取底层 asyncpg 连接（剥离 SQLAlchemy 包装）
-        raw_conn = conn.connection._connection
+        raw_conn = conn.driver_connection
         yield raw_conn
     except Exception:
         logger.error("[get_raw_connection] COPY 操作异常，连接将被释放")
         raise
     finally:
-        await conn.close()
+        conn.close()
 
 
 async def is_timescaledb_available(eng: AsyncEngine | None = None) -> bool:

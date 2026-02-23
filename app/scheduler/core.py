@@ -135,7 +135,7 @@ async def sync_stock_list_on_startup() -> None:
 async def sync_from_progress(skip_check: bool = False) -> None:
     """启动时基于进度表恢复同步（替代旧的 check_data_integrity）。
 
-    流程：获取同步锁 → reset_stale_status → 初始化进度表 →
+    流程：交易日检查 → 获取同步锁 → reset_stale_status → 初始化进度表 →
     同步退市状态 → 查询待处理股票 → 批量处理 → 完成率日志 → 释放锁
 
     Args:
@@ -155,6 +155,8 @@ async def sync_from_progress(skip_check: bool = False) -> None:
         from app.data.manager import DataManager
         from app.data.tushare import TushareClient
         from app.database import async_session_factory
+        from app.models.market import TradeCalendar
+        from sqlalchemy import select
 
         client = TushareClient()
         manager = DataManager(
@@ -162,6 +164,30 @@ async def sync_from_progress(skip_check: bool = False) -> None:
             clients={"tushare": client},
             primary="tushare",
         )
+
+        # 查询最近的交易日作为目标日期（避免非交易日无效同步）
+        today = date.today()
+        async with async_session_factory() as session:
+            stmt = (
+                select(TradeCalendar.cal_date)
+                .where(
+                    TradeCalendar.is_open == True,
+                    TradeCalendar.cal_date <= today,
+                )
+                .order_by(TradeCalendar.cal_date.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            latest_trade_date = result.scalar_one_or_none()
+
+        if latest_trade_date is None:
+            elapsed = time.monotonic() - start
+            logger.warning("[启动同步] 交易日历为空，跳过（耗时 %.1fs）", elapsed)
+            return
+
+        target_date = latest_trade_date
+        if target_date != today:
+            logger.info("[启动同步] 今天非交易日，使用最近交易日：%s", target_date)
 
         # 获取同步锁
         if not await manager.acquire_sync_lock():
@@ -179,7 +205,6 @@ async def sync_from_progress(skip_check: bool = False) -> None:
             delisted_result = await manager.sync_delisted_status()
 
             # 查询待处理股票
-            target_date = date.today()
             needing_sync = await manager.get_stocks_needing_sync(target_date)
 
             if not needing_sync:
