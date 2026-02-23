@@ -197,14 +197,17 @@ async def batch_insert(
     if use_copy:
         try:
             from app.data.copy_writer import copy_insert
-            return await copy_insert(table, rows, conflict="nothing")
+            return await copy_insert(table, rows, conflict="update")
         except Exception as e:
             logger.warning(
                 "[batch_insert] COPY 协议写入 %s 失败，降级到 INSERT: %s",
                 table.name, e,
             )
 
-    # Fallback: 原有 INSERT ... ON CONFLICT DO NOTHING
+    # Fallback: INSERT ... ON CONFLICT DO UPDATE
+    pk_cols = [c.name for c in table.primary_key.columns]
+    update_cols = [c.name for c in table.columns if c.name not in pk_cols and c.name != "fetched_at"]
+
     num_columns = len(rows[0])
     max_batch = 32000 // num_columns
     batch_size = min(batch_size, max_batch)
@@ -212,7 +215,14 @@ async def batch_insert(
     total = 0
     for i in range(0, len(rows), batch_size):
         batch = rows[i : i + batch_size]
-        stmt = pg_insert(table).values(batch).on_conflict_do_nothing()
+        stmt = pg_insert(table).values(batch)
+        if pk_cols and update_cols:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=pk_cols,
+                set_={col: getattr(stmt.excluded, col) for col in update_cols},
+            )
+        elif pk_cols:
+            stmt = stmt.on_conflict_do_nothing()
         await session.execute(stmt)
         total += len(batch)
 

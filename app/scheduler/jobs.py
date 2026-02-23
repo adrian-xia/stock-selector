@@ -98,37 +98,64 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 timeout=settings.sync_batch_timeout,
             )
 
-        # 步骤 3.5：资金流向同步（非关键，失败不阻断）
-        moneyflow_start = time.monotonic()
+        # 步骤 3.1：P1 财务数据同步（按季度判断，非关键，失败不阻断）
+        p1_start = time.monotonic()
         try:
-            mf_result = await manager.sync_raw_moneyflow(target)
-            tl_result = await manager.sync_raw_top_list(target)
-            etl_result = await manager.etl_moneyflow(target)
-            logger.info(
-                "[资金流向同步] 完成：raw=%s, top=%s, etl=%s，耗时 %.1fs",
-                mf_result, tl_result, etl_result, time.monotonic() - moneyflow_start,
-            )
+            # 判断当前季度的报告期（上一季度末）
+            # Q1(1-3月)→上年12.31, Q2(4-6月)→3.31, Q3(7-9月)→6.30, Q4(10-12月)→9.30
+            month = target.month
+            year = target.year
+            if month <= 3:
+                period = f"{year - 1}1231"
+            elif month <= 6:
+                period = f"{year}0331"
+            elif month <= 9:
+                period = f"{year}0630"
+            else:
+                period = f"{year}0930"
+
+            # 每季度首月执行（1/4/7/10月），避免每天重复拉取
+            if month in (1, 4, 7, 10):
+                raw_result = await manager.sync_raw_fina(period)
+                etl_result = await manager.etl_fina(period)
+                logger.info(
+                    "[P1财务数据] 完成：period=%s, raw=%s, etl=%s，耗时 %.1fs",
+                    period, raw_result, etl_result, time.monotonic() - p1_start,
+                )
+            else:
+                logger.debug("[P1财务数据] 非季度首月，跳过")
         except Exception:
             logger.warning(
-                "[资金流向同步] 失败（继续执行），耗时 %.1fs\n%s",
-                time.monotonic() - moneyflow_start, traceback.format_exc(),
+                "[P1财务数据] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - p1_start, traceback.format_exc(),
             )
 
-        # 步骤 3.6：指数数据同步（非关键，失败不阻断）
-        index_start = time.monotonic()
+        # 步骤 3.5：P2 资金流向同步（非关键，失败不阻断）
+        p2_start = time.monotonic()
         try:
-            idx_daily = await manager.sync_raw_index_daily(target)
-            idx_weight = await manager.sync_raw_index_weight(target)
-            idx_tech = await manager.sync_raw_index_technical(target)
-            idx_etl = await manager.etl_index(target)
+            p2_result = await manager.sync_raw_tables("p2", target, target, mode="incremental")
             logger.info(
-                "[指数数据同步] 完成：daily=%s, weight=%s, tech=%s, etl=%s，耗时 %.1fs",
-                idx_daily, idx_weight, idx_tech, idx_etl, time.monotonic() - index_start,
+                "[P2资金流向] 完成：%s，耗时 %.1fs",
+                p2_result, time.monotonic() - p2_start,
             )
         except Exception:
             logger.warning(
-                "[指数数据同步] 失败（继续执行），耗时 %.1fs\n%s",
-                time.monotonic() - index_start, traceback.format_exc(),
+                "[P2资金流向] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - p2_start, traceback.format_exc(),
+            )
+
+        # 步骤 3.6：P3 指数数据同步（非关键，失败不阻断）
+        p3_start = time.monotonic()
+        try:
+            p3_result = await manager.sync_raw_tables("p3_daily", target, target, mode="incremental")
+            logger.info(
+                "[P3指数数据] 完成：%s，耗时 %.1fs",
+                p3_result, time.monotonic() - p3_start,
+            )
+        except Exception:
+            logger.warning(
+                "[P3指数数据] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - p3_start, traceback.format_exc(),
             )
 
         # 步骤 3.7：板块数据同步（非关键，失败不阻断）
@@ -136,6 +163,24 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         try:
             td_str = target.strftime("%Y%m%d")
             concept_daily = await manager.sync_concept_daily(trade_date=td_str)
+
+            # 同步板块成分股（每周一执行，避免每天重复拉取）
+            if target.weekday() == 0:  # 周一
+                from sqlalchemy import text as sa_text
+                async with async_session_factory() as session:
+                    rows = await session.execute(
+                        sa_text("SELECT ts_code FROM concept_index")
+                    )
+                    concept_codes = [r.ts_code for r in rows]
+                member_ok, member_fail = 0, 0
+                for code in concept_codes:
+                    try:
+                        await manager.sync_concept_member(code)
+                        member_ok += 1
+                    except Exception:
+                        member_fail += 1
+                logger.info("[板块成分股] 完成：成功 %d，失败 %d", member_ok, member_fail)
+
             concept_tech = await manager.update_concept_indicators(target)
             logger.info(
                 "[板块数据同步] 完成：daily=%s, tech=%s，耗时 %.1fs",
@@ -159,6 +204,27 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
             logger.warning(
                 "[P5核心数据同步] 失败（继续执行），耗时 %.1fs\n%s",
                 time.monotonic() - p5_start, traceback.format_exc(),
+            )
+
+        # 步骤 3.85：raw 追平检查（扫描 raw_sync_progress，补齐遗漏的表）
+        gap_start = time.monotonic()
+        try:
+            gap_result = await manager.sync_raw_tables(
+                "all", target, target, mode="gap_fill"
+            )
+            if gap_result:
+                gap_filled = sum(
+                    1 for v in gap_result.values()
+                    if isinstance(v, dict) and v.get("rows", 0) > 0
+                )
+                logger.info(
+                    "[raw追平检查] 完成：检查 %d 张表，补齐 %d 张，耗时 %.1fs",
+                    len(gap_result), gap_filled, time.monotonic() - gap_start,
+                )
+        except Exception:
+            logger.warning(
+                "[raw追平检查] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - gap_start, traceback.format_exc(),
             )
 
         # 步骤 3.9：新闻采集与情感分析（受 news_crawl_enabled 控制，失败不阻断）

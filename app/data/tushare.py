@@ -1481,11 +1481,12 @@ class TushareClient:
         df = await self._call("kpl_concept", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
-    async def fetch_raw_broker_recommend(self, ts_code: str = "", date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
+    async def fetch_raw_broker_recommend(self, ts_code: str = "", month: str = "", date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取券商推荐（对应 broker_recommend 接口）。
 
         Args:
             ts_code: 股票代码
+            month: 月份（YYYYMM）
             date: 推荐日期（YYYYMMDD）
             start_date: 开始日期（YYYYMMDD）
             end_date: 结束日期（YYYYMMDD）
@@ -1493,7 +1494,7 @@ class TushareClient:
         Returns:
             券商推荐原始数据列表
         """
-        df = await self._call("broker_recommend", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
+        df = await self._call("broker_recommend", ts_code=ts_code, month=month, date=date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_ths_hot(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:

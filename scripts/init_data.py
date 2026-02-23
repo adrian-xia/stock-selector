@@ -185,82 +185,72 @@ async def sync_daily_data(
     end_date: date,
     stock_count: int,
 ) -> dict:
-    """步骤 3：同步日线数据。
+    """步骤 3：通过统一入口同步所有 raw 表 + ETL。
 
     Returns:
-        dict: {"success": int, "failed": int}
+        dict: 各组同步结果
     """
     print("\n" + "=" * 60)
-    print("步骤 3/4: 同步日线数据")
+    print("步骤 3/4: 同步全量数据（raw-first）")
     print("=" * 60)
     print(f"日期范围：{start_date} ~ {end_date}")
-    print(f"股票数量：{stock_count} 只")
-    print()
-    print("⏳ 正在同步日线数据，请耐心等待...")
-    print("   （根据数据范围和网络速度，可能需要数分钟到数小时）")
     print()
 
-    # 获取交易日列表
-    trading_dates = await manager.get_trade_calendar(start_date, end_date)
-
-    if not trading_dates:
-        print("✗ 错误：指定日期范围内无交易日")
-        return {"success": 0, "failed": 0}
-
-    print(f"共需同步 {len(trading_dates)} 个交易日")
-    print()
-
-    # 逐个交易日同步（sync_raw_daily + etl_daily）
-    total_success = 0
-    total_failed = 0
     overall_start = time.monotonic()
+    results = {}
 
-    for i, trade_date in enumerate(trading_dates, 1):
-        date_start = time.monotonic()
-
-        try:
-            # 1. 同步原始数据到 raw 表
-            raw_result = await manager.sync_raw_daily(trade_date)
-
-            # 2. ETL 清洗到业务表
-            etl_result = await manager.etl_daily(trade_date)
-
-            date_elapsed = time.monotonic() - date_start
-            success_count = etl_result.get("inserted", 0)
-            total_success += success_count
-
-            # 每 10 个交易日显示一次进度
+    # P0: 日线数据（按交易日逐日同步，显示进度）
+    print("⏳ [P0] 同步日线数据...")
+    trading_dates = await manager.get_trade_calendar(start_date, end_date)
+    if trading_dates:
+        p0_success, p0_failed = 0, 0
+        for i, trade_date in enumerate(trading_dates, 1):
+            try:
+                await manager.sync_raw_daily(trade_date)
+                await manager.etl_daily(trade_date)
+                p0_success += 1
+            except Exception as e:
+                logger.error("P0 日期 %s 失败：%s", trade_date, e)
+                p0_failed += 1
             if i % 10 == 0 or i == len(trading_dates):
                 progress = (i / len(trading_dates)) * 100
-                print(f"[{i}/{len(trading_dates)}] {progress:.1f}% - "
-                      f"最新日期：{trade_date}，"
-                      f"写入 {success_count} 条，"
-                      f"耗时 {int(date_elapsed)}秒")
+                print(f"   [{i}/{len(trading_dates)}] {progress:.1f}% - {trade_date}")
+        results["p0"] = {"success": p0_success, "failed": p0_failed}
+        print(f"✓ [P0] 完成：成功 {p0_success} 天，失败 {p0_failed} 天")
+    else:
+        print("✗ [P0] 无交易日数据")
 
-                # 估算剩余时间
-                if i < len(trading_dates):
-                    avg_time = (time.monotonic() - overall_start) / i
-                    remaining_time = int(avg_time * (len(trading_dates) - i))
-                    remaining_minutes = remaining_time // 60
-                    remaining_seconds = remaining_time % 60
-                    print(f"   预计剩余时间：{remaining_minutes}分{remaining_seconds}秒")
+    # P2: 资金流向
+    print("\n⏳ [P2] 同步资金流向...")
+    try:
+        p2_result = await manager.sync_raw_tables("p2", start_date, end_date, mode="full")
+        results["p2"] = p2_result
+        print(f"✓ [P2] 完成")
+    except Exception as e:
+        print(f"✗ [P2] 失败：{e}")
 
-        except Exception as e:
-            logger.error("同步日期 %s 失败：%s", trade_date, e)
-            print(f"✗ 日期 {trade_date} 同步失败：{e}")
-            total_failed += 1
+    # P3: 指数数据
+    print("\n⏳ [P3] 同步指数数据...")
+    try:
+        p3d_result = await manager.sync_raw_tables("p3_daily", start_date, end_date, mode="full")
+        p3s_result = await manager.sync_raw_tables("p3_static", start_date, end_date, mode="full")
+        results["p3"] = {"daily": p3d_result, "static": p3s_result}
+        print(f"✓ [P3] 完成")
+    except Exception as e:
+        print(f"✗ [P3] 失败：{e}")
+
+    # P5: 扩展数据
+    print("\n⏳ [P5] 同步扩展数据...")
+    try:
+        p5_result = await manager.sync_raw_tables("p5", start_date, end_date, mode="full")
+        results["p5"] = p5_result
+        print(f"✓ [P5] 完成")
+    except Exception as e:
+        print(f"✗ [P5] 失败：{e}")
 
     overall_elapsed = int(time.monotonic() - overall_start)
-    overall_minutes = overall_elapsed // 60
-    overall_seconds = overall_elapsed % 60
-
-    print()
-    print(f"✓ 日线数据同步完成：")
-    print(f"   成功：{total_success} 条记录")
-    print(f"   失败：{total_failed} 个交易日")
-    print(f"   总耗时：{overall_minutes}分{overall_seconds}秒")
-
-    return {"success": total_success, "failed": total_failed}
+    print(f"\n✓ 全量数据同步完成，耗时 {overall_elapsed // 60}分{overall_elapsed % 60}秒")
+    return results
 
 
 async def compute_indicators() -> dict:
@@ -332,9 +322,9 @@ async def main():
     print(f"预计交易日：约 {int((end_date - start_date).days / 365 * 250)} 个")
     print()
     print("初始化流程：")
-    print("  1. 同步股票列表")
-    print("  2. 同步交易日历")
-    print("  3. 同步日线数据（耗时较长）")
+    print("  1. 同步股票列表（raw-first）")
+    print("  2. 同步交易日历（raw-first）")
+    print("  3. 同步全量数据（P0 日线 + P2 资金 + P3 指数 + P5 扩展）")
     print("  4. 计算技术指标")
     print()
     confirm = input("确认开始初始化？(y/n): ").strip().lower()
@@ -369,7 +359,7 @@ async def main():
         print("=" * 60)
         print(f"股票列表：{stock_count} 只")
         print(f"交易日历：{calendar_count} 个交易日")
-        print(f"日线数据：成功 {daily_result['success']} 条记录，失败 {daily_result['failed']} 个交易日")
+        print(f"数据同步：P0/P2/P3/P5 全量完成")
         print(f"技术指标：成功 {indicator_result['success']} 只，失败 {indicator_result['failed']} 只")
         print(f"总耗时：{overall_minutes}分{overall_seconds}秒")
         print()

@@ -56,9 +56,17 @@ async def copy_insert(
     start = time.monotonic()
     table_name = table.name
 
-    # 获取列信息
-    columns = [c.name for c in table.columns]
+    # 获取列信息：排除有 server_default 且数据中未提供值的列（COPY 不触发 DEFAULT）
+    all_columns = [c.name for c in table.columns]
     pk_cols = [c.name for c in table.primary_key.columns]
+
+    # 检查第一行数据中实际提供了哪些列
+    provided_keys = set(rows[0].keys()) if rows else set()
+    # server_default 列：如果数据中未提供，则排除（如 fetched_at, created_at, updated_at）
+    columns = [
+        c.name for c in table.columns
+        if c.name in provided_keys or c.server_default is None
+    ]
 
     processed = 0
 
@@ -76,11 +84,13 @@ async def copy_insert(
 
             tmp_table = f"_tmp_{table_name}"
 
-            # 1. 创建临时表（与目标表同结构）
+            # 1. 创建临时表（不使用 ON COMMIT DROP，因为 asyncpg 连接可能在自动提交模式）
+            await raw_conn.execute(
+                f'DROP TABLE IF EXISTS "{tmp_table}"'
+            )
             await raw_conn.execute(
                 f'CREATE TEMP TABLE "{tmp_table}" '
-                f'(LIKE "{table_name}" INCLUDING DEFAULTS) '
-                f"ON COMMIT DROP"
+                f'(LIKE "{table_name}" INCLUDING DEFAULTS)'
             )
 
             try:

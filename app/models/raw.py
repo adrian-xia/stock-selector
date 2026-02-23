@@ -1463,9 +1463,9 @@ class RawTushareStockCompany(Base):
 
     ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
     exchange: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    chairman: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    manager: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    secretary: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chairman: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    manager: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    secretary: Mapped[str | None] = mapped_column(String(256), nullable=True)
     reg_capital: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     setup_date: Mapped[str | None] = mapped_column(String(8), nullable=True)
     province: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -1675,7 +1675,7 @@ class RawTushareHsgtTop10(Base):
 
     ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
     trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
-    market_type: Mapped[str] = mapped_column(String(8), primary_key=True)
+    market_type: Mapped[int] = mapped_column(primary_key=True)
     rank: Mapped[int | None] = mapped_column(nullable=True)
     name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     close: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)

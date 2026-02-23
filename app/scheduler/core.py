@@ -218,13 +218,31 @@ async def sync_from_progress(skip_check: bool = False) -> None:
 
             logger.info("[启动同步] 待同步股票 %d 只", len(needing_sync))
 
-            # 批量处理
+            # 批量处理（P0 日线 raw-first）
             await manager.process_stocks_batch(
                 needing_sync,
                 target_date,
                 concurrency=settings.daily_sync_concurrency,
                 timeout=settings.sync_batch_timeout,
             )
+
+            # raw 表缺口补齐：按优先级 P0 → P2 → P3 → P5 补齐
+            logger.info("[启动同步] 开始 raw 表缺口补齐")
+            from app.config import settings as app_settings
+            data_start = date.fromisoformat(app_settings.data_start_date)
+            for group in ["p2", "p3_daily", "p5"]:
+                try:
+                    gap_result = await manager.sync_raw_tables(
+                        group, data_start, target_date, mode="gap_fill"
+                    )
+                    if gap_result:
+                        filled = sum(
+                            1 for v in gap_result.values()
+                            if isinstance(v, dict) and v.get("rows", 0) > 0
+                        )
+                        logger.info("[启动同步] raw 缺口补齐 %s：%d 张表有数据", group, filled)
+                except Exception:
+                    logger.warning("[启动同步] raw 缺口补齐 %s 失败，继续", group)
 
             # 完成率日志
             summary = await manager.get_sync_summary(target_date)

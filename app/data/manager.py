@@ -48,8 +48,10 @@ from app.models.raw import (
     RawTushareIndexMemberAll,
     RawTushareIndexWeight,
     RawTushareMoneyflow,
+    RawTushareStockBasic,
     RawTushareTopInst,
     RawTushareTopList,
+    RawTushareTradeCal,
     # P5 扩展数据 raw 表
     RawTushareBlockTrade,
     RawTushareDailyShare,
@@ -141,15 +143,25 @@ class DataManager:
     # --- Sync operations ---
 
     async def sync_stock_list(self) -> dict:
-        """Fetch and persist stock list from data source."""
-        async with self._session_factory() as session:
-            raw_rows = await self._primary_client.fetch_stock_list()
-            cleaned = transform_tushare_stock_basic(raw_rows)
+        """Fetch and persist stock list: raw-first (API → raw_tushare_stock_basic → ETL → stocks)."""
+        raw_rows = await self._primary_client.fetch_stock_list()
 
-            # 使用 ON CONFLICT DO UPDATE 确保数据更新
-            count = 0
-            if cleaned:
-                # 每批最多 1000 条，避免参数超限
+        if not raw_rows:
+            logger.warning("[sync_stock_list] 未获取到数据")
+            return {"raw_inserted": 0, "inserted": 0}
+
+        # 1. 写入 raw 表
+        async with self._session_factory() as session:
+            raw_count = await self._upsert_raw(
+                session, RawTushareStockBasic.__table__, raw_rows
+            )
+            await session.commit()
+
+        # 2. ETL 清洗写入 stocks 业务表
+        cleaned = transform_tushare_stock_basic(raw_rows)
+        count = 0
+        if cleaned:
+            async with self._session_factory() as session:
                 batch_size = 1000
                 for i in range(0, len(cleaned), batch_size):
                     batch = cleaned[i : i + batch_size]
@@ -171,28 +183,38 @@ class DataManager:
                     count += len(batch)
                 await session.commit()
 
-            logger.info("Stock list synced: %d records", count)
-            return {"inserted": count}
+        logger.info("Stock list synced: raw=%d, business=%d", raw_count, count)
+        return {"raw_inserted": raw_count, "inserted": count}
 
     async def sync_trade_calendar(
         self, start_date: date | None = None, end_date: date | None = None
     ) -> dict:
-        """Fetch and persist trade calendar."""
+        """Fetch and persist trade calendar: raw-first (API → raw_tushare_trade_cal → ETL → trade_calendar)."""
         if start_date is None:
             start_date = date(1990, 1, 1)
         if end_date is None:
             end_date = date.today() + timedelta(days=90)
 
-        async with self._session_factory() as session:
-            raw_rows = await self._primary_client.fetch_trade_calendar(
-                start_date, end_date
-            )
-            cleaned = transform_tushare_trade_cal(raw_rows)
+        raw_rows = await self._primary_client.fetch_trade_calendar(
+            start_date, end_date
+        )
 
-            # 使用 ON CONFLICT DO UPDATE 确保数据更新，分批插入避免参数超限
-            count = 0
-            if cleaned:
-                # 每批最多 1000 条（3 列 * 1000 = 3000 参数）
+        if not raw_rows:
+            logger.warning("[sync_trade_calendar] 未获取到数据")
+            return {"raw_inserted": 0, "inserted": 0}
+
+        # 1. 写入 raw 表
+        async with self._session_factory() as session:
+            raw_count = await self._upsert_raw(
+                session, RawTushareTradeCal.__table__, raw_rows
+            )
+            await session.commit()
+
+        # 2. ETL 清洗写入 trade_calendar 业务表
+        cleaned = transform_tushare_trade_cal(raw_rows)
+        count = 0
+        if cleaned:
+            async with self._session_factory() as session:
                 batch_size = 1000
                 for i in range(0, len(cleaned), batch_size):
                     batch = cleaned[i : i + batch_size]
@@ -208,27 +230,25 @@ class DataManager:
                     count += len(batch)
                 await session.commit()
 
-            # 计算日期范围
-            if cleaned:
-                dates = [row["cal_date"] for row in cleaned]
-                min_date = min(dates)
-                max_date = max(dates)
-                logger.info(
-                    "Trade calendar synced: %d records (%s to %s)",
-                    count, min_date, max_date
+        # 日志：日期范围和覆盖检查
+        if cleaned:
+            dates = [row["cal_date"] for row in cleaned]
+            min_date = min(dates)
+            max_date = max(dates)
+            logger.info(
+                "Trade calendar synced: raw=%d, business=%d (%s to %s)",
+                raw_count, count, min_date, max_date
+            )
+            days_ahead = (max_date - date.today()).days
+            if days_ahead < 30:
+                logger.warning(
+                    "Trade calendar coverage insufficient: max_date %s is only %d days ahead",
+                    max_date, days_ahead
                 )
+        else:
+            logger.info("Trade calendar synced: raw=%d, business=%d", raw_count, count)
 
-                # 检查未来覆盖是否充足
-                days_ahead = (max_date - date.today()).days
-                if days_ahead < 30:
-                    logger.warning(
-                        "Trade calendar coverage insufficient: max_date %s is only %d days ahead",
-                        max_date, days_ahead
-                    )
-            else:
-                logger.info("Trade calendar synced: %d records", count)
-
-            return {"inserted": count}
+        return {"raw_inserted": raw_count, "inserted": count}
 
     async def sync_daily(
         self,
@@ -236,46 +256,61 @@ class DataManager:
         start_date: date,
         end_date: date,
     ) -> dict:
-        """Fetch daily bars for a single stock using TushareClient."""
+        """Fetch daily bars for a single stock, raw-first: API → raw 表 → ETL → stock_daily。"""
         import time
 
-        # 1. API 调用计时
+        from app.data.tushare import TushareClient
+
+        client: TushareClient = self._primary_client  # type: ignore[assignment]
+        sd = start_date.strftime("%Y%m%d")
+        ed = end_date.strftime("%Y%m%d")
+
+        # 1. 获取三个接口的原始数据
         api_start = time.monotonic()
         try:
-            raw_rows = await self._primary_client.fetch_daily(
-                code, start_date, end_date
+            raw_daily = await client._call("daily", ts_code=code, start_date=sd, end_date=ed)
+            raw_adj = await client._call("adj_factor", ts_code=code, start_date=sd, end_date=ed)
+            raw_basic = await client._call(
+                "daily_basic", ts_code=code, start_date=sd, end_date=ed,
             )
         except Exception as e:
-            raise DataSyncError(
-                f"Tushare failed for {code}: {e}"
-            ) from e
+            raise DataSyncError(f"Tushare failed for {code}: {e}") from e
         api_elapsed = time.monotonic() - api_start
 
-        # 2. 数据清洗计时（fetch_daily 已返回合并后的数据，直接转换）
-        clean_start = time.monotonic()
-        cleaned = transform_tushare_daily(raw_rows, [], [])
-        clean_elapsed = time.monotonic() - clean_start
+        daily_rows = raw_daily.to_dict("records") if not raw_daily.empty else []
+        adj_rows = raw_adj.to_dict("records") if not raw_adj.empty else []
+        basic_rows = raw_basic.to_dict("records") if not raw_basic.empty else []
 
-        if not cleaned:
-            logger.debug(
-                "[sync_daily] %s: API总计=%.2fs, 清洗=%.2fs, 入库=0s (无数据)",
-                code, api_elapsed, clean_elapsed,
-            )
+        if not daily_rows:
+            logger.debug("[sync_daily] %s: API=%.2fs, 无数据", code, api_elapsed)
             return {"inserted": 0, "skipped": 0, "source": "tushare"}
 
-        # 3. 数据库写入计时
-        db_start = time.monotonic()
+        # 2. 写入 raw 表
+        raw_start = time.monotonic()
         async with self._session_factory() as session:
-            count = await batch_insert(
-                session, StockDaily.__table__, cleaned
-            )
-        db_elapsed = time.monotonic() - db_start
+            if daily_rows:
+                await self._upsert_raw(session, RawTushareDaily.__table__, daily_rows)
+            if adj_rows:
+                await self._upsert_raw(session, RawTushareAdjFactor.__table__, adj_rows)
+            if basic_rows:
+                await self._upsert_raw(session, RawTushareDailyBasic.__table__, basic_rows)
+            await session.commit()
+        raw_elapsed = time.monotonic() - raw_start
+
+        # 3. ETL: 从原始数据清洗写入 stock_daily
+        etl_start = time.monotonic()
+        cleaned = transform_tushare_daily(daily_rows, adj_rows, basic_rows)
+        if not cleaned:
+            return {"inserted": 0, "skipped": 0, "source": "tushare"}
+
+        async with self._session_factory() as session:
+            count = await batch_insert(session, StockDaily.__table__, cleaned)
+        etl_elapsed = time.monotonic() - etl_start
 
         logger.debug(
-            "[sync_daily] %s: API总计=%.2fs, 清洗=%.2fs, 入库=%.2fs",
-            code, api_elapsed, clean_elapsed, db_elapsed,
+            "[sync_daily] %s: API=%.2fs, raw=%.2fs, ETL=%.2fs, 写入 %d 条",
+            code, api_elapsed, raw_elapsed, etl_elapsed, count,
         )
-
         return {"inserted": count, "source": "tushare"}
 
     async def sync_raw_daily(self, trade_date: date) -> dict:
@@ -568,6 +603,8 @@ class DataManager:
     async def sync_raw_index_technical(self, trade_date: date) -> dict:
         """按日期获取核心指数技术因子写入 raw 表。
 
+        注意：index_factor_pro 接口可能需要 VIP 权限，不可用时跳过。
+
         Args:
             trade_date: 交易日期
 
@@ -580,9 +617,13 @@ class DataManager:
         td_str = trade_date.strftime("%Y%m%d")
 
         all_rows: list[dict] = []
-        for ts_code in CORE_INDEX_LIST:
-            rows = await client.fetch_raw_index_factor_pro(ts_code, td_str, td_str)
-            all_rows.extend(rows)
+        try:
+            for ts_code in CORE_INDEX_LIST:
+                rows = await client.fetch_raw_index_factor_pro(ts_code, td_str, td_str)
+                all_rows.extend(rows)
+        except Exception as e:
+            logger.warning("[sync_raw_index_technical] index_factor_pro 接口不可用（可能需要 VIP 权限），跳过: %s", e)
+            return {"index_factor_pro": 0}
 
         counts = {"index_factor_pro": 0}
         async with self._session_factory() as session:
@@ -622,13 +663,26 @@ class DataManager:
     async def sync_raw_industry_classify(self) -> dict:
         """全量获取行业分类写入 raw 表。
 
+        尝试获取 L1/L2/L3 三个级别的行业分类并合并。
+
         Returns:
             {"index_classify": int}
         """
         from app.data.tushare import TushareClient
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-        raw_rows = await client.fetch_raw_index_classify()
+
+        # 尝试获取所有级别的行业分类
+        raw_rows: list[dict] = []
+        for level in ["L1", "L2", "L3", ""]:
+            try:
+                rows = await client.fetch_raw_index_classify(level=level)
+                raw_rows.extend(rows)
+            except Exception as e:
+                logger.warning("[sync_raw_industry_classify] level=%s 获取失败: %s", level, e)
+
+        if not raw_rows:
+            logger.warning("[sync_raw_industry_classify] 所有级别均返回 0 行（可能是接口权限限制）")
 
         counts = {"index_classify": 0}
         async with self._session_factory() as session:
@@ -1336,6 +1390,7 @@ class DataManager:
             "indicator_done": indicator_done,
             "failed": failed,
             "completion_rate": completion_rate,
+            "raw_summary": await self._get_raw_sync_summary(target_date),
         }
 
     async def get_failed_stocks(self, max_retries: int) -> list[dict]:
@@ -2439,7 +2494,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_daily_share(td_str)
+        raw_data = await client.fetch_raw_daily_share(trade_date=td_str)
         counts = {"daily_share": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2503,7 +2558,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_hm_list(td_str)
+        raw_data = await client.fetch_raw_hm_list(trade_date=td_str)
         counts = {"hm_list": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2551,7 +2606,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_ths_limit(td_str)
+        raw_data = await client.fetch_raw_ths_limit(trade_date=td_str)
         counts = {"ths_limit": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -3102,11 +3157,11 @@ class DataManager:
         return counts
 
     async def sync_raw_broker_recommend(self, trade_date: date) -> dict:
-        """按日期获取券商推荐写入 raw 表。"""
+        """按月份获取券商推荐写入 raw 表。"""
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-        td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_broker_recommend(date=td_str)
+        month_str = trade_date.strftime("%Y%m")
+        raw_data = await client.fetch_raw_broker_recommend(month=month_str)
         counts = {"broker_recommend": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -3366,3 +3421,308 @@ class DataManager:
         )
         return results
 
+    # ===================================================================
+    # 统一同步入口（Task 3.1-3.4）
+    # ===================================================================
+
+    # 表组映射：每个条目为 (raw_table_name, sync_method_name, freq, etl_method_name|None)
+    # freq: "daily"=按交易日, "static"=无日期参数, "period"=按季度
+    TABLE_GROUP_MAP: dict[str, list[tuple[str, str, str, str | None]]] = {
+        "p0": [
+            ("raw_tushare_daily", "sync_raw_daily", "daily", "etl_daily"),
+        ],
+        "p1": [
+            ("raw_tushare_fina_indicator", "sync_raw_fina", "period", "etl_fina"),
+        ],
+        "p2": [
+            ("raw_tushare_moneyflow", "sync_raw_moneyflow", "daily", None),
+            ("raw_tushare_top_list", "sync_raw_top_list", "daily", "etl_moneyflow"),
+        ],
+        "p3_daily": [
+            ("raw_tushare_index_daily", "sync_raw_index_daily", "daily", None),
+            ("raw_tushare_index_weight", "sync_raw_index_weight", "daily", None),
+            ("raw_tushare_index_factor_pro", "sync_raw_index_technical", "daily", "etl_index"),
+        ],
+        "p3_static": [
+            ("raw_tushare_index_basic", "sync_raw_index_basic", "static", None),
+            ("raw_tushare_index_classify", "sync_raw_industry_classify", "static", None),
+            ("raw_tushare_index_member_all", "sync_raw_industry_member", "static", None),
+        ],
+        "p5": [
+            # 日频核心
+            ("raw_tushare_suspend_d", "sync_raw_suspend_d", "daily", "etl_suspend"),
+            ("raw_tushare_limit_list_d", "sync_raw_limit_list_d", "daily", "etl_limit_list"),
+            ("raw_tushare_margin", "sync_raw_margin", "daily", None),
+            ("raw_tushare_margin_detail", "sync_raw_margin_detail", "daily", None),
+            ("raw_tushare_block_trade", "sync_raw_block_trade", "daily", None),
+            # daily_share: Tushare 无此接口名，已禁用
+            # ("raw_tushare_daily_share", "sync_raw_daily_share", "daily", None),
+            ("raw_tushare_stk_factor", "sync_raw_stk_factor", "daily", None),
+            ("raw_tushare_stk_factor_pro", "sync_raw_stk_factor_pro", "daily", None),
+            # hm_board: Tushare 无此接口名，已禁用
+            # ("raw_tushare_hm_board", "sync_raw_hm_board", "daily", None),
+            ("raw_tushare_hm_list", "sync_raw_hm_list", "daily", None),
+            ("raw_tushare_ths_hot", "sync_raw_ths_hot", "daily", None),
+            ("raw_tushare_dc_hot", "sync_raw_dc_hot", "daily", None),
+            # ths_limit: Tushare 无此接口名，已禁用
+            # ("raw_tushare_ths_limit", "sync_raw_ths_limit", "daily", None),
+            # 日频补充
+            ("raw_tushare_hsgt_top10", "sync_raw_hsgt_top10", "daily", None),
+            ("raw_tushare_ggt_daily", "sync_raw_ggt_daily", "daily", None),
+            ("raw_tushare_ccass_hold", "sync_raw_ccass_hold", "daily", None),
+            ("raw_tushare_ccass_hold_detail", "sync_raw_ccass_hold_detail", "daily", None),
+            ("raw_tushare_hk_hold", "sync_raw_hk_hold", "daily", None),
+            ("raw_tushare_cyq_perf", "sync_raw_cyq_perf", "daily", None),
+            # cyq_chips: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
+            # ("raw_tushare_cyq_chips", "sync_raw_cyq_chips", "daily", None),
+            ("raw_tushare_slb_len", "sync_raw_slb_len", "daily", None),
+            # limit_step: Tushare 接口权限不足，已禁用
+            # ("raw_tushare_limit_step", "sync_raw_limit_step", "daily", None),
+            # hm_detail: Tushare 接口频率限制（每小时 2 次），已禁用
+            # ("raw_tushare_hm_detail", "sync_raw_hm_detail", "daily", None),
+            ("raw_tushare_stk_auction", "sync_raw_stk_auction", "daily", None),
+            # stk_auction_o: Tushare 接口权限不足，已禁用
+            # ("raw_tushare_stk_auction_o", "sync_raw_stk_auction_o", "daily", None),
+            ("raw_tushare_kpl_list", "sync_raw_kpl_list", "daily", None),
+            ("raw_tushare_kpl_concept", "sync_raw_kpl_concept", "daily", None),
+            ("raw_tushare_broker_recommend", "sync_raw_broker_recommend", "daily", None),
+            # 周频/月频
+            ("raw_tushare_weekly", "sync_raw_weekly", "daily", None),
+            ("raw_tushare_monthly", "sync_raw_monthly", "daily", None),
+            ("raw_tushare_ggt_monthly", "sync_raw_ggt_monthly", "daily", None),
+            # 季度
+            ("raw_tushare_top10_holders", "sync_raw_top10_holders", "daily", None),
+            ("raw_tushare_top10_floatholders", "sync_raw_top10_floatholders", "daily", None),
+            ("raw_tushare_stk_holdernumber", "sync_raw_stk_holdernumber", "daily", None),
+            ("raw_tushare_stk_holdertrade", "sync_raw_stk_holdertrade", "daily", None),
+            # 静态
+            ("raw_tushare_stock_company", "sync_raw_stock_company", "static", None),
+            ("raw_tushare_margin_target", "sync_raw_margin_target", "static", None),
+            ("raw_tushare_namechange", "sync_raw_namechange", "static", None),
+            ("raw_tushare_stk_managers", "sync_raw_stk_managers", "static", None),
+            # stk_rewards: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
+            # ("raw_tushare_stk_rewards", "sync_raw_stk_rewards", "static", None),
+            ("raw_tushare_new_share", "sync_raw_new_share", "static", None),
+            # stk_list_his: Tushare 无此接口名，已禁用
+            # ("raw_tushare_stk_list_his", "sync_raw_stk_list_his", "static", None),
+            ("raw_tushare_pledge_stat", "sync_raw_pledge_stat", "static", None),
+            # pledge_detail: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
+            # ("raw_tushare_pledge_detail", "sync_raw_pledge_detail", "static", None),
+            ("raw_tushare_repurchase", "sync_raw_repurchase", "static", None),
+            ("raw_tushare_stk_surv", "sync_raw_stk_surv", "static", None),
+            ("raw_tushare_share_float", "sync_raw_share_float", "daily", None),
+            ("raw_tushare_report_rc", "sync_raw_report_rc", "daily", None),
+        ],
+        "p4": [
+            # P4 板块数据通过 sync_concept_* 方法同步，不在此映射中
+            # 因为板块同步逻辑较特殊（需要遍历板块代码），由盘后链路步骤 3.7 单独处理
+        ],
+    }
+
+    @classmethod
+    def _resolve_table_groups(cls, table_group: str | list[str]) -> list[tuple[str, str, str, str | None]]:
+        """解析 table_group 参数，返回合并后的表列表。"""
+        if table_group == "all":
+            groups = ["p0", "p1", "p2", "p3_daily", "p3_static", "p4", "p5"]
+        elif table_group == "p3":
+            groups = ["p3_daily", "p3_static"]
+        elif isinstance(table_group, str):
+            groups = [table_group]
+        else:
+            groups = table_group
+
+        result = []
+        for g in groups:
+            entries = cls.TABLE_GROUP_MAP.get(g, [])
+            result.extend(entries)
+        return result
+
+    async def sync_raw_tables(
+        self,
+        table_group: str | list[str],
+        start_date: date,
+        end_date: date,
+        mode: str = "incremental",
+    ) -> dict:
+        """统一同步入口：按表组和模式同步 raw 表并执行 ETL。
+
+        Args:
+            table_group: "p0"/"p1"/"p2"/"p3"/"p4"/"p5"/"all" 或列表
+            start_date: 起始日期（full 模式使用）
+            end_date: 结束日期（通常为目标交易日）
+            mode: "full"=全量, "incremental"=仅 end_date, "gap_fill"=基于进度补缺口
+
+        Returns:
+            {table_name: {rows: int, error: str|None}, ...}
+        """
+        import time
+        import traceback
+
+        chain_start = time.monotonic()
+        entries = self._resolve_table_groups(table_group)
+        if not entries:
+            logger.warning("[sync_raw_tables] 表组 %s 无对应条目", table_group)
+            return
+
+        # 获取交易日列表（用于 full/gap_fill 模式）
+        trading_dates: list[date] = []
+        if mode in ("full", "gap_fill"):
+            trading_dates = await self.get_trade_calendar(start_date, end_date)
+
+        # 获取 raw_sync_progress（用于 gap_fill 模式）
+        progress_map: dict[str, date | None] = {}
+        if mode == "gap_fill":
+            async with self._session_factory() as session:
+                from app.models.market import RawSyncProgress
+                result = await session.execute(select(RawSyncProgress))
+                for row in result.scalars().all():
+                    progress_map[row.table_name] = row.last_sync_date
+
+        results: dict = {}
+
+        for raw_table, sync_method_name, freq, etl_method_name in entries:
+            sync_method = getattr(self, sync_method_name, None)
+            if sync_method is None:
+                logger.warning("[sync_raw_tables] 方法 %s 不存在，跳过", sync_method_name)
+                continue
+
+            # 确定要同步的日期列表
+            if freq == "static":
+                # 静态表：无日期参数，直接调用一次
+                dates_to_sync = [None]
+            elif freq == "period":
+                # 按季度：跳过，P1 财务数据由专门逻辑处理
+                dates_to_sync = [None]
+            elif mode == "incremental":
+                dates_to_sync = [end_date]
+            elif mode == "full":
+                dates_to_sync = trading_dates
+            elif mode == "gap_fill":
+                last_sync = progress_map.get(raw_table)
+                if last_sync and last_sync >= end_date:
+                    logger.debug("[sync_raw_tables] %s 已追平，跳过", raw_table)
+                    continue
+                gap_start = (last_sync + timedelta(days=1)) if last_sync else start_date
+                dates_to_sync = [d for d in trading_dates if d >= gap_start]
+            else:
+                dates_to_sync = [end_date]
+
+            total_rows = 0
+            error_msg = None
+
+            for td in dates_to_sync:
+                try:
+                    if freq == "static":
+                        r = await sync_method()
+                    elif freq == "period":
+                        # P1 财务数据：按季度同步
+                        if td is not None:
+                            period_str = td.strftime("%Y%m%d")
+                            r = await sync_method(period_str)
+                        else:
+                            r = {}
+                    else:
+                        r = await sync_method(td)
+                    # 累加行数
+                    if isinstance(r, dict):
+                        total_rows += sum(
+                            v for v in r.values() if isinstance(v, int)
+                        )
+                except Exception:
+                    error_msg = traceback.format_exc()[-200:]
+                    logger.warning(
+                        "[sync_raw_tables] %s 在 %s 失败: %s",
+                        raw_table, td, error_msg,
+                    )
+                    # 继续下一个日期，不中断
+
+            # 执行对应的 ETL（仅对 incremental 模式的最新日期）
+            if etl_method_name and mode == "incremental":
+                etl_method = getattr(self, etl_method_name, None)
+                if etl_method:
+                    try:
+                        if freq == "period":
+                            await etl_method(end_date.strftime("%Y%m%d"))
+                        else:
+                            await etl_method(end_date)
+                    except Exception:
+                        logger.warning(
+                            "[sync_raw_tables] ETL %s 失败: %s",
+                            etl_method_name, traceback.format_exc()[-200:],
+                        )
+
+            results[raw_table] = {"rows": total_rows, "error": error_msg}
+
+            # 更新 raw_sync_progress（Task 3.4）
+            if error_msg is None and freq != "static":
+                await self._update_raw_sync_progress(
+                    raw_table, end_date, total_rows
+                )
+
+        elapsed = time.monotonic() - chain_start
+        ok_count = sum(1 for v in results.values() if v.get("error") is None)
+        fail_count = len(results) - ok_count
+        logger.info(
+            "[sync_raw_tables] group=%s mode=%s 完成：%d 成功，%d 失败，耗时 %.1fs",
+            table_group, mode, ok_count, fail_count, elapsed,
+        )
+        return results
+
+    async def _update_raw_sync_progress(
+        self, table_name: str, sync_date: date, rows: int
+    ) -> None:
+        """更新 raw_sync_progress 表中某张 raw 表的同步进度。"""
+        from app.models.market import RawSyncProgress
+
+        async with self._session_factory() as session:
+            stmt = pg_insert(RawSyncProgress.__table__).values(
+                table_name=table_name,
+                last_sync_date=sync_date,
+                last_sync_rows=rows,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["table_name"],
+                set_={
+                    "last_sync_date": stmt.excluded.last_sync_date,
+                    "last_sync_rows": stmt.excluded.last_sync_rows,
+                },
+            )
+            await session.execute(stmt)
+            await session.commit()
+
+    async def _get_raw_sync_summary(self, target_date: date) -> dict:
+        """获取 raw 表同步进度摘要。
+
+        Returns:
+            {total_tables, up_to_date, stale, never_synced}
+        """
+        from app.models.market import RawSyncProgress
+
+        # 收集所有已注册的 raw 表名
+        all_tables = set()
+        for entries in self.TABLE_GROUP_MAP.values():
+            for raw_table, _, _, _ in entries:
+                all_tables.add(raw_table)
+
+        async with self._session_factory() as session:
+            result = await session.execute(select(RawSyncProgress))
+            progress_rows = {r.table_name: r.last_sync_date for r in result.scalars().all()}
+
+        up_to_date = 0
+        stale = 0
+        never_synced = 0
+        for table in all_tables:
+            last_date = progress_rows.get(table)
+            if last_date is None:
+                never_synced += 1
+            elif last_date >= target_date:
+                up_to_date += 1
+            else:
+                stale += 1
+
+        return {
+            "total_tables": len(all_tables),
+            "up_to_date": up_to_date,
+            "stale": stale,
+            "never_synced": never_synced,
+        }

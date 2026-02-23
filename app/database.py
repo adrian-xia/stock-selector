@@ -62,6 +62,7 @@ async def get_raw_connection():
         logger.error("[get_raw_connection] COPY 操作异常，连接将被释放")
         raise
     finally:
+        # 归还连接到连接池
         conn.close()
 
 
