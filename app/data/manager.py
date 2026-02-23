@@ -551,7 +551,7 @@ class DataManager:
 
         all_rows: list[dict] = []
         for ts_code in CORE_INDEX_LIST:
-            rows = await client.fetch_raw_index_weight(ts_code, td_str, td_str)
+            rows = await client.fetch_raw_index_weight(ts_code, td_str)
             all_rows.extend(rows)
 
         counts = {"index_weight": 0}
@@ -791,6 +791,29 @@ class DataManager:
         """批量 UPSERT 原始数据到 raw 表，优先使用 COPY 协议。"""
         if not rows:
             return 0
+
+        import math
+
+        # 清洗 NaN → None（Tushare 返回的 DataFrame 转 dict 后 NaN 为 float('nan')）
+        for row in rows:
+            for k, v in row.items():
+                if isinstance(v, float) and math.isnan(v):
+                    row[k] = None
+
+        # 按主键去重（保留最后一条，避免 ON CONFLICT 同批次重复行报错）
+        pk_cols = [c.name for c in table.primary_key.columns]
+        if pk_cols:
+            # 过滤主键为 None 的行
+            rows = [r for r in rows if all(r.get(c) is not None for c in pk_cols)]
+            seen = {}
+            for row in rows:
+                key = tuple(row.get(c) for c in pk_cols)
+                seen[key] = row
+            rows = list(seen.values())
+
+        # 过滤掉表中不存在的列（Tushare API 可能返回额外字段）
+        valid_cols = {c.name for c in table.columns}
+        rows = [{k: v for k, v in row.items() if k in valid_cols} for row in rows]
 
         # 优先尝试 COPY 协议
         try:

@@ -181,6 +181,18 @@ async def batch_insert(
     if not rows:
         return 0
 
+    import math
+
+    # 清洗 NaN → None（Tushare DataFrame 转 dict 后 NaN 为 float('nan')）
+    for row in rows:
+        for k, v in row.items():
+            if isinstance(v, float) and math.isnan(v):
+                row[k] = None
+
+    # 过滤掉表中不存在的列（API 可能返回额外字段）
+    valid_cols = {c.name for c in table.columns}
+    rows = [{k: v for k, v in row.items() if k in valid_cols} for row in rows]
+
     # 优先尝试 COPY 协议
     if use_copy:
         try:

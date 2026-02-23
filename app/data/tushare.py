@@ -575,7 +575,7 @@ class TushareClient:
         Returns:
             指数基础信息列表
         """
-        df = await self._call("index_basic", api_name="index_basic", market=market)
+        df = await self._call("index_basic", market=market)
         return df.to_dict("records")
 
     async def fetch_raw_index_weight(
@@ -592,7 +592,6 @@ class TushareClient:
         """
         df = await self._call(
             "index_weight",
-            api_name="index_weight",
             index_code=index_code,
             trade_date=trade_date,
         )
@@ -614,7 +613,6 @@ class TushareClient:
         """
         df = await self._call(
             "index_daily",
-            api_name="index_daily",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -628,7 +626,6 @@ class TushareClient:
         """获取指数周线行情（对应 index_weekly 接口）。"""
         df = await self._call(
             "index_weekly",
-            api_name="index_weekly",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -642,7 +639,6 @@ class TushareClient:
         """获取指数月线行情（对应 index_monthly 接口）。"""
         df = await self._call(
             "index_monthly",
-            api_name="index_monthly",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -657,7 +653,6 @@ class TushareClient:
         """获取指数每日指标（对应 index_dailybasic 接口）。"""
         df = await self._call(
             "index_dailybasic",
-            api_name="index_dailybasic",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -671,7 +666,6 @@ class TushareClient:
         """获取国际指数行情（对应 index_global 接口）。"""
         df = await self._call(
             "index_global",
-            api_name="index_global",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -694,7 +688,6 @@ class TushareClient:
         """
         df = await self._call(
             "daily_info",
-            api_name="daily_info",
             trade_date=trade_date,
             ts_code=ts_code,
             exchange=exchange,
@@ -707,7 +700,6 @@ class TushareClient:
         """获取深圳市场每日指标（对应 sz_daily_info 接口）。"""
         df = await self._call(
             "sz_daily_info",
-            api_name="sz_daily_info",
             trade_date=trade_date,
             ts_code=ts_code,
         )
@@ -725,7 +717,6 @@ class TushareClient:
         """
         df = await self._call(
             "index_classify",
-            api_name="index_classify",
             level=level,
             src=src,
         )
@@ -746,7 +737,6 @@ class TushareClient:
         """
         df = await self._call(
             "index_member_all",
-            api_name="index_member_all",
             index_code=index_code,
             ts_code=ts_code,
             is_new=is_new,
@@ -759,7 +749,6 @@ class TushareClient:
         """获取申万行业日线行情（对应 sw_daily 接口）。"""
         df = await self._call(
             "sw_daily",
-            api_name="sw_daily",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -781,7 +770,6 @@ class TushareClient:
         """
         df = await self._call(
             "ci_index_member",
-            api_name="ci_index_member",
             index_code=index_code,
             ts_code=ts_code,
         )
@@ -793,7 +781,6 @@ class TushareClient:
         """获取中信行业日线行情（对应 ci_daily 接口）。"""
         df = await self._call(
             "ci_daily",
-            api_name="ci_daily",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -810,7 +797,6 @@ class TushareClient:
         """
         df = await self._call(
             "index_factor_pro",
-            api_name="index_factor_pro",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -824,7 +810,6 @@ class TushareClient:
         """获取通达信日线行情（对应 tdx_daily 接口）。"""
         df = await self._call(
             "tdx_daily",
-            api_name="tdx_daily",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -838,7 +823,7 @@ class TushareClient:
 
     async def fetch_raw_ths_index(self) -> list[dict]:
         """获取同花顺板块指数（对应 ths_index 接口）。"""
-        df = await self._call("ths_index", api_name="ths_index")
+        df = await self._call("ths_index")
         return df.to_dict("records")
 
     async def fetch_raw_ths_daily(
@@ -847,7 +832,6 @@ class TushareClient:
         """获取同花顺板块日线行情（对应 ths_daily 接口）。"""
         df = await self._call(
             "ths_daily",
-            api_name="ths_daily",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,
@@ -864,7 +848,7 @@ class TushareClient:
         Returns:
             板块成分股列表
         """
-        df = await self._call("ths_member", api_name="ths_member", ts_code=ts_code)
+        df = await self._call("ths_member", ts_code=ts_code)
         return df.to_dict("records")
 
     async def fetch_raw_dc_index(self, src: str = "") -> list[dict]:
@@ -876,7 +860,7 @@ class TushareClient:
         Returns:
             板块指数列表
         """
-        df = await self._call("dc_index", api_name="dc_index", src=src)
+        df = await self._call("dc_index", src=src)
         return df.to_dict("records")
 
     async def fetch_raw_dc_member(self, ts_code: str) -> list[dict]:
@@ -888,7 +872,7 @@ class TushareClient:
         Returns:
             板块成分股列表
         """
-        df = await self._call("dc_member", api_name="dc_member", ts_code=ts_code)
+        df = await self._call("dc_member", ts_code=ts_code)
         return df.to_dict("records")
 
     async def fetch_raw_dc_hot_new(self, trade_date: str) -> list[dict]:
@@ -900,12 +884,12 @@ class TushareClient:
         Returns:
             热门板块列表
         """
-        df = await self._call("dc_hot_new", api_name="dc_hot_new", trade_date=trade_date)
+        df = await self._call("dc_hot_new", trade_date=trade_date)
         return df.to_dict("records")
 
     async def fetch_raw_tdx_index(self) -> list[dict]:
         """获取通达信板块指数（对应 tdx_index 接口）。"""
-        df = await self._call("tdx_index", api_name="tdx_index")
+        df = await self._call("tdx_index")
         return df.to_dict("records")
 
     async def fetch_raw_tdx_member(self, ts_code: str) -> list[dict]:
@@ -917,7 +901,7 @@ class TushareClient:
         Returns:
             板块成分股列表
         """
-        df = await self._call("tdx_member", api_name="tdx_member", ts_code=ts_code)
+        df = await self._call("tdx_member", ts_code=ts_code)
         return df.to_dict("records")
 
     # =====================================================================
@@ -937,7 +921,7 @@ class TushareClient:
         Returns:
             股票曾用名列表
         """
-        df = await self._call("namechange", api_name="namechange", ts_code=ts_code, start_date=start_date, end_date=end_date)
+        df = await self._call("namechange", ts_code=ts_code, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stock_company(self, ts_code: str = "", exchange: str = "") -> list[dict]:
@@ -950,7 +934,7 @@ class TushareClient:
         Returns:
             上市公司基本信息列表
         """
-        df = await self._call("stock_company", api_name="stock_company", ts_code=ts_code, exchange=exchange)
+        df = await self._call("stock_company", ts_code=ts_code, exchange=exchange)
         return df.to_dict("records")
 
     async def fetch_raw_stk_managers(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -965,7 +949,7 @@ class TushareClient:
         Returns:
             上市公司管理层列表
         """
-        df = await self._call("stk_managers", api_name="stk_managers", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_managers", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_rewards(self, ts_code: str = "", end_date: str = "") -> list[dict]:
@@ -978,7 +962,7 @@ class TushareClient:
         Returns:
             管理层薪酬和持股列表
         """
-        df = await self._call("stk_rewards", api_name="stk_rewards", ts_code=ts_code, end_date=end_date)
+        df = await self._call("stk_rewards", ts_code=ts_code, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_new_share(self, start_date: str = "", end_date: str = "") -> list[dict]:
@@ -991,7 +975,7 @@ class TushareClient:
         Returns:
             IPO 新股列表
         """
-        df = await self._call("new_share", api_name="new_share", start_date=start_date, end_date=end_date)
+        df = await self._call("new_share", start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_daily_share(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1006,7 +990,7 @@ class TushareClient:
         Returns:
             每日股本变动列表
         """
-        df = await self._call("daily_share", api_name="daily_share", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("daily_share", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_list_his(self, ts_code: str = "", list_date: str = "", delist_date: str = "") -> list[dict]:
@@ -1020,7 +1004,7 @@ class TushareClient:
         Returns:
             股票上市历史列表
         """
-        df = await self._call("stk_list_his", api_name="stk_list_his", ts_code=ts_code, list_date=list_date, delist_date=delist_date)
+        df = await self._call("stk_list_his", ts_code=ts_code, list_date=list_date, delist_date=delist_date)
         return df.to_dict("records")
 
     # 11b. 行情补充（5 个）
@@ -1037,7 +1021,7 @@ class TushareClient:
         Returns:
             周线行情列表
         """
-        df = await self._call("weekly", api_name="weekly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("weekly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_monthly(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1052,7 +1036,7 @@ class TushareClient:
         Returns:
             月线行情列表
         """
-        df = await self._call("monthly", api_name="monthly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("monthly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_suspend_d(self, ts_code: str = "", suspend_date: str = "", resume_date: str = "") -> list[dict]:
@@ -1066,7 +1050,7 @@ class TushareClient:
         Returns:
             停复牌信息列表
         """
-        df = await self._call("suspend_d", api_name="suspend_d", ts_code=ts_code, suspend_date=suspend_date, resume_date=resume_date)
+        df = await self._call("suspend_d", ts_code=ts_code, suspend_date=suspend_date, resume_date=resume_date)
         return df.to_dict("records")
 
     async def fetch_raw_hsgt_top10(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", market_type: str = "") -> list[dict]:
@@ -1082,7 +1066,7 @@ class TushareClient:
         Returns:
             沪深港通十大成交股列表
         """
-        df = await self._call("hsgt_top10", api_name="hsgt_top10", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, market_type=market_type)
+        df = await self._call("hsgt_top10", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, market_type=market_type)
         return df.to_dict("records")
 
     async def fetch_raw_ggt_daily(self, trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1096,54 +1080,54 @@ class TushareClient:
         Returns:
             港股通每日成交统计列表
         """
-        df = await self._call("ggt_daily", api_name="ggt_daily", trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("ggt_daily", trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     # 11c. 市场参考数据（9 个）
 
     async def fetch_raw_top10_holders(self, ts_code: str = "", period: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取前十大股东（对应 top10_holders 接口）。"""
-        df = await self._call("top10_holders", api_name="top10_holders", ts_code=ts_code, period=period, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        df = await self._call("top10_holders", ts_code=ts_code, period=period, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_top10_floatholders(self, ts_code: str = "", period: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取前十大流通股东（对应 top10_floatholders 接口）。"""
-        df = await self._call("top10_floatholders", api_name="top10_floatholders", ts_code=ts_code, period=period, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        df = await self._call("top10_floatholders", ts_code=ts_code, period=period, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_pledge_stat(self, ts_code: str = "", end_date: str = "") -> list[dict]:
         """获取股权质押统计（对应 pledge_stat 接口）。"""
-        df = await self._call("pledge_stat", api_name="pledge_stat", ts_code=ts_code, end_date=end_date)
+        df = await self._call("pledge_stat", ts_code=ts_code, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_pledge_detail(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取股权质押明细（对应 pledge_detail 接口）。"""
-        df = await self._call("pledge_detail", api_name="pledge_detail", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        df = await self._call("pledge_detail", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_repurchase(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取股票回购（对应 repurchase 接口）。"""
-        df = await self._call("repurchase", api_name="repurchase", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        df = await self._call("repurchase", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_share_float(self, ts_code: str = "", ann_date: str = "", float_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取限售股解禁（对应 share_float 接口）。"""
-        df = await self._call("share_float", api_name="share_float", ts_code=ts_code, ann_date=ann_date, float_date=float_date, start_date=start_date, end_date=end_date)
+        df = await self._call("share_float", ts_code=ts_code, ann_date=ann_date, float_date=float_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_block_trade(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取大宗交易（对应 block_trade 接口）。"""
-        df = await self._call("block_trade", api_name="block_trade", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("block_trade", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_holdernumber(self, ts_code: str = "", enddate: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取股东人数（对应 stk_holdernumber 接口）。"""
-        df = await self._call("stk_holdernumber", api_name="stk_holdernumber", ts_code=ts_code, enddate=enddate, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_holdernumber", ts_code=ts_code, enddate=enddate, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_holdertrade(self, ts_code: str = "", ann_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
         """获取股东增减持（对应 stk_holdertrade 接口）。"""
-        df = await self._call("stk_holdertrade", api_name="stk_holdertrade", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_holdertrade", ts_code=ts_code, ann_date=ann_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     # 11d. 特色数据（9 个）
@@ -1160,7 +1144,7 @@ class TushareClient:
         Returns:
             券商月度金股原始数据列表
         """
-        df = await self._call("report_rc", api_name="report_rc", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
+        df = await self._call("report_rc", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_cyq_perf(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1175,7 +1159,7 @@ class TushareClient:
         Returns:
             筹码分布原始数据列表
         """
-        df = await self._call("cyq_perf", api_name="cyq_perf", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("cyq_perf", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_cyq_chips(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1190,7 +1174,7 @@ class TushareClient:
         Returns:
             筹码集中度原始数据列表
         """
-        df = await self._call("cyq_chips", api_name="cyq_chips", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("cyq_chips", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_factor(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1205,7 +1189,7 @@ class TushareClient:
         Returns:
             技术因子原始数据列表
         """
-        df = await self._call("stk_factor", api_name="stk_factor", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_factor", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_factor_pro(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1220,7 +1204,7 @@ class TushareClient:
         Returns:
             技术因子增强版原始数据列表
         """
-        df = await self._call("stk_factor_pro", api_name="stk_factor_pro", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_factor_pro", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_ccass_hold(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1235,7 +1219,7 @@ class TushareClient:
         Returns:
             港股通持股汇总原始数据列表
         """
-        df = await self._call("ccass_hold", api_name="ccass_hold", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("ccass_hold", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_ccass_hold_detail(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1250,7 +1234,7 @@ class TushareClient:
         Returns:
             港股通持股明细原始数据列表
         """
-        df = await self._call("ccass_hold_detail", api_name="ccass_hold_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("ccass_hold_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_hk_hold(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", exchange: str = "") -> list[dict]:
@@ -1266,7 +1250,7 @@ class TushareClient:
         Returns:
             沪深港通持股明细原始数据列表
         """
-        df = await self._call("hk_hold", api_name="hk_hold", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, exchange=exchange)
+        df = await self._call("hk_hold", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, exchange=exchange)
         return df.to_dict("records")
 
     async def fetch_raw_stk_surv(self, ts_code: str = "", end_date: str = "", start_date: str = "", survey_date: str = "") -> list[dict]:
@@ -1281,7 +1265,7 @@ class TushareClient:
         Returns:
             股票调查问卷原始数据列表
         """
-        df = await self._call("stk_surv", api_name="stk_surv", ts_code=ts_code, end_date=end_date, start_date=start_date, survey_date=survey_date)
+        df = await self._call("stk_surv", ts_code=ts_code, end_date=end_date, start_date=start_date, survey_date=survey_date)
         return df.to_dict("records")
 
     # 11e. 两融数据（4 个）
@@ -1298,7 +1282,7 @@ class TushareClient:
         Returns:
             融资融券交易汇总原始数据列表
         """
-        df = await self._call("margin", api_name="margin", trade_date=trade_date, start_date=start_date, end_date=end_date, exchange_id=exchange_id)
+        df = await self._call("margin", trade_date=trade_date, start_date=start_date, end_date=end_date, exchange_id=exchange_id)
         return df.to_dict("records")
 
     async def fetch_raw_margin_detail(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1313,7 +1297,7 @@ class TushareClient:
         Returns:
             融资融券交易明细原始数据列表
         """
-        df = await self._call("margin_detail", api_name="margin_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("margin_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_margin_target(self, ts_code: str = "") -> list[dict]:
@@ -1325,7 +1309,7 @@ class TushareClient:
         Returns:
             融资融券标的原始数据列表
         """
-        df = await self._call("margin_target", api_name="margin_target", ts_code=ts_code)
+        df = await self._call("margin_target", ts_code=ts_code)
         return df.to_dict("records")
 
     async def fetch_raw_slb_len(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1340,7 +1324,7 @@ class TushareClient:
         Returns:
             转融通借入原始数据列表
         """
-        df = await self._call("slb_len", api_name="slb_len", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("slb_len", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     # 11f. 打板专题（14 个）
@@ -1358,7 +1342,7 @@ class TushareClient:
         Returns:
             每日涨跌停统计原始数据列表
         """
-        df = await self._call("limit_list_d", api_name="limit_list_d", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
+        df = await self._call("limit_list_d", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
         return df.to_dict("records")
 
     async def fetch_raw_ths_limit(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit_type: str = "") -> list[dict]:
@@ -1374,7 +1358,7 @@ class TushareClient:
         Returns:
             同花顺涨跌停原始数据列表
         """
-        df = await self._call("ths_limit", api_name="ths_limit", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
+        df = await self._call("ths_limit", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
         return df.to_dict("records")
 
     async def fetch_raw_limit_step(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1389,7 +1373,7 @@ class TushareClient:
         Returns:
             涨跌停阶梯原始数据列表
         """
-        df = await self._call("limit_step", api_name="limit_step", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("limit_step", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_hm_board(self, trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1403,7 +1387,7 @@ class TushareClient:
         Returns:
             热门板块原始数据列表
         """
-        df = await self._call("hm_board", api_name="hm_board", trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("hm_board", trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_hm_list(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1418,7 +1402,7 @@ class TushareClient:
         Returns:
             热门股票原始数据列表
         """
-        df = await self._call("hm_list", api_name="hm_list", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("hm_list", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_hm_detail(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1433,7 +1417,7 @@ class TushareClient:
         Returns:
             热门股票明细原始数据列表
         """
-        df = await self._call("hm_detail", api_name="hm_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("hm_detail", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_auction(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1448,7 +1432,7 @@ class TushareClient:
         Returns:
             集合竞价原始数据列表
         """
-        df = await self._call("stk_auction", api_name="stk_auction", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_auction", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_stk_auction_o(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1463,7 +1447,7 @@ class TushareClient:
         Returns:
             集合竞价（开盘）原始数据列表
         """
-        df = await self._call("stk_auction_o", api_name="stk_auction_o", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("stk_auction_o", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_kpl_list(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit_type: str = "") -> list[dict]:
@@ -1479,7 +1463,7 @@ class TushareClient:
         Returns:
             科创板涨跌停原始数据列表
         """
-        df = await self._call("kpl_list", api_name="kpl_list", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
+        df = await self._call("kpl_list", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date, limit_type=limit_type)
         return df.to_dict("records")
 
     async def fetch_raw_kpl_concept(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1494,7 +1478,7 @@ class TushareClient:
         Returns:
             科创板概念原始数据列表
         """
-        df = await self._call("kpl_concept", api_name="kpl_concept", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("kpl_concept", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_broker_recommend(self, ts_code: str = "", date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1509,7 +1493,7 @@ class TushareClient:
         Returns:
             券商推荐原始数据列表
         """
-        df = await self._call("broker_recommend", api_name="broker_recommend", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
+        df = await self._call("broker_recommend", ts_code=ts_code, date=date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_ths_hot(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1524,7 +1508,7 @@ class TushareClient:
         Returns:
             同花顺热榜原始数据列表
         """
-        df = await self._call("ths_hot", api_name="ths_hot", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("ths_hot", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_dc_hot(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "") -> list[dict]:
@@ -1539,7 +1523,7 @@ class TushareClient:
         Returns:
             东财热榜原始数据列表
         """
-        df = await self._call("dc_hot", api_name="dc_hot", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
+        df = await self._call("dc_hot", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
     async def fetch_raw_ggt_monthly(self, month: str = "", start_month: str = "", end_month: str = "") -> list[dict]:
@@ -1553,5 +1537,5 @@ class TushareClient:
         Returns:
             港股通月度统计原始数据列表
         """
-        df = await self._call("ggt_monthly", api_name="ggt_monthly", month=month, start_month=start_month, end_month=end_month)
+        df = await self._call("ggt_monthly", month=month, start_month=start_month, end_month=end_month)
         return df.to_dict("records")
