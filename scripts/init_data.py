@@ -26,6 +26,22 @@ from app.models.market import StockDaily
 logger = logging.getLogger(__name__)
 
 
+def _generate_quarter_periods(start_date: date, end_date: date) -> list[str]:
+    """生成日期范围内所有季度末日期字符串列表。
+
+    季度末 = 0331, 0630, 0930, 1231
+    例：2024-01-01 ~ 2025-06-30 → ["20240331", "20240630", "20240930", "20241231", "20250331", "20250630"]
+    """
+    quarter_ends = [(3, 31), (6, 30), (9, 30), (12, 31)]
+    periods: list[str] = []
+    for year in range(start_date.year, end_date.year + 1):
+        for month, day in quarter_ends:
+            qe = date(year, month, day)
+            if start_date <= qe <= end_date:
+                periods.append(qe.strftime("%Y%m%d"))
+    return periods
+
+
 def _build_manager() -> DataManager:
     """构建 DataManager 实例。"""
     clients = {
@@ -220,6 +236,26 @@ async def sync_daily_data(
     else:
         print("✗ [P0] 无交易日数据")
 
+    # P1: 财务数据（按季度同步）
+    print("\n⏳ [P1] 同步财务数据...")
+    try:
+        periods = _generate_quarter_periods(start_date, end_date)
+        p1_success, p1_failed = 0, 0
+        for i, period in enumerate(periods, 1):
+            try:
+                await manager.sync_raw_fina(period)
+                await manager.etl_fina(period)
+                p1_success += 1
+            except Exception as e:
+                logger.error("P1 季度 %s 失败：%s", period, e)
+                p1_failed += 1
+            if i % 4 == 0 or i == len(periods):
+                print(f"   [{i}/{len(periods)}] {period}")
+        results["p1"] = {"success": p1_success, "failed": p1_failed}
+        print(f"✓ [P1] 完成：成功 {p1_success} 季，失败 {p1_failed} 季")
+    except Exception as e:
+        print(f"✗ [P1] 失败：{e}")
+
     # P2: 资金流向
     print("\n⏳ [P2] 同步资金流向...")
     try:
@@ -238,6 +274,41 @@ async def sync_daily_data(
         print(f"✓ [P3] 完成")
     except Exception as e:
         print(f"✗ [P3] 失败：{e}")
+
+    # P4: 板块数据
+    print("\n⏳ [P4] 同步板块数据...")
+    try:
+        # 板块基础信息
+        print("   同步板块列表...")
+        await manager.sync_concept_index(src="THS")
+
+        # 板块日线（逐日）
+        print("   同步板块日线...")
+        for i, td in enumerate(trading_dates, 1):
+            td_str = td.strftime("%Y%m%d")
+            await manager.sync_concept_daily(trade_date=td_str)
+            if i % 10 == 0 or i == len(trading_dates):
+                print(f"   [{i}/{len(trading_dates)}] {td_str}")
+
+        # 板块成分股
+        print("   同步板块成分股...")
+        from sqlalchemy import select as sa_select
+        from app.models.concept import ConceptIndex
+        async with async_session_factory() as session:
+            result = await session.execute(sa_select(ConceptIndex.ts_code))
+            concept_codes = [r[0] for r in result.all()]
+        for i, code in enumerate(concept_codes, 1):
+            try:
+                await manager.sync_concept_member(code, src="THS")
+            except Exception as e:
+                logger.error("板块 %s 成分股同步失败：%s", code, e)
+            if i % 50 == 0 or i == len(concept_codes):
+                print(f"   [{i}/{len(concept_codes)}] 成分股")
+
+        results["p4"] = {"status": "ok"}
+        print("✓ [P4] 完成")
+    except Exception as e:
+        print(f"✗ [P4] 失败：{e}")
 
     # P5: 扩展数据
     print("\n⏳ [P5] 同步扩展数据...")
@@ -324,7 +395,7 @@ async def main():
     print("初始化流程：")
     print("  1. 同步股票列表（raw-first）")
     print("  2. 同步交易日历（raw-first）")
-    print("  3. 同步全量数据（P0 日线 + P2 资金 + P3 指数 + P5 扩展）")
+    print("  3. 同步全量数据（P0 日线 + P1 财务 + P2 资金 + P3 指数 + P4 板块 + P5 扩展）")
     print("  4. 计算技术指标")
     print()
     confirm = input("确认开始初始化？(y/n): ").strip().lower()
@@ -359,7 +430,7 @@ async def main():
         print("=" * 60)
         print(f"股票列表：{stock_count} 只")
         print(f"交易日历：{calendar_count} 个交易日")
-        print(f"数据同步：P0/P2/P3/P5 全量完成")
+        print(f"数据同步：P0/P1/P2/P3/P4/P5 全量完成")
         print(f"技术指标：成功 {indicator_result['success']} 只，失败 {indicator_result['failed']} 只")
         print(f"总耗时：{overall_minutes}分{overall_seconds}秒")
         print()

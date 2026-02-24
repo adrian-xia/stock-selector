@@ -270,23 +270,51 @@ def backfill_daily(start: str, end: str) -> None:
     asyncio.run(_run())
 
 
+def _generate_quarter_periods(start_date: date, end_date: date) -> list[str]:
+    """生成日期范围内所有季度末日期字符串列表。
+
+    季度末 = 0331, 0630, 0930, 1231
+    例：2024-01-01 ~ 2025-06-30 → ["20240331", "20240630", "20240930", "20241231", "20250331", "20250630"]
+    """
+    quarter_ends = [(3, 31), (6, 30), (9, 30), (12, 31)]
+    periods: list[str] = []
+    for year in range(start_date.year, end_date.year + 1):
+        for month, day in quarter_ends:
+            qe = date(year, month, day)
+            if start_date <= qe <= end_date:
+                periods.append(qe.strftime("%Y%m%d"))
+    return periods
+
+
 @cli.command("init-tushare")
 @click.option("--start", default=None, help="开始日期 (YYYY-MM-DD)，默认为 settings.data_start_date")
 @click.option("--end", default=None, help="结束日期 (YYYY-MM-DD)，默认为今天")
-@click.option("--skip-fina", is_flag=True, help="跳过财务数据同步")
-@click.option("--skip-index", is_flag=True, help="跳过指数数据同步")
-@click.option("--skip-concept", is_flag=True, help="跳过板块数据同步")
-def init_tushare(start: str | None, end: str | None, skip_fina: bool, skip_index: bool, skip_concept: bool) -> None:
-    """全量初始化 Tushare 数据：stock_basic → trade_cal → 逐日 daily → fina → 指数/板块 → 技术指标。
+@click.option("--skip-fina", is_flag=True, help="跳过财务数据同步（P1）")
+@click.option("--skip-p2", is_flag=True, help="跳过资金流向同步（P2）")
+@click.option("--skip-index", is_flag=True, help="跳过指数数据同步（P3）")
+@click.option("--skip-concept", is_flag=True, help="跳过板块数据同步（P4）")
+@click.option("--skip-p5", is_flag=True, help="跳过扩展数据同步（P5）")
+def init_tushare(
+    start: str | None,
+    end: str | None,
+    skip_fina: bool,
+    skip_p2: bool,
+    skip_index: bool,
+    skip_concept: bool,
+    skip_p5: bool,
+) -> None:
+    """全量初始化 Tushare 数据（9 步）。
 
-    这是一个综合命令，按顺序执行以下步骤：
+    按顺序执行：
     1. 同步股票列表 (stock_basic)
     2. 同步交易日历 (trade_cal)
-    3. 逐日同步日线数据 (daily + adj_factor + daily_basic)
-    4. 同步财务数据 (fina_indicator，可选)
-    5. 同步指数数据 (index_basic + index_daily，可选)
-    6. 同步板块数据 (concept_index + concept_daily，可选)
-    7. 计算技术指标 (technical_daily + index_technical_daily + concept_technical_daily)
+    3. 逐日同步日线数据 P0 (daily + adj_factor + daily_basic)
+    4. 同步财务数据 P1 (fina_indicator，按季度，可选)
+    5. 同步资金流向 P2 (moneyflow 等，可选)
+    6. 同步指数数据 P3 (index_basic + index_daily，可选)
+    7. 同步板块数据 P4 (concept_index + concept_daily + concept_member，可选)
+    8. 同步扩展数据 P5 (补充表，可选)
+    9. 计算技术指标 (technical_daily + index_technical_daily + concept_technical_daily)
 
     注意：此命令适用于首次初始化或全量重建数据。
     对于日常增量更新，请使用 sync-daily 命令。
@@ -297,70 +325,147 @@ def init_tushare(start: str | None, end: str | None, skip_fina: bool, skip_index
     manager = _build_manager()
     start_date = date.fromisoformat(start) if start else date.fromisoformat(settings.data_start_date)
     end_date = date.fromisoformat(end) if end else date.today()
+    total_steps = 9
 
     async def _run() -> None:
         overall_start = time.monotonic()
 
         click.echo("=" * 60)
-        click.echo("Tushare 数据全量初始化")
+        click.echo("Tushare 数据全量初始化（9 步）")
         click.echo("=" * 60)
         click.echo(f"日期范围：{start_date} ~ {end_date}")
         click.echo()
 
         # 步骤 1: 同步股票列表
-        click.echo("步骤 1/7: 同步股票列表...")
+        click.echo(f"步骤 1/{total_steps}: 同步股票列表...")
         stock_result = await manager.sync_stock_list()
         click.echo(f"✓ 股票列表同步完成：{stock_result.get('inserted', 0)} 只股票")
         click.echo()
 
         # 步骤 2: 同步交易日历
-        click.echo("步骤 2/7: 同步交易日历...")
+        click.echo(f"步骤 2/{total_steps}: 同步交易日历...")
         calendar_result = await manager.sync_trade_calendar(start_date, end_date)
         click.echo(f"✓ 交易日历同步完成：{calendar_result.get('inserted', 0)} 个交易日")
         click.echo()
 
-        # 步骤 3: 逐日同步日线数据
-        click.echo("步骤 3/7: 逐日同步日线数据...")
+        # 步骤 3: 逐日同步日线数据（P0）
+        click.echo(f"步骤 3/{total_steps}: 同步日线数据（P0）...")
         trading_dates = await manager.get_trade_calendar(start_date, end_date)
         click.echo(f"共需同步 {len(trading_dates)} 个交易日")
-
         daily_result = await batch_sync_daily(
             session_factory=async_session_factory,
             trade_dates=trading_dates,
             manager=manager,
         )
-        click.echo(f"✓ 日线数据同步完成：成功 {daily_result['success']} 天，失败 {daily_result['failed']} 天")
+        click.echo(f"✓ P0 日线数据同步完成：成功 {daily_result['success']} 天，失败 {daily_result['failed']} 天")
         click.echo()
 
-        # 步骤 4: 同步财务数据（可选）
+        # 步骤 4: 同步财务数据（P1，可选）
         if not skip_fina:
-            click.echo("步骤 4/7: 同步财务数据...")
-            click.echo("⚠️  财务数据同步功能待实现（V2）")
+            click.echo(f"步骤 4/{total_steps}: 同步财务数据（P1）...")
+            periods = _generate_quarter_periods(start_date, end_date)
+            click.echo(f"共需同步 {len(periods)} 个季度")
+            p1_success, p1_failed = 0, 0
+            for i, period in enumerate(periods, 1):
+                try:
+                    await manager.sync_raw_fina(period)
+                    await manager.etl_fina(period)
+                    p1_success += 1
+                except Exception as e:
+                    logger.error("P1 季度 %s 失败：%s", period, e)
+                    p1_failed += 1
+                if i % 4 == 0 or i == len(periods):
+                    click.echo(f"   [{i}/{len(periods)}] {period}")
+            click.echo(f"✓ P1 财务数据同步完成：成功 {p1_success} 季，失败 {p1_failed} 季")
             click.echo()
         else:
-            click.echo("步骤 4/7: 跳过财务数据同步")
+            click.echo(f"步骤 4/{total_steps}: 跳过财务数据同步（P1）")
             click.echo()
 
-        # 步骤 5: 同步指数数据（可选）
+        # 步骤 5: 同步资金流向（P2，可选）
+        if not skip_p2:
+            click.echo(f"步骤 5/{total_steps}: 同步资金流向（P2）...")
+            try:
+                await manager.sync_raw_tables("p2", start_date, end_date, mode="full")
+                click.echo("✓ P2 资金流向同步完成")
+            except Exception as e:
+                logger.error("P2 同步失败：%s", e)
+                click.echo(f"✗ P2 资金流向同步失败：{e}")
+            click.echo()
+        else:
+            click.echo(f"步骤 5/{total_steps}: 跳过资金流向同步（P2）")
+            click.echo()
+
+        # 步骤 6: 同步指数数据（P3，可选）
         if not skip_index:
-            click.echo("步骤 5/7: 同步指数数据...")
-            click.echo("⚠️  指数数据同步功能待实现（V2）")
+            click.echo(f"步骤 6/{total_steps}: 同步指数数据（P3）...")
+            try:
+                await manager.sync_raw_tables("p3", start_date, end_date, mode="full")
+                click.echo("✓ P3 指数数据同步完成")
+            except Exception as e:
+                logger.error("P3 同步失败：%s", e)
+                click.echo(f"✗ P3 指数数据同步失败：{e}")
             click.echo()
         else:
-            click.echo("步骤 5/7: 跳过指数数据同步")
+            click.echo(f"步骤 6/{total_steps}: 跳过指数数据同步（P3）")
             click.echo()
 
-        # 步骤 6: 同步板块数据（可选）
+        # 步骤 7: 同步板块数据（P4，可选）
         if not skip_concept:
-            click.echo("步骤 6/7: 同步板块数据...")
-            click.echo("⚠️  板块数据同步功能待实现（V2）")
+            click.echo(f"步骤 7/{total_steps}: 同步板块数据（P4）...")
+            try:
+                # 7a: 板块基础信息
+                click.echo("   同步板块列表...")
+                await manager.sync_concept_index(src="THS")
+
+                # 7b: 板块日线（逐日）
+                click.echo("   同步板块日线...")
+                for i, td in enumerate(trading_dates, 1):
+                    td_str = td.strftime("%Y%m%d")
+                    await manager.sync_concept_daily(trade_date=td_str)
+                    if i % 10 == 0 or i == len(trading_dates):
+                        click.echo(f"   [{i}/{len(trading_dates)}] {td_str}")
+
+                # 7c: 板块成分股
+                click.echo("   同步板块成分股...")
+                from sqlalchemy import select as sa_select
+                from app.models.concept import ConceptIndex
+                async with async_session_factory() as session:
+                    result = await session.execute(sa_select(ConceptIndex.ts_code))
+                    concept_codes = [r[0] for r in result.all()]
+                for i, code in enumerate(concept_codes, 1):
+                    try:
+                        await manager.sync_concept_member(code, src="THS")
+                    except Exception as e:
+                        logger.error("板块 %s 成分股同步失败：%s", code, e)
+                    if i % 50 == 0 or i == len(concept_codes):
+                        click.echo(f"   [{i}/{len(concept_codes)}] 成分股")
+
+                click.echo("✓ P4 板块数据同步完成")
+            except Exception as e:
+                logger.error("P4 同步失败：%s", e)
+                click.echo(f"✗ P4 板块数据同步失败：{e}")
             click.echo()
         else:
-            click.echo("步骤 6/7: 跳过板块数据同步")
+            click.echo(f"步骤 7/{total_steps}: 跳过板块数据同步（P4）")
             click.echo()
 
-        # 步骤 7: 计算技术指标
-        click.echo("步骤 7/7: 计算技术指标...")
+        # 步骤 8: 同步扩展数据（P5，可选）
+        if not skip_p5:
+            click.echo(f"步骤 8/{total_steps}: 同步扩展数据（P5）...")
+            try:
+                await manager.sync_raw_tables("p5", start_date, end_date, mode="full")
+                click.echo("✓ P5 扩展数据同步完成")
+            except Exception as e:
+                logger.error("P5 同步失败：%s", e)
+                click.echo(f"✗ P5 扩展数据同步失败：{e}")
+            click.echo()
+        else:
+            click.echo(f"步骤 8/{total_steps}: 跳过扩展数据同步（P5）")
+            click.echo()
+
+        # 步骤 9: 计算技术指标
+        click.echo(f"步骤 9/{total_steps}: 计算技术指标...")
         from app.data.indicator import compute_all_stocks
 
         indicator_result = await compute_all_stocks(
