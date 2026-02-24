@@ -2414,7 +2414,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_suspend_d(td_str)
+        raw_data = await client.fetch_raw_suspend_d(suspend_date=td_str)
         counts = {"suspend_d": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2430,7 +2430,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_limit_list_d(td_str)
+        raw_data = await client.fetch_raw_limit_list_d(trade_date=td_str)
         counts = {"limit_list_d": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2446,7 +2446,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_margin(td_str)
+        raw_data = await client.fetch_raw_margin(trade_date=td_str)
         counts = {"margin": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2462,7 +2462,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_margin_detail(td_str)
+        raw_data = await client.fetch_raw_margin_detail(trade_date=td_str)
         counts = {"margin_detail": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2478,7 +2478,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_block_trade(td_str)
+        raw_data = await client.fetch_raw_block_trade(trade_date=td_str)
         counts = {"block_trade": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2510,7 +2510,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_stk_factor(td_str)
+        raw_data = await client.fetch_raw_stk_factor(trade_date=td_str)
         counts = {"stk_factor": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2526,7 +2526,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_stk_factor_pro(td_str)
+        raw_data = await client.fetch_raw_stk_factor_pro(trade_date=td_str)
         counts = {"stk_factor_pro": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2542,7 +2542,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_hm_board(td_str)
+        raw_data = await client.fetch_raw_hm_board(trade_date=td_str)
         counts = {"hm_board": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2574,7 +2574,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_ths_hot(td_str)
+        raw_data = await client.fetch_raw_ths_hot(trade_date=td_str)
         counts = {"ths_hot": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2590,7 +2590,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_dc_hot(td_str)
+        raw_data = await client.fetch_raw_dc_hot(trade_date=td_str)
         counts = {"dc_hot": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2624,7 +2624,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_weekly(td_str)
+        raw_data = await client.fetch_raw_weekly(trade_date=td_str)
         counts = {"weekly": 0}
         async with self._session_factory() as session:
             if raw_data:
@@ -2640,7 +2640,7 @@ class DataManager:
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_monthly(td_str)
+        raw_data = await client.fetch_raw_monthly(trade_date=td_str)
         counts = {"monthly": 0}
         async with self._session_factory() as session:
             if raw_data:
