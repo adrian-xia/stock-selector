@@ -3524,12 +3524,20 @@ class DataManager:
         """解析 table_group 参数，返回合并后的表列表。"""
         if table_group == "all":
             groups = ["p0", "p1", "p2", "p3_daily", "p3_static", "p4", "p5"]
-        elif table_group == "p3":
-            groups = ["p3_daily", "p3_static"]
         elif isinstance(table_group, str):
-            groups = [table_group]
+            # 单个字符串：p3 展开为 p3_daily + p3_static
+            if table_group == "p3":
+                groups = ["p3_daily", "p3_static"]
+            else:
+                groups = [table_group]
         else:
-            groups = table_group
+            # 列表：逐个展开，p3 → p3_daily + p3_static
+            groups = []
+            for g in table_group:
+                if g == "p3":
+                    groups.extend(["p3_daily", "p3_static"])
+                else:
+                    groups.append(g)
 
         result = []
         for g in groups:
