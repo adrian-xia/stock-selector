@@ -791,12 +791,12 @@ class TushareClient:
     async def fetch_raw_index_factor_pro(
         self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
     ) -> list[dict]:
-        """获取指数技术面因子（对应 index_factor_pro 接口）。
+        """获取指数技术面因子（对应 idx_factor_pro 接口，doc_id=358）。
 
-        包含 MA/MACD/KDJ/RSI/BOLL/ATR/CCI/WR 等技术指标。
+        包含 MA/EMA/MACD/KDJ/RSI/BOLL/ATR/CCI/WR/DMI/MTM/ROC/PSY/OBV/TRIX/EMV/VR/BRAR/CR/MFI 等 80+ 技术指标。
         """
         df = await self._call(
-            "index_factor_pro",
+            "idx_factor_pro",
             ts_code=ts_code,
             trade_date=trade_date,
             start_date=start_date,

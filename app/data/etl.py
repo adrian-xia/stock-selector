@@ -411,6 +411,8 @@ def transform_tushare_industry_member(raw_rows: list[dict]) -> list[dict]:
 def transform_tushare_index_technical(raw_rows: list[dict]) -> list[dict]:
     """清洗指数技术指标（raw_tushare_index_factor_pro → index_technical_daily）。
 
+    字段映射：raw 表 _bfq 后缀字段 → 业务表字段。
+
     Args:
         raw_rows: 原始数据行列表
 
@@ -422,37 +424,113 @@ def transform_tushare_index_technical(raw_rows: list[dict]) -> list[dict]:
         cleaned.append({
             "ts_code": raw["ts_code"],
             "trade_date": parse_date(raw["trade_date"]),
-            # 均线指标
-            "ma5": parse_decimal(raw.get("ma5")),
-            "ma10": parse_decimal(raw.get("ma10")),
-            "ma20": parse_decimal(raw.get("ma20")),
-            "ma60": parse_decimal(raw.get("ma60")),
-            "ma120": parse_decimal(raw.get("ma120")),
-            "ma250": parse_decimal(raw.get("ma250")),
+            # 均线指标（MA）
+            "ma5": parse_decimal(raw.get("ma_bfq_5")),
+            "ma10": parse_decimal(raw.get("ma_bfq_10")),
+            "ma20": parse_decimal(raw.get("ma_bfq_20")),
+            "ma60": parse_decimal(raw.get("ma_bfq_60")),
+            "ma120": parse_decimal(raw.get("ma_bfq_90")),  # idx_factor_pro 无 120，用 90 近似
+            "ma250": parse_decimal(raw.get("ma_bfq_250")),
             # MACD 指标
-            "macd_dif": parse_decimal(raw.get("macd_dif")),
-            "macd_dea": parse_decimal(raw.get("macd_dea")),
-            "macd_hist": parse_decimal(raw.get("macd")),  # raw 表中是 macd，业务表中是 macd_hist
+            "macd_dif": parse_decimal(raw.get("macd_dif_bfq")),
+            "macd_dea": parse_decimal(raw.get("macd_dea_bfq")),
+            "macd_hist": parse_decimal(raw.get("macd_bfq")),
             # KDJ 指标
-            "kdj_k": parse_decimal(raw.get("kdj_k")),
-            "kdj_d": parse_decimal(raw.get("kdj_d")),
-            "kdj_j": parse_decimal(raw.get("kdj_j")),
+            "kdj_k": parse_decimal(raw.get("kdj_k_bfq")),
+            "kdj_d": parse_decimal(raw.get("kdj_d_bfq")),
+            "kdj_j": parse_decimal(raw.get("kdj_bfq")),
             # RSI 指标
-            "rsi6": parse_decimal(raw.get("rsi6")),
-            "rsi12": parse_decimal(raw.get("rsi12")),
-            "rsi24": parse_decimal(raw.get("rsi24")),
+            "rsi6": parse_decimal(raw.get("rsi_bfq_6")),
+            "rsi12": parse_decimal(raw.get("rsi_bfq_12")),
+            "rsi24": parse_decimal(raw.get("rsi_bfq_24")),
             # 布林带指标
-            "boll_upper": parse_decimal(raw.get("boll_upper")),
-            "boll_mid": parse_decimal(raw.get("boll_mid")),
-            "boll_lower": parse_decimal(raw.get("boll_lower")),
-            # 成交量指标（raw 表中没有，需要自己计算）
+            "boll_upper": parse_decimal(raw.get("boll_upper_bfq")),
+            "boll_mid": parse_decimal(raw.get("boll_mid_bfq")),
+            "boll_lower": parse_decimal(raw.get("boll_lower_bfq")),
+            # 成交量指标（raw 表无均线，保留 None）
             "vol_ma5": None,
             "vol_ma10": None,
             "vol_ratio": None,
-            # 其他指标
-            "atr14": parse_decimal(raw.get("atr")),
-            "cci14": parse_decimal(raw.get("cci")),
-            "willr14": parse_decimal(raw.get("wr")),
+            # 其他基础指标
+            "atr14": parse_decimal(raw.get("atr_bfq")),
+            "cci14": parse_decimal(raw.get("cci_bfq")),
+            "willr14": parse_decimal(raw.get("wr_bfq")),
+            "wr": parse_decimal(raw.get("wr_bfq")),
+            "cci": parse_decimal(raw.get("cci_bfq")),
+            "bias": parse_decimal(raw.get("bias1_bfq")),
+            "obv": parse_decimal(raw.get("obv_bfq")),
+            # DMI 趋向指标
+            "dmi_pdi": parse_decimal(raw.get("dmi_pdi_bfq")),
+            "dmi_mdi": parse_decimal(raw.get("dmi_mdi_bfq")),
+            "dmi_adx": parse_decimal(raw.get("dmi_adx_bfq")),
+            "dmi_adxr": parse_decimal(raw.get("dmi_adxr_bfq")),
+            # MTM 动量指标
+            "mtm": parse_decimal(raw.get("mtm_bfq")),
+            "mtmma": parse_decimal(raw.get("mtmma_bfq")),
+            # ROC 变动率
+            "roc": parse_decimal(raw.get("roc_bfq")),
+            "maroc": parse_decimal(raw.get("maroc_bfq")),
+            # PSY 心理线
+            "psy": parse_decimal(raw.get("psy_bfq")),
+            "psyma": parse_decimal(raw.get("psyma_bfq")),
+            # TRIX 三重指数平滑
+            "trix": parse_decimal(raw.get("trix_bfq")),
+            "trma": parse_decimal(raw.get("trma_bfq")),
+            # EMV 简易波动指标
+            "emv": parse_decimal(raw.get("emv_bfq")),
+            "maemv": parse_decimal(raw.get("maemv_bfq")),
+            # VR 成交量变异率
+            "vr": parse_decimal(raw.get("vr_bfq")),
+            # BRAR 情绪指标
+            "brar_ar": parse_decimal(raw.get("brar_ar_bfq")),
+            "brar_br": parse_decimal(raw.get("brar_br_bfq")),
+            # CR 能量指标
+            "cr": parse_decimal(raw.get("cr_bfq")),
+            # MFI 资金流量指标
+            "mfi": parse_decimal(raw.get("mfi_bfq")),
+            # DPO 区间震荡线
+            "dpo": parse_decimal(raw.get("dpo_bfq")),
+            "madpo": parse_decimal(raw.get("madpo_bfq")),
+            # MASS 梅斯线
+            "mass": parse_decimal(raw.get("mass_bfq")),
+            "ma_mass": parse_decimal(raw.get("ma_mass_bfq")),
+            # ASI 振动升降指标
+            "asi": parse_decimal(raw.get("asi_bfq")),
+            "asit": parse_decimal(raw.get("asit_bfq")),
+            # DFMA 平行线差指标
+            "dfma_dif": parse_decimal(raw.get("dfma_dif_bfq")),
+            "dfma_difma": parse_decimal(raw.get("dfma_difma_bfq")),
+            # EMA 指数移动平均
+            "ema5": parse_decimal(raw.get("ema_bfq_5")),
+            "ema10": parse_decimal(raw.get("ema_bfq_10")),
+            "ema20": parse_decimal(raw.get("ema_bfq_20")),
+            "ema30": parse_decimal(raw.get("ema_bfq_30")),
+            "ema60": parse_decimal(raw.get("ema_bfq_60")),
+            "ema90": parse_decimal(raw.get("ema_bfq_90")),
+            "ema250": parse_decimal(raw.get("ema_bfq_250")),
+            # EXPMA 指数平滑移动平均
+            "expma_12": parse_decimal(raw.get("expma_12_bfq")),
+            "expma_50": parse_decimal(raw.get("expma_50_bfq")),
+            # KTN 肯特纳通道
+            "ktn_upper": parse_decimal(raw.get("ktn_upper_bfq")),
+            "ktn_mid": parse_decimal(raw.get("ktn_mid_bfq")),
+            "ktn_lower": parse_decimal(raw.get("ktn_down_bfq")),
+            # TAQ 唐奇安通道
+            "taq_up": parse_decimal(raw.get("taq_up_bfq")),
+            "taq_mid": parse_decimal(raw.get("taq_mid_bfq")),
+            "taq_down": parse_decimal(raw.get("taq_down_bfq")),
+            # XSII 薛斯通道
+            "xsii_td1": parse_decimal(raw.get("xsii_td1_bfq")),
+            "xsii_td2": parse_decimal(raw.get("xsii_td2_bfq")),
+            "xsii_td3": parse_decimal(raw.get("xsii_td3_bfq")),
+            "xsii_td4": parse_decimal(raw.get("xsii_td4_bfq")),
+            # Days 连涨连跌天数
+            "updays": parse_decimal(raw.get("updays")),
+            "downdays": parse_decimal(raw.get("downdays")),
+            "topdays": parse_decimal(raw.get("topdays")),
+            "lowdays": parse_decimal(raw.get("lowdays")),
+            # BBI 多空指标
+            "bbi": parse_decimal(raw.get("bbi_bfq")),
         })
     return cleaned
 

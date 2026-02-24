@@ -222,20 +222,40 @@ class TestTransformTushareIndexTechnical:
         from app.data.etl import transform_tushare_index_technical
 
         raw = [{"ts_code": "000001.SH", "trade_date": "20260217",
-                "ma5": 3200.0, "ma10": 3180.0, "ma20": 3150.0,
-                "ma60": 3100.0, "ma120": 3050.0, "ma250": 3000.0,
-                "macd_dif": 15.5, "macd_dea": 12.3, "macd": 6.4,
-                "kdj_k": 75.0, "kdj_d": 68.0, "kdj_j": 89.0,
-                "rsi6": 62.0, "rsi12": 58.0, "rsi24": 55.0,
-                "boll_upper": 3300.0, "boll_mid": 3200.0, "boll_lower": 3100.0,
-                "atr": 45.0, "cci": 120.0, "wr": -25.0}]
+                "ma_bfq_5": 3200.0, "ma_bfq_10": 3180.0, "ma_bfq_20": 3150.0,
+                "ma_bfq_60": 3100.0, "ma_bfq_90": 3050.0, "ma_bfq_250": 3000.0,
+                "macd_dif_bfq": 15.5, "macd_dea_bfq": 12.3, "macd_bfq": 6.4,
+                "kdj_k_bfq": 75.0, "kdj_d_bfq": 68.0, "kdj_bfq": 89.0,
+                "rsi_bfq_6": 62.0, "rsi_bfq_12": 58.0, "rsi_bfq_24": 55.0,
+                "boll_upper_bfq": 3300.0, "boll_mid_bfq": 3200.0, "boll_lower_bfq": 3100.0,
+                "atr_bfq": 45.0, "cci_bfq": 120.0, "wr_bfq": -25.0,
+                "bias1_bfq": 1.5, "obv_bfq": 100000.0,
+                "dmi_pdi_bfq": 30.0, "dmi_mdi_bfq": 20.0, "dmi_adx_bfq": 25.0, "dmi_adxr_bfq": 22.0,
+                "mtm_bfq": 50.0, "mtmma_bfq": 48.0, "roc_bfq": 3.5, "maroc_bfq": 3.2,
+                "psy_bfq": 60.0, "psyma_bfq": 55.0, "trix_bfq": 0.15, "trma_bfq": 0.12,
+                "emv_bfq": 1.2, "maemv_bfq": 1.0, "vr_bfq": 150.0,
+                "brar_ar_bfq": 120.0, "brar_br_bfq": 110.0, "cr_bfq": 200.0, "mfi_bfq": 65.0,
+                "bbi_bfq": 3150.0,
+                "ema_bfq_5": 3195.0, "ema_bfq_20": 3160.0, "ema_bfq_250": 3010.0}]
         result = transform_tushare_index_technical(raw)
         assert len(result) == 1
         assert result[0]["ts_code"] == "000001.SH"
         assert result[0]["trade_date"] == date(2026, 2, 17)
         assert result[0]["ma5"] == Decimal("3200.0")
-        assert result[0]["macd_hist"] == Decimal("6.4")  # raw macd → macd_hist
-        assert result[0]["atr14"] == Decimal("45.0")  # raw atr → atr14
+        assert result[0]["macd_hist"] == Decimal("6.4")  # raw macd_bfq → macd_hist
+        assert result[0]["atr14"] == Decimal("45.0")  # raw atr_bfq → atr14
+        assert result[0]["kdj_j"] == Decimal("89.0")  # raw kdj_bfq → kdj_j
+        # 新增指标断言
+        assert result[0]["dmi_pdi"] == Decimal("30.0")
+        assert result[0]["mtm"] == Decimal("50.0")
+        assert result[0]["roc"] == Decimal("3.5")
+        assert result[0]["psy"] == Decimal("60.0")
+        assert result[0]["vr"] == Decimal("150.0")
+        assert result[0]["brar_ar"] == Decimal("120.0")
+        assert result[0]["cr"] == Decimal("200.0")
+        assert result[0]["mfi"] == Decimal("65.0")
+        assert result[0]["bbi"] == Decimal("3150.0")
+        assert result[0]["ema5"] == Decimal("3195.0")
 
     def test_empty(self):
         from app.data.etl import transform_tushare_index_technical
@@ -245,13 +265,13 @@ class TestTransformTushareIndexTechnical:
         from app.data.etl import transform_tushare_index_technical
 
         raw = [{"ts_code": "000001.SH", "trade_date": "20260217",
-                "ma5": None, "ma10": float("nan"), "ma20": None,
-                "ma60": None, "ma120": None, "ma250": None,
-                "macd_dif": None, "macd_dea": None, "macd": None,
-                "kdj_k": None, "kdj_d": None, "kdj_j": None,
-                "rsi6": None, "rsi12": None, "rsi24": None,
-                "boll_upper": None, "boll_mid": None, "boll_lower": None,
-                "atr": None, "cci": None, "wr": None}]
+                "ma_bfq_5": None, "ma_bfq_10": float("nan"), "ma_bfq_20": None,
+                "ma_bfq_60": None, "ma_bfq_90": None, "ma_bfq_250": None,
+                "macd_dif_bfq": None, "macd_dea_bfq": None, "macd_bfq": None,
+                "kdj_k_bfq": None, "kdj_d_bfq": None, "kdj_bfq": None,
+                "rsi_bfq_6": None, "rsi_bfq_12": None, "rsi_bfq_24": None,
+                "boll_upper_bfq": None, "boll_mid_bfq": None, "boll_lower_bfq": None,
+                "atr_bfq": None, "cci_bfq": None, "wr_bfq": None}]
         result = transform_tushare_index_technical(raw)
         assert len(result) == 1
         assert result[0]["ma5"] is None

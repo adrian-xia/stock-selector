@@ -603,13 +603,13 @@ class DataManager:
     async def sync_raw_index_technical(self, trade_date: date) -> dict:
         """按日期获取核心指数技术因子写入 raw 表。
 
-        注意：index_factor_pro 接口可能需要 VIP 权限，不可用时跳过。
+        注意：idx_factor_pro 接口可能需要 VIP 权限，不可用时跳过。
 
         Args:
             trade_date: 交易日期
 
         Returns:
-            {"index_factor_pro": int}
+            {"idx_factor_pro": int}
         """
         from app.data.tushare import TushareClient
 
@@ -622,18 +622,18 @@ class DataManager:
                 rows = await client.fetch_raw_index_factor_pro(ts_code, td_str, td_str)
                 all_rows.extend(rows)
         except Exception as e:
-            logger.warning("[sync_raw_index_technical] index_factor_pro 接口不可用（可能需要 VIP 权限），跳过: %s", e)
-            return {"index_factor_pro": 0}
+            logger.warning("[sync_raw_index_technical] idx_factor_pro 接口不可用（可能需要 VIP 权限），跳过: %s", e)
+            return {"idx_factor_pro": 0}
 
-        counts = {"index_factor_pro": 0}
+        counts = {"idx_factor_pro": 0}
         async with self._session_factory() as session:
             if all_rows:
-                counts["index_factor_pro"] = await self._upsert_raw(
+                counts["idx_factor_pro"] = await self._upsert_raw(
                     session, RawTushareIndexFactorPro.__table__, all_rows
                 )
             await session.commit()
 
-        logger.info("[sync_raw_index_technical] %s: index_factor_pro=%d", trade_date, counts["index_factor_pro"])
+        logger.info("[sync_raw_index_technical] %s: idx_factor_pro=%d", trade_date, counts["idx_factor_pro"])
         return counts
 
     # --- P3 指数静态数据同步 ---

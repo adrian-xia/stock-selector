@@ -1216,7 +1216,7 @@ class RawTushareCiDaily(Base):
 
 
 class RawTushareIndexFactorPro(Base):
-    """指数技术面因子原始表（对应 index_factor_pro 接口）。"""
+    """指数技术面因子原始表（对应 idx_factor_pro 接口，doc_id=358）。"""
 
     __tablename__ = "raw_tushare_index_factor_pro"
     __table_args__ = (
@@ -1225,33 +1225,125 @@ class RawTushareIndexFactorPro(Base):
 
     ts_code: Mapped[str] = mapped_column(String(16), primary_key=True)
     trade_date: Mapped[str] = mapped_column(String(8), primary_key=True)
-    # 均线指标
-    ma5: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    ma10: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    ma20: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    ma60: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    ma120: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    ma250: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    # OHLCV 行情字段
+    open: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    high: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    low: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    close: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    pre_close: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    change: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    pct_change: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    vol: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    amount: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # ASI 振动升降指标
+    asi_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    asit_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # ATR 真实波幅
+    atr_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # BBI 多空指标
+    bbi_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # BIAS 乖离率
+    bias1_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    bias2_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    bias3_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # BOLL 布林带
+    boll_lower_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    boll_mid_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    boll_upper_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # BRAR 情绪指标
+    brar_ar_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    brar_br_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # CCI 顺势指标
+    cci_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # CR 能量指标
+    cr_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # DFMA 平行线差指标
+    dfma_dif_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    dfma_difma_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # DMI 趋向指标
+    dmi_adx_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    dmi_adxr_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    dmi_mdi_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    dmi_pdi_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # Days 连涨连跌天数
+    downdays: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    updays: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    lowdays: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    topdays: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # DPO 区间震荡线
+    dpo_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    madpo_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # EMA 指数移动平均
+    ema_bfq_5: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ema_bfq_10: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ema_bfq_20: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ema_bfq_30: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ema_bfq_60: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ema_bfq_90: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ema_bfq_250: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # EMV 简易波动指标
+    emv_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    maemv_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # EXPMA 指数平滑移动平均
+    expma_12_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    expma_50_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # KDJ 随机指标
+    kdj_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    kdj_d_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    kdj_k_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # KTN 肯特纳通道
+    ktn_down_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ktn_mid_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ktn_upper_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # MA 简单移动平均
+    ma_bfq_5: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_bfq_10: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_bfq_20: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_bfq_30: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_bfq_60: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_bfq_90: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_bfq_250: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     # MACD 指标
-    macd_dif: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    macd_dea: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    macd: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    # KDJ 指标
-    kdj_k: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    kdj_d: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    kdj_j: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    # RSI 指标
-    rsi6: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    rsi12: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    rsi24: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    # 布林带指标
-    boll_upper: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    boll_mid: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    boll_lower: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    # 其他指标
-    atr: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    cci: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    wr: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
+    macd_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    macd_dea_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    macd_dif_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # MASS 梅斯线
+    mass_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma_mass_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # MFI 资金流量指标
+    mfi_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # MTM 动量指标
+    mtm_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    mtmma_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # OBV 能量潮
+    obv_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # PSY 心理线
+    psy_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    psyma_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # ROC 变动率
+    roc_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    maroc_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # RSI 相对强弱
+    rsi_bfq_6: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    rsi_bfq_12: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    rsi_bfq_24: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # TAQ 唐奇安通道
+    taq_down_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    taq_mid_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    taq_up_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # TRIX 三重指数平滑
+    trix_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    trma_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # VR 成交量变异率
+    vr_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # WR 威廉指标
+    wr_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    wr1_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    # XSII 薛斯通道
+    xsii_td1_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    xsii_td2_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    xsii_td3_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    xsii_td4_bfq: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
