@@ -865,7 +865,14 @@ class TushareClient:
             板块成分股列表
         """
         df = await self._call("ths_member", ts_code=ts_code)
-        return df.to_dict("records")
+        records = df.to_dict("records")
+        # API 返回 con_code/con_name → raw 表字段 code/name
+        for r in records:
+            if "con_code" in r:
+                r["code"] = r.pop("con_code")
+            if "con_name" in r:
+                r["name"] = r.pop("con_name")
+        return records
 
     async def fetch_raw_dc_index(self, src: str = "") -> list[dict]:
         """获取东方财富板块指数（对应 dc_index 接口）。
@@ -1064,10 +1071,14 @@ class TushareClient:
             resume_date: 复牌日期（YYYYMMDD）
 
         Returns:
-            停复牌信息列表
+            停复牌信息列表（字段已映射为 raw 表字段名）
         """
         df = await self._call("suspend_d", ts_code=ts_code, suspend_date=suspend_date, resume_date=resume_date)
-        return df.to_dict("records")
+        records = df.to_dict("records")
+        # API 返回 trade_date → raw 表主键 suspend_date
+        for r in records:
+            r["suspend_date"] = r.pop("trade_date", None)
+        return records
 
     async def fetch_raw_hsgt_top10(self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", market_type: str = "") -> list[dict]:
         """获取沪深港通十大成交股（对应 hsgt_top10 接口）。

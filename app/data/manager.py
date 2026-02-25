@@ -600,13 +600,19 @@ class DataManager:
         logger.info("[sync_raw_index_weight] %s: index_weight=%d", trade_date, counts["index_weight"])
         return counts
 
-    async def sync_raw_index_technical(self, trade_date: date) -> dict:
+    async def sync_raw_index_technical(self, trade_date: date, *, end_date: date | None = None) -> dict:
         """按日期获取核心指数技术因子写入 raw 表。
+
+        支持两种模式：
+        - 单日模式：只传 trade_date，按单日获取（盘后增量用）
+        - 批量模式：传 trade_date + end_date，按日期范围批量获取（全量初始化用，
+          每个指数只需 1 次 API 调用，大幅节省 idx_factor_pro 每日限额）
 
         注意：idx_factor_pro 接口可能需要 VIP 权限，不可用时跳过。
 
         Args:
-            trade_date: 交易日期
+            trade_date: 起始日期（单日模式时也是结束日期）
+            end_date: 结束日期（批量模式），None 表示单日模式
 
         Returns:
             {"idx_factor_pro": int}
@@ -614,12 +620,15 @@ class DataManager:
         from app.data.tushare import TushareClient
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-        td_str = trade_date.strftime("%Y%m%d")
+        start_str = trade_date.strftime("%Y%m%d")
+        end_str = (end_date or trade_date).strftime("%Y%m%d")
 
         all_rows: list[dict] = []
         try:
             for ts_code in CORE_INDEX_LIST:
-                rows = await client.fetch_raw_index_factor_pro(ts_code, td_str, td_str)
+                rows = await client.fetch_raw_index_factor_pro(
+                    ts_code, start_date=start_str, end_date=end_str
+                )
                 all_rows.extend(rows)
         except Exception as e:
             logger.warning("[sync_raw_index_technical] idx_factor_pro 接口不可用（可能需要 VIP 权限），跳过: %s", e)
@@ -633,7 +642,8 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info("[sync_raw_index_technical] %s: idx_factor_pro=%d", trade_date, counts["idx_factor_pro"])
+        label = f"{trade_date}~{end_date}" if end_date else str(trade_date)
+        logger.info("[sync_raw_index_technical] %s: idx_factor_pro=%d", label, counts["idx_factor_pro"])
         return counts
 
     # --- P3 指数静态数据同步 ---
@@ -2410,20 +2420,52 @@ class DataManager:
     # --- P5 日频 raw 同步 ---
 
     async def sync_raw_suspend_d(self, trade_date: date) -> dict:
-        """按日期获取停复牌信息写入 raw 表。"""
+        """按日期获取停复牌信息写入 raw 表（盘后增量模式）。
+
+        suspend_d 接口不支持按日期过滤，此方法在盘后链路中为空操作。
+        全量同步请使用 sync_raw_suspend_d_full()。
+        """
+        # suspend_d 接口不支持按日期过滤，盘后链路中跳过
+        logger.debug("[sync_raw_suspend_d] 跳过（接口不支持按日期过滤，使用 sync_raw_suspend_d_full 全量同步）")
+        return {"suspend_d": 0}
+
+    async def sync_raw_suspend_d_full(self) -> dict:
+        """全量获取停复牌信息写入 raw 表（按股票遍历）。
+
+        suspend_d 接口只支持按 ts_code 查询，不支持按日期过滤。
+        需要遍历所有股票逐只拉取。
+        """
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-        td_str = trade_date.strftime("%Y%m%d")
-        raw_data = await client.fetch_raw_suspend_d(suspend_date=td_str)
-        counts = {"suspend_d": 0}
-        async with self._session_factory() as session:
-            if raw_data:
-                counts["suspend_d"] = await self._upsert_raw(
-                    session, RawTushareSuspendD.__table__, raw_data
-                )
-            await session.commit()
-        logger.info("[sync_raw_suspend_d] %s: %d", trade_date, counts["suspend_d"])
-        return counts
+
+        # 获取所有上市股票代码
+        stock_list = await self.get_stock_list()
+        total = len(stock_list)
+        total_count = 0
+        failed = 0
+
+        logger.info("[sync_raw_suspend_d_full] 开始全量同步停复牌信息，共 %d 只股票", total)
+
+        for i, stock in enumerate(stock_list, 1):
+            ts_code = stock["ts_code"]
+            try:
+                raw_data = await client.fetch_raw_suspend_d(ts_code=ts_code)
+                if raw_data:
+                    async with self._session_factory() as session:
+                        count = await self._upsert_raw(
+                            session, RawTushareSuspendD.__table__, raw_data
+                        )
+                        await session.commit()
+                    total_count += count
+            except Exception as e:
+                failed += 1
+                logger.warning("[sync_raw_suspend_d_full] %s 失败: %s", ts_code, e)
+
+            if i % 500 == 0 or i == total:
+                logger.info("[sync_raw_suspend_d_full] [%d/%d] 已写入 %d 条", i, total, total_count)
+
+        logger.info("[sync_raw_suspend_d_full] 完成：%d 只股票，%d 条数据，%d 失败", total, total_count, failed)
+        return {"suspend_d": total_count, "failed": failed}
 
     async def sync_raw_limit_list_d(self, trade_date: date) -> dict:
         """按日期获取涨跌停统计写入 raw 表。"""
@@ -3441,7 +3483,7 @@ class DataManager:
         "p3_daily": [
             ("raw_tushare_index_daily", "sync_raw_index_daily", "daily", None),
             ("raw_tushare_index_weight", "sync_raw_index_weight", "daily", None),
-            ("raw_tushare_index_factor_pro", "sync_raw_index_technical", "daily", "etl_index"),
+            ("raw_tushare_index_factor_pro", "sync_raw_index_technical", "bulk_daily", "etl_index"),
         ],
         "p3_static": [
             ("raw_tushare_index_basic", "sync_raw_index_basic", "static", None),
@@ -3450,7 +3492,7 @@ class DataManager:
         ],
         "p5": [
             # 日频核心
-            ("raw_tushare_suspend_d", "sync_raw_suspend_d", "daily", "etl_suspend"),
+            ("raw_tushare_suspend_d", "sync_raw_suspend_d_full", "static", "etl_suspend"),
             ("raw_tushare_limit_list_d", "sync_raw_limit_list_d", "daily", "etl_limit_list"),
             ("raw_tushare_margin", "sync_raw_margin", "daily", None),
             ("raw_tushare_margin_detail", "sync_raw_margin_detail", "daily", None),
@@ -3601,6 +3643,9 @@ class DataManager:
             elif freq == "period":
                 # 按季度：跳过，P1 财务数据由专门逻辑处理
                 dates_to_sync = [None]
+            elif freq == "bulk_daily":
+                # 批量日频：全量/gap_fill 模式下一次性传日期范围，增量模式按单日
+                dates_to_sync = [end_date]  # 占位，实际在下面特殊处理
             elif mode == "incremental":
                 dates_to_sync = [end_date]
             elif mode == "full":
@@ -3629,6 +3674,12 @@ class DataManager:
                             r = await sync_method(period_str)
                         else:
                             r = {}
+                    elif freq == "bulk_daily":
+                        # 批量日频：全量/gap_fill 传日期范围，增量传单日
+                        if mode in ("full", "gap_fill") and start_date and end_date:
+                            r = await sync_method(start_date, end_date=end_date)
+                        else:
+                            r = await sync_method(td)
                     else:
                         r = await sync_method(td)
                     # 累加行数

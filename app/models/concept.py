@@ -65,12 +65,11 @@ class ConceptMember(Base):
     __table_args__ = (
         Index("idx_concept_member_concept_code", "concept_code"),
         Index("idx_concept_member_stock_code", "stock_code"),
-        Index("idx_concept_member_in_date", "in_date"),
     )
 
     concept_code: Mapped[str] = mapped_column(String(16), primary_key=True)
     stock_code: Mapped[str] = mapped_column(String(16), primary_key=True)
-    in_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    in_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     out_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

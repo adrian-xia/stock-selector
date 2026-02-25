@@ -574,13 +574,17 @@ def transform_tushare_concept_daily(raw_rows: list[dict]) -> list[dict]:
     """
     cleaned = []
     for raw in raw_rows:
+        close = parse_decimal(raw.get("close"))
+        # 过滤掉 close 为 null 的脏数据（部分板块在某些日期无行情）
+        if close is None:
+            continue
         cleaned.append({
             "ts_code": raw["ts_code"],
             "trade_date": parse_date(raw["trade_date"]),
-            "open": parse_decimal(raw.get("open")),
-            "high": parse_decimal(raw.get("high")),
-            "low": parse_decimal(raw.get("low")),
-            "close": parse_decimal(raw.get("close")),
+            "open": parse_decimal(raw.get("open")) or close,
+            "high": parse_decimal(raw.get("high")) or close,
+            "low": parse_decimal(raw.get("low")) or close,
+            "close": close,
             "pre_close": parse_decimal(raw.get("pre_close")),
             "change": parse_decimal(raw.get("change")),
             "pct_chg": parse_decimal(raw.get("pct_chg")),
@@ -604,7 +608,7 @@ def transform_tushare_concept_member(raw_rows: list[dict]) -> list[dict]:
         cleaned.append({
             "concept_code": raw["ts_code"],
             "stock_code": raw["code"],
-            "in_date": parse_date(raw["in_date"]),
+            "in_date": parse_date(raw.get("in_date")),
             "out_date": parse_date(raw.get("out_date")),
         })
     return cleaned
