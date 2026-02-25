@@ -406,7 +406,7 @@ class DataManager:
         async with self._session_factory() as session:
             count = await batch_insert(session, StockDaily.__table__, cleaned)
 
-        logger.info("[etl_daily] %s: 写入 %d 条", trade_date, count)
+        logger.debug("[etl_daily] %s: 写入 %d 条", trade_date, count)
         return {"inserted": count}
 
     # --- P2 资金流向同步 ---
@@ -435,7 +435,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info(
+        logger.debug(
             "[sync_raw_moneyflow] %s: moneyflow=%d",
             trade_date, counts["moneyflow"],
         )
@@ -474,7 +474,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info(
+        logger.debug(
             "[sync_raw_top_list] %s: top_list=%d, top_inst=%d",
             trade_date, counts["top_list"], counts["top_inst"],
         )
@@ -530,7 +530,7 @@ class DataManager:
                     session, DragonTiger.__table__, cleaned_tl
                 )
 
-        logger.info(
+        logger.debug(
             "[etl_moneyflow] %s: money_flow=%d, dragon_tiger=%d",
             trade_date, counts["money_flow"], counts["dragon_tiger"],
         )
@@ -567,7 +567,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info("[sync_raw_index_daily] %s: index_daily=%d", trade_date, counts["index_daily"])
+        logger.debug("[sync_raw_index_daily] %s: index_daily=%d", trade_date, counts["index_daily"])
         return counts
 
     async def sync_raw_index_weight(self, trade_date: date) -> dict:
@@ -597,7 +597,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info("[sync_raw_index_weight] %s: index_weight=%d", trade_date, counts["index_weight"])
+        logger.debug("[sync_raw_index_weight] %s: index_weight=%d", trade_date, counts["index_weight"])
         return counts
 
     async def sync_raw_index_technical(self, trade_date: date, *, end_date: date | None = None) -> dict:
@@ -643,7 +643,7 @@ class DataManager:
             await session.commit()
 
         label = f"{trade_date}~{end_date}" if end_date else str(trade_date)
-        logger.info("[sync_raw_index_technical] %s: idx_factor_pro=%d", label, counts["idx_factor_pro"])
+        logger.debug("[sync_raw_index_technical] %s: idx_factor_pro=%d", label, counts["idx_factor_pro"])
         return counts
 
     # --- P3 指数静态数据同步 ---
@@ -667,7 +667,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info("[sync_raw_index_basic] index_basic=%d", counts["index_basic"])
+        logger.debug("[sync_raw_index_basic] index_basic=%d", counts["index_basic"])
         return counts
 
     async def sync_raw_industry_classify(self) -> dict:
@@ -702,7 +702,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info("[sync_raw_industry_classify] index_classify=%d", counts["index_classify"])
+        logger.debug("[sync_raw_industry_classify] index_classify=%d", counts["index_classify"])
         return counts
 
     async def sync_raw_industry_member(self) -> dict:
@@ -724,7 +724,7 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.info("[sync_raw_industry_member] index_member_all=%d", counts["index_member_all"])
+        logger.debug("[sync_raw_industry_member] index_member_all=%d", counts["index_member_all"])
         return counts
 
     # --- P3 指数数据 ETL ---
@@ -788,7 +788,7 @@ class DataManager:
                     session, IndexTechnicalDaily.__table__, cleaned_it
                 )
 
-        logger.info(
+        logger.debug(
             "[etl_index] %s: index_daily=%d, index_weight=%d, index_technical_daily=%d",
             trade_date, counts["index_daily"], counts["index_weight"], counts["index_technical_daily"],
         )
@@ -842,7 +842,7 @@ class DataManager:
                     session, IndustryMember.__table__, cleaned_im
                 )
 
-        logger.info(
+        logger.debug(
             "[etl_index_static] index_basic=%d, industry_classify=%d, industry_member=%d",
             counts["index_basic"], counts["industry_classify"], counts["industry_member"],
         )
@@ -1855,13 +1855,13 @@ class DataManager:
         Returns:
             {"fina_indicator": int} - 各表写入的记录数
         """
-        logger.info(f"[sync_raw_fina] 开始同步 {period} 财务数据到 raw 表")
+        logger.debug(f"[sync_raw_fina] 开始同步 {period} 财务数据到 raw 表")
 
         async with self._session_factory() as session:
             # 1. 同步财务指标（fina_indicator_vip）
-            logger.info(f"  - 获取 fina_indicator 数据（period={period}）")
+            logger.debug(f"  - 获取 fina_indicator 数据（period={period}）")
             raw_fina = await self._primary_client.fetch_raw_fina_indicator(period)
-            logger.info(f"  - 获取到 {len(raw_fina)} 条 fina_indicator 数据")
+            logger.debug(f"  - 获取到 {len(raw_fina)} 条 fina_indicator 数据")
 
             # 批量写入 raw_tushare_fina_indicator
             fina_count = 0
@@ -1869,9 +1869,9 @@ class DataManager:
                 fina_count = await batch_insert(
                     session, RawTushareFinaIndicator.__table__, raw_fina
                 )
-                logger.info(f"  - 写入 raw_tushare_fina_indicator: {fina_count} 条")
+                logger.debug(f"  - 写入 raw_tushare_fina_indicator: {fina_count} 条")
 
-        logger.info(f"[sync_raw_fina] 完成 {period} 财务数据同步")
+        logger.debug(f"[sync_raw_fina] 完成 {period} 财务数据同步")
         return {"fina_indicator": fina_count}
 
     async def etl_fina(self, period: str) -> dict:
@@ -1883,7 +1883,7 @@ class DataManager:
         Returns:
             {"inserted": int} - 写入的记录数
         """
-        logger.info(f"[etl_fina] 开始 ETL 清洗 {period} 财务数据")
+        logger.debug(f"[etl_fina] 开始 ETL 清洗 {period} 财务数据")
 
         async with self._session_factory() as session:
             # 1. 从 raw_tushare_fina_indicator 读取数据
@@ -1893,7 +1893,7 @@ class DataManager:
                 )
             )
             raw_rows = result.scalars().all()
-            logger.info(f"  - 从 raw_tushare_fina_indicator 读取 {len(raw_rows)} 条")
+            logger.debug(f"  - 从 raw_tushare_fina_indicator 读取 {len(raw_rows)} 条")
 
             if not raw_rows:
                 logger.warning(f"  - {period} 没有财务指标数据，跳过 ETL")
@@ -1923,7 +1923,7 @@ class DataManager:
 
             # 3. ETL 转换
             cleaned = transform_tushare_fina_indicator(raw_dicts)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 批量写入 finance_indicator
             inserted = 0
@@ -1931,9 +1931,9 @@ class DataManager:
                 inserted = await batch_insert(
                     session, FinanceIndicator.__table__, cleaned
                 )
-                logger.info(f"  - 写入 finance_indicator: {inserted} 条")
+                logger.debug(f"  - 写入 finance_indicator: {inserted} 条")
 
-        logger.info(f"[etl_fina] 完成 {period} 财务数据 ETL")
+        logger.debug(f"[etl_fina] 完成 {period} 财务数据 ETL")
         return {"inserted": inserted}
 
     # =====================================================================
@@ -1953,7 +1953,7 @@ class DataManager:
 
         # 1. 从 Tushare 获取原始数据
         raw_data = await self.client.fetch_raw_index_basic(market=market)
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -1966,13 +1966,13 @@ class DataManager:
             raw_inserted = await batch_insert(
                 session, RawTushareIndexBasic.__table__, raw_data
             )
-            logger.info(f"  - 写入 raw_tushare_index_basic: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw_tushare_index_basic: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_index_basic
 
             cleaned = transform_tushare_index_basic(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 index_basic
             from app.models.index import IndexBasic
@@ -1980,7 +1980,7 @@ class DataManager:
             cleaned_inserted = await batch_insert(
                 session, IndexBasic.__table__, cleaned
             )
-            logger.info(f"  - 写入 index_basic: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 index_basic: {cleaned_inserted} 条")
 
         logger.info(f"[sync_index_basic] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2009,7 +2009,7 @@ class DataManager:
             start_date=start_date,
             end_date=end_date,
         )
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2022,13 +2022,13 @@ class DataManager:
             raw_inserted = await batch_insert(
                 session, RawTushareIndexDaily.__table__, raw_data
             )
-            logger.info(f"  - 写入 raw_tushare_index_daily: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw_tushare_index_daily: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_index_daily
 
             cleaned = transform_tushare_index_daily(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 index_daily
             from app.models.index import IndexDaily
@@ -2036,7 +2036,7 @@ class DataManager:
             cleaned_inserted = await batch_insert(
                 session, IndexDaily.__table__, cleaned
             )
-            logger.info(f"  - 写入 index_daily: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 index_daily: {cleaned_inserted} 条")
 
         logger.info(f"[sync_index_daily] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2057,7 +2057,7 @@ class DataManager:
         raw_data = await self.client.fetch_raw_index_weight(
             index_code=index_code, trade_date=trade_date
         )
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2070,13 +2070,13 @@ class DataManager:
             raw_inserted = await batch_insert(
                 session, RawTushareIndexWeight.__table__, raw_data
             )
-            logger.info(f"  - 写入 raw_tushare_index_weight: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw_tushare_index_weight: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_index_weight
 
             cleaned = transform_tushare_index_weight(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 index_weight
             from app.models.index import IndexWeight
@@ -2084,7 +2084,7 @@ class DataManager:
             cleaned_inserted = await batch_insert(
                 session, IndexWeight.__table__, cleaned
             )
-            logger.info(f"  - 写入 index_weight: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 index_weight: {cleaned_inserted} 条")
 
         logger.info(f"[sync_index_weight] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2103,7 +2103,7 @@ class DataManager:
 
         # 1. 从 Tushare 获取原始数据
         raw_data = await self.client.fetch_raw_index_classify(level=level, src=src)
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2116,13 +2116,13 @@ class DataManager:
             raw_inserted = await batch_insert(
                 session, RawTushareIndexClassify.__table__, raw_data
             )
-            logger.info(f"  - 写入 raw_tushare_index_classify: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw_tushare_index_classify: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_industry_classify
 
             cleaned = transform_tushare_industry_classify(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 industry_classify
             from app.models.index import IndustryClassify
@@ -2130,7 +2130,7 @@ class DataManager:
             cleaned_inserted = await batch_insert(
                 session, IndustryClassify.__table__, cleaned
             )
-            logger.info(f"  - 写入 industry_classify: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 industry_classify: {cleaned_inserted} 条")
 
         logger.info(f"[sync_industry_classify] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2154,7 +2154,7 @@ class DataManager:
         raw_data = await self.client.fetch_raw_index_member_all(
             index_code=index_code, ts_code=ts_code, is_new=is_new
         )
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2167,13 +2167,13 @@ class DataManager:
             raw_inserted = await batch_insert(
                 session, RawTushareIndexMemberAll.__table__, raw_data
             )
-            logger.info(f"  - 写入 raw_tushare_index_member_all: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw_tushare_index_member_all: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_industry_member
 
             cleaned = transform_tushare_industry_member(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 industry_member
             from app.models.index import IndustryMember
@@ -2181,7 +2181,7 @@ class DataManager:
             cleaned_inserted = await batch_insert(
                 session, IndustryMember.__table__, cleaned
             )
-            logger.info(f"  - 写入 industry_member: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 industry_member: {cleaned_inserted} 条")
 
         logger.info(f"[sync_industry_member] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2219,7 +2219,7 @@ class DataManager:
         else:
             raise ValueError(f"不支持的数据源: {src}")
 
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2228,17 +2228,17 @@ class DataManager:
         # 2. 写入 raw 表
         async with self._session_factory() as session:
             raw_inserted = await batch_insert(session, raw_table, raw_data)
-            logger.info(f"  - 写入 raw 表: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw 表: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_concept_index
             cleaned = transform_tushare_concept_index(raw_data, src)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 concept_index
             from app.models.concept import ConceptIndex
             cleaned_inserted = await batch_insert(session, ConceptIndex.__table__, cleaned)
-            logger.info(f"  - 写入 concept_index: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 concept_index: {cleaned_inserted} 条")
 
         logger.info(f"[sync_concept_index] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2266,7 +2266,7 @@ class DataManager:
             start_date=start_date,
             end_date=end_date,
         )
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2276,17 +2276,17 @@ class DataManager:
         async with self._session_factory() as session:
             from app.models.raw import RawTushareThsDaily
             raw_inserted = await batch_insert(session, RawTushareThsDaily.__table__, raw_data)
-            logger.info(f"  - 写入 raw_tushare_ths_daily: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw_tushare_ths_daily: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_concept_daily
             cleaned = transform_tushare_concept_daily(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 concept_daily
             from app.models.concept import ConceptDaily
             cleaned_inserted = await batch_insert(session, ConceptDaily.__table__, cleaned)
-            logger.info(f"  - 写入 concept_daily: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 concept_daily: {cleaned_inserted} 条")
 
         logger.info(f"[sync_concept_daily] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2319,7 +2319,7 @@ class DataManager:
         else:
             raise ValueError(f"不支持的数据源: {src}")
 
-        logger.info(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
+        logger.debug(f"  - 从 Tushare 获取 {len(raw_data)} 条原始数据")
 
         if not raw_data:
             logger.warning("  - 未获取到数据")
@@ -2328,17 +2328,17 @@ class DataManager:
         # 2. 写入 raw 表
         async with self._session_factory() as session:
             raw_inserted = await batch_insert(session, raw_table, raw_data)
-            logger.info(f"  - 写入 raw 表: {raw_inserted} 条")
+            logger.debug(f"  - 写入 raw 表: {raw_inserted} 条")
 
             # 3. ETL 转换
             from app.data.etl import transform_tushare_concept_member
             cleaned = transform_tushare_concept_member(raw_data)
-            logger.info(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
 
             # 4. 写入 concept_member
             from app.models.concept import ConceptMember
             cleaned_inserted = await batch_insert(session, ConceptMember.__table__, cleaned)
-            logger.info(f"  - 写入 concept_member: {cleaned_inserted} 条")
+            logger.debug(f"  - 写入 concept_member: {cleaned_inserted} 条")
 
         logger.info(f"[sync_concept_member] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -2480,7 +2480,7 @@ class DataManager:
                     session, RawTushareLimitListD.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_limit_list_d] %s: %d", trade_date, counts["limit_list_d"])
+        logger.debug("[sync_raw_limit_list_d] %s: %d", trade_date, counts["limit_list_d"])
         return counts
 
     async def sync_raw_margin(self, trade_date: date) -> dict:
@@ -2496,7 +2496,7 @@ class DataManager:
                     session, RawTushareMargin.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_margin] %s: %d", trade_date, counts["margin"])
+        logger.debug("[sync_raw_margin] %s: %d", trade_date, counts["margin"])
         return counts
 
     async def sync_raw_margin_detail(self, trade_date: date) -> dict:
@@ -2512,7 +2512,7 @@ class DataManager:
                     session, RawTushareMarginDetail.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_margin_detail] %s: %d", trade_date, counts["margin_detail"])
+        logger.debug("[sync_raw_margin_detail] %s: %d", trade_date, counts["margin_detail"])
         return counts
 
     async def sync_raw_block_trade(self, trade_date: date) -> dict:
@@ -2528,7 +2528,7 @@ class DataManager:
                     session, RawTushareBlockTrade.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_block_trade] %s: %d", trade_date, counts["block_trade"])
+        logger.debug("[sync_raw_block_trade] %s: %d", trade_date, counts["block_trade"])
         return counts
 
     async def sync_raw_daily_share(self, trade_date: date) -> dict:
@@ -2544,7 +2544,7 @@ class DataManager:
                     session, RawTushareDailyShare.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_daily_share] %s: %d", trade_date, counts["daily_share"])
+        logger.debug("[sync_raw_daily_share] %s: %d", trade_date, counts["daily_share"])
         return counts
 
     async def sync_raw_stk_factor(self, trade_date: date) -> dict:
@@ -2560,7 +2560,7 @@ class DataManager:
                     session, RawTushareStkFactor.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_factor] %s: %d", trade_date, counts["stk_factor"])
+        logger.debug("[sync_raw_stk_factor] %s: %d", trade_date, counts["stk_factor"])
         return counts
 
     async def sync_raw_stk_factor_pro(self, trade_date: date) -> dict:
@@ -2576,7 +2576,7 @@ class DataManager:
                     session, RawTushareStkFactorPro.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_factor_pro] %s: %d", trade_date, counts["stk_factor_pro"])
+        logger.debug("[sync_raw_stk_factor_pro] %s: %d", trade_date, counts["stk_factor_pro"])
         return counts
 
     async def sync_raw_hm_board(self, trade_date: date) -> dict:
@@ -2592,7 +2592,7 @@ class DataManager:
                     session, RawTushareHmBoard.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_hm_board] %s: %d", trade_date, counts["hm_board"])
+        logger.debug("[sync_raw_hm_board] %s: %d", trade_date, counts["hm_board"])
         return counts
 
     async def sync_raw_hm_list(self, trade_date: date) -> dict:
@@ -2608,7 +2608,7 @@ class DataManager:
                     session, RawTushareHmList.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_hm_list] %s: %d", trade_date, counts["hm_list"])
+        logger.debug("[sync_raw_hm_list] %s: %d", trade_date, counts["hm_list"])
         return counts
 
     async def sync_raw_ths_hot(self, trade_date: date) -> dict:
@@ -2624,7 +2624,7 @@ class DataManager:
                     session, RawTushareThsHot.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_ths_hot] %s: %d", trade_date, counts["ths_hot"])
+        logger.debug("[sync_raw_ths_hot] %s: %d", trade_date, counts["ths_hot"])
         return counts
 
     async def sync_raw_dc_hot(self, trade_date: date) -> dict:
@@ -2640,7 +2640,7 @@ class DataManager:
                     session, RawTushareDcHot.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_dc_hot] %s: %d", trade_date, counts["dc_hot"])
+        logger.debug("[sync_raw_dc_hot] %s: %d", trade_date, counts["dc_hot"])
         return counts
 
     async def sync_raw_ths_limit(self, trade_date: date) -> dict:
@@ -2656,7 +2656,7 @@ class DataManager:
                     session, RawTushareThsLimit.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_ths_limit] %s: %d", trade_date, counts["ths_limit"])
+        logger.debug("[sync_raw_ths_limit] %s: %d", trade_date, counts["ths_limit"])
         return counts
 
     # --- P5 周频/月频 raw 同步 ---
@@ -2674,7 +2674,7 @@ class DataManager:
                     session, RawTushareWeekly.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_weekly] %s: %d", trade_date, counts["weekly"])
+        logger.debug("[sync_raw_weekly] %s: %d", trade_date, counts["weekly"])
         return counts
 
     async def sync_raw_monthly(self, trade_date: date) -> dict:
@@ -2690,7 +2690,7 @@ class DataManager:
                     session, RawTushareMonthly.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_monthly] %s: %d", trade_date, counts["monthly"])
+        logger.debug("[sync_raw_monthly] %s: %d", trade_date, counts["monthly"])
         return counts
 
     # --- P5 静态/低频 raw 同步 ---
@@ -2709,7 +2709,7 @@ class DataManager:
                         session, RawTushareStockCompany.__table__, raw_data
                     )
             await session.commit()
-        logger.info("[sync_raw_stock_company] total=%d", counts["stock_company"])
+        logger.debug("[sync_raw_stock_company] total=%d", counts["stock_company"])
         return counts
 
     async def sync_raw_margin_target(self) -> dict:
@@ -2724,7 +2724,7 @@ class DataManager:
                     session, RawTushareMarginTarget.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_margin_target] total=%d", counts["margin_target"])
+        logger.debug("[sync_raw_margin_target] total=%d", counts["margin_target"])
         return counts
 
     # --- P5 季度 raw 同步 ---
@@ -2742,7 +2742,7 @@ class DataManager:
                     session, RawTushareTop10Holders.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_top10_holders] %s: %d", trade_date, counts["top10_holders"])
+        logger.debug("[sync_raw_top10_holders] %s: %d", trade_date, counts["top10_holders"])
         return counts
 
     async def sync_raw_top10_floatholders(self, trade_date: date) -> dict:
@@ -2758,7 +2758,7 @@ class DataManager:
                     session, RawTushareTop10Floatholders.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_top10_floatholders] %s: %d", trade_date, counts["top10_floatholders"])
+        logger.debug("[sync_raw_top10_floatholders] %s: %d", trade_date, counts["top10_floatholders"])
         return counts
 
     async def sync_raw_stk_holdernumber(self, trade_date: date) -> dict:
@@ -2774,7 +2774,7 @@ class DataManager:
                     session, RawTushareStkHoldernumber.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_holdernumber] %s: %d", trade_date, counts["stk_holdernumber"])
+        logger.debug("[sync_raw_stk_holdernumber] %s: %d", trade_date, counts["stk_holdernumber"])
         return counts
 
     async def sync_raw_stk_holdertrade(self, trade_date: date) -> dict:
@@ -2790,7 +2790,7 @@ class DataManager:
                     session, RawTushareStkHoldertrade.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_holdertrade] %s: %d", trade_date, counts["stk_holdertrade"])
+        logger.debug("[sync_raw_stk_holdertrade] %s: %d", trade_date, counts["stk_holdertrade"])
         return counts
 
     # --- P5 补充数据 raw 同步（28 张表） ---
@@ -2809,7 +2809,7 @@ class DataManager:
                     session, RawTushareNamechange.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_namechange] total=%d", counts["namechange"])
+        logger.debug("[sync_raw_namechange] total=%d", counts["namechange"])
         return counts
 
     async def sync_raw_stk_managers(self) -> dict:
@@ -2824,7 +2824,7 @@ class DataManager:
                     session, RawTushareStkManagers.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_managers] total=%d", counts["stk_managers"])
+        logger.debug("[sync_raw_stk_managers] total=%d", counts["stk_managers"])
         return counts
 
     async def sync_raw_stk_rewards(self) -> dict:
@@ -2839,7 +2839,7 @@ class DataManager:
                     session, RawTushareStkRewards.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_rewards] total=%d", counts["stk_rewards"])
+        logger.debug("[sync_raw_stk_rewards] total=%d", counts["stk_rewards"])
         return counts
 
     async def sync_raw_new_share(self) -> dict:
@@ -2854,7 +2854,7 @@ class DataManager:
                     session, RawTushareNewShare.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_new_share] total=%d", counts["new_share"])
+        logger.debug("[sync_raw_new_share] total=%d", counts["new_share"])
         return counts
 
     async def sync_raw_stk_list_his(self) -> dict:
@@ -2869,7 +2869,7 @@ class DataManager:
                     session, RawTushareStkListHis.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_list_his] total=%d", counts["stk_list_his"])
+        logger.debug("[sync_raw_stk_list_his] total=%d", counts["stk_list_his"])
         return counts
 
     # 2. 行情补充表（2 张）
@@ -2887,7 +2887,7 @@ class DataManager:
                     session, RawTushareHsgtTop10.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_hsgt_top10] %s: %d", trade_date, counts["hsgt_top10"])
+        logger.debug("[sync_raw_hsgt_top10] %s: %d", trade_date, counts["hsgt_top10"])
         return counts
 
     async def sync_raw_ggt_daily(self, trade_date: date) -> dict:
@@ -2903,7 +2903,7 @@ class DataManager:
                     session, RawTushareGgtDaily.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_ggt_daily] %s: %d", trade_date, counts["ggt_daily"])
+        logger.debug("[sync_raw_ggt_daily] %s: %d", trade_date, counts["ggt_daily"])
         return counts
 
     # 3. 市场参考表（4 张）
@@ -2920,7 +2920,7 @@ class DataManager:
                     session, RawTusharePledgeStat.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_pledge_stat] total=%d", counts["pledge_stat"])
+        logger.debug("[sync_raw_pledge_stat] total=%d", counts["pledge_stat"])
         return counts
 
     async def sync_raw_pledge_detail(self) -> dict:
@@ -2935,7 +2935,7 @@ class DataManager:
                     session, RawTusharePledgeDetail.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_pledge_detail] total=%d", counts["pledge_detail"])
+        logger.debug("[sync_raw_pledge_detail] total=%d", counts["pledge_detail"])
         return counts
 
     async def sync_raw_repurchase(self) -> dict:
@@ -2950,7 +2950,7 @@ class DataManager:
                     session, RawTushareRepurchase.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_repurchase] total=%d", counts["repurchase"])
+        logger.debug("[sync_raw_repurchase] total=%d", counts["repurchase"])
         return counts
 
     async def sync_raw_share_float(self, trade_date: date) -> dict:
@@ -2966,7 +2966,7 @@ class DataManager:
                     session, RawTushareShareFloat.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_share_float] %s: %d", trade_date, counts["share_float"])
+        logger.debug("[sync_raw_share_float] %s: %d", trade_date, counts["share_float"])
         return counts
 
     # 4. 特色数据表（7 张）
@@ -2984,7 +2984,7 @@ class DataManager:
                     session, RawTushareReportRc.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_report_rc] %s: %d", trade_date, counts["report_rc"])
+        logger.debug("[sync_raw_report_rc] %s: %d", trade_date, counts["report_rc"])
         return counts
 
     async def sync_raw_cyq_perf(self, trade_date: date) -> dict:
@@ -3000,7 +3000,7 @@ class DataManager:
                     session, RawTushareCyqPerf.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_cyq_perf] %s: %d", trade_date, counts["cyq_perf"])
+        logger.debug("[sync_raw_cyq_perf] %s: %d", trade_date, counts["cyq_perf"])
         return counts
 
     async def sync_raw_cyq_chips(self, trade_date: date) -> dict:
@@ -3016,7 +3016,7 @@ class DataManager:
                     session, RawTushareCyqChips.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_cyq_chips] %s: %d", trade_date, counts["cyq_chips"])
+        logger.debug("[sync_raw_cyq_chips] %s: %d", trade_date, counts["cyq_chips"])
         return counts
 
     async def sync_raw_ccass_hold(self, trade_date: date) -> dict:
@@ -3032,7 +3032,7 @@ class DataManager:
                     session, RawTushareCcassHold.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_ccass_hold] %s: %d", trade_date, counts["ccass_hold"])
+        logger.debug("[sync_raw_ccass_hold] %s: %d", trade_date, counts["ccass_hold"])
         return counts
 
     async def sync_raw_ccass_hold_detail(self, trade_date: date) -> dict:
@@ -3048,7 +3048,7 @@ class DataManager:
                     session, RawTushareCcassHoldDetail.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_ccass_hold_detail] %s: %d", trade_date, counts["ccass_hold_detail"])
+        logger.debug("[sync_raw_ccass_hold_detail] %s: %d", trade_date, counts["ccass_hold_detail"])
         return counts
 
     async def sync_raw_hk_hold(self, trade_date: date) -> dict:
@@ -3064,7 +3064,7 @@ class DataManager:
                     session, RawTushareHkHold.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_hk_hold] %s: %d", trade_date, counts["hk_hold"])
+        logger.debug("[sync_raw_hk_hold] %s: %d", trade_date, counts["hk_hold"])
         return counts
 
     async def sync_raw_stk_surv(self) -> dict:
@@ -3079,7 +3079,7 @@ class DataManager:
                     session, RawTushareStkSurv.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_surv] total=%d", counts["stk_surv"])
+        logger.debug("[sync_raw_stk_surv] total=%d", counts["stk_surv"])
         return counts
 
     # 5. 两融补充表（1 张）
@@ -3097,7 +3097,7 @@ class DataManager:
                     session, RawTushareSlbLen.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_slb_len] %s: %d", trade_date, counts["slb_len"])
+        logger.debug("[sync_raw_slb_len] %s: %d", trade_date, counts["slb_len"])
         return counts
 
     # 6. 打板专题表（9 张）
@@ -3115,7 +3115,7 @@ class DataManager:
                     session, RawTushareLimitStep.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_limit_step] %s: %d", trade_date, counts["limit_step"])
+        logger.debug("[sync_raw_limit_step] %s: %d", trade_date, counts["limit_step"])
         return counts
 
     async def sync_raw_hm_detail(self, trade_date: date) -> dict:
@@ -3131,7 +3131,7 @@ class DataManager:
                     session, RawTushareHmDetail.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_hm_detail] %s: %d", trade_date, counts["hm_detail"])
+        logger.debug("[sync_raw_hm_detail] %s: %d", trade_date, counts["hm_detail"])
         return counts
 
     async def sync_raw_stk_auction(self, trade_date: date) -> dict:
@@ -3147,7 +3147,7 @@ class DataManager:
                     session, RawTushareStkAuction.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_auction] %s: %d", trade_date, counts["stk_auction"])
+        logger.debug("[sync_raw_stk_auction] %s: %d", trade_date, counts["stk_auction"])
         return counts
 
     async def sync_raw_stk_auction_o(self, trade_date: date) -> dict:
@@ -3163,7 +3163,7 @@ class DataManager:
                     session, RawTushareStkAuctionO.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_stk_auction_o] %s: %d", trade_date, counts["stk_auction_o"])
+        logger.debug("[sync_raw_stk_auction_o] %s: %d", trade_date, counts["stk_auction_o"])
         return counts
 
     async def sync_raw_kpl_list(self, trade_date: date) -> dict:
@@ -3179,7 +3179,7 @@ class DataManager:
                     session, RawTushareKplList.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_kpl_list] %s: %d", trade_date, counts["kpl_list"])
+        logger.debug("[sync_raw_kpl_list] %s: %d", trade_date, counts["kpl_list"])
         return counts
 
     async def sync_raw_kpl_concept(self, trade_date: date) -> dict:
@@ -3195,7 +3195,7 @@ class DataManager:
                     session, RawTushareKplConcept.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_kpl_concept] %s: %d", trade_date, counts["kpl_concept"])
+        logger.debug("[sync_raw_kpl_concept] %s: %d", trade_date, counts["kpl_concept"])
         return counts
 
     async def sync_raw_broker_recommend(self, trade_date: date) -> dict:
@@ -3211,7 +3211,7 @@ class DataManager:
                     session, RawTushareBrokerRecommend.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_broker_recommend] %s: %d", trade_date, counts["broker_recommend"])
+        logger.debug("[sync_raw_broker_recommend] %s: %d", trade_date, counts["broker_recommend"])
         return counts
 
     async def sync_raw_ggt_monthly(self, trade_date: date) -> dict:
@@ -3227,7 +3227,7 @@ class DataManager:
                     session, RawTushareGgtMonthly.__table__, raw_data
                 )
             await session.commit()
-        logger.info("[sync_raw_ggt_monthly] %s: %d", trade_date, counts["ggt_monthly"])
+        logger.debug("[sync_raw_ggt_monthly] %s: %d", trade_date, counts["ggt_monthly"])
         return counts
 
     # --- P5 ETL 方法 ---
@@ -3263,7 +3263,7 @@ class DataManager:
                     session, SuspendInfo.__table__, cleaned
                 )
 
-        logger.info("[etl_suspend] %s: %d", trade_date, counts["suspend_info"])
+        logger.debug("[etl_suspend] %s: %d", trade_date, counts["suspend_info"])
         return counts
 
     async def etl_limit_list(self, trade_date: date) -> dict:
@@ -3297,7 +3297,7 @@ class DataManager:
                     session, LimitListDaily.__table__, cleaned
                 )
 
-        logger.info("[etl_limit_list] %s: %d", trade_date, counts["limit_list_daily"])
+        logger.debug("[etl_limit_list] %s: %d", trade_date, counts["limit_list_daily"])
         return counts
 
     # --- P5 聚合入口 ---
@@ -3629,8 +3629,9 @@ class DataManager:
                     progress_map[row.table_name] = row.last_sync_date
 
         results: dict = {}
+        total_entries = len(entries)
 
-        for raw_table, sync_method_name, freq, etl_method_name in entries:
+        for entry_idx, (raw_table, sync_method_name, freq, etl_method_name) in enumerate(entries, 1):
             sync_method = getattr(self, sync_method_name, None)
             if sync_method is None:
                 logger.warning("[sync_raw_tables] 方法 %s 不存在，跳过", sync_method_name)
@@ -3638,13 +3639,10 @@ class DataManager:
 
             # 确定要同步的日期列表
             if freq == "static":
-                # 静态表：无日期参数，直接调用一次
                 dates_to_sync = [None]
             elif freq == "period":
-                # 按季度：跳过，P1 财务数据由专门逻辑处理
                 dates_to_sync = [None]
             elif freq == "bulk_daily":
-                # 批量日频：全量/gap_fill 模式下一次性传日期范围，增量模式按单日
                 dates_to_sync = [end_date]  # 占位，实际在下面特殊处理
             elif mode == "incremental":
                 dates_to_sync = [end_date]
@@ -3660,22 +3658,22 @@ class DataManager:
             else:
                 dates_to_sync = [end_date]
 
+            table_start = time.monotonic()
             total_rows = 0
             error_msg = None
+            total_dates = len(dates_to_sync)
 
-            for td in dates_to_sync:
+            for date_idx, td in enumerate(dates_to_sync, 1):
                 try:
                     if freq == "static":
                         r = await sync_method()
                     elif freq == "period":
-                        # P1 财务数据：按季度同步
                         if td is not None:
                             period_str = td.strftime("%Y%m%d")
                             r = await sync_method(period_str)
                         else:
                             r = {}
                     elif freq == "bulk_daily":
-                        # 批量日频：全量/gap_fill 传日期范围，增量传单日
                         if mode in ("full", "gap_fill") and start_date and end_date:
                             r = await sync_method(start_date, end_date=end_date)
                         else:
@@ -3683,17 +3681,30 @@ class DataManager:
                     else:
                         r = await sync_method(td)
                     # 累加行数
+                    rows = 0
                     if isinstance(r, dict):
-                        total_rows += sum(
-                            v for v in r.values() if isinstance(v, int)
+                        rows = sum(v for v in r.values() if isinstance(v, int))
+                        total_rows += rows
+                    # 日频表且多日：每个日期 1 条日志
+                    if freq == "daily" and total_dates > 1:
+                        logger.info(
+                            "[sync] %s [表%d/%d] [%d/%d] %s ✓ %d行",
+                            raw_table, entry_idx, total_entries,
+                            date_idx, total_dates, td, rows,
                         )
                 except Exception:
                     error_msg = traceback.format_exc()[-200:]
-                    logger.warning(
-                        "[sync_raw_tables] %s 在 %s 失败: %s",
-                        raw_table, td, error_msg,
-                    )
-                    # 继续下一个日期，不中断
+                    if freq == "daily" and total_dates > 1:
+                        logger.warning(
+                            "[sync] %s [表%d/%d] [%d/%d] %s ✗ %s",
+                            raw_table, entry_idx, total_entries,
+                            date_idx, total_dates, td, error_msg[:80],
+                        )
+                    else:
+                        logger.warning(
+                            "[sync_raw_tables] %s 在 %s 失败: %s",
+                            raw_table, td, error_msg,
+                        )
 
             # 执行对应的 ETL（仅对 incremental 模式的最新日期）
             if etl_method_name and mode == "incremental":
@@ -3704,13 +3715,44 @@ class DataManager:
                             await etl_method(end_date.strftime("%Y%m%d"))
                         else:
                             await etl_method(end_date)
+                        logger.info(
+                            "[sync] ETL %s [表%d/%d] %s ✓",
+                            etl_method_name, entry_idx, total_entries, end_date,
+                        )
                     except Exception:
                         logger.warning(
-                            "[sync_raw_tables] ETL %s 失败: %s",
-                            etl_method_name, traceback.format_exc()[-200:],
+                            "[sync] ETL %s [表%d/%d] %s ✗ %s",
+                            etl_method_name, entry_idx, total_entries,
+                            end_date, traceback.format_exc()[-200:],
                         )
 
             results[raw_table] = {"rows": total_rows, "error": error_msg}
+
+            # 表完成汇总
+            table_elapsed = time.monotonic() - table_start
+            if freq == "static":
+                logger.info(
+                    "[sync] %s [表%d/%d] 静态 ✓ %d行，耗时%.1fs",
+                    raw_table, entry_idx, total_entries, total_rows, table_elapsed,
+                )
+            elif freq == "bulk_daily" and mode in ("full", "gap_fill"):
+                logger.info(
+                    "[sync] %s [表%d/%d] 批量 %s~%s ✓ %d行，耗时%.1fs",
+                    raw_table, entry_idx, total_entries,
+                    start_date, end_date, total_rows, table_elapsed,
+                )
+            elif total_dates > 1:
+                logger.info(
+                    "[sync] %s [表%d/%d] 完成：%d日，共%d行，耗时%.1fs",
+                    raw_table, entry_idx, total_entries,
+                    total_dates, total_rows, table_elapsed,
+                )
+            else:
+                logger.info(
+                    "[sync] %s [表%d/%d] %s ✓ %d行，耗时%.1fs",
+                    raw_table, entry_idx, total_entries,
+                    end_date, total_rows, table_elapsed,
+                )
 
             # 更新 raw_sync_progress（Task 3.4）
             if error_msg is None and freq != "static":

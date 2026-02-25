@@ -229,8 +229,7 @@ async def sync_daily_data(
                 logger.error("P0 日期 %s 失败：%s", trade_date, e)
                 p0_failed += 1
             if i % 10 == 0 or i == len(trading_dates):
-                progress = (i / len(trading_dates)) * 100
-                print(f"   [{i}/{len(trading_dates)}] {progress:.1f}% - {trade_date}")
+                print(f"   [init] P0 日线 [{i}/{len(trading_dates)}] {trade_date} ✓")
         results["p0"] = {"success": p0_success, "failed": p0_failed}
         print(f"✓ [P0] 完成：成功 {p0_success} 天，失败 {p0_failed} 天")
     else:
@@ -250,7 +249,7 @@ async def sync_daily_data(
                 logger.error("P1 季度 %s 失败：%s", period, e)
                 p1_failed += 1
             if i % 4 == 0 or i == len(periods):
-                print(f"   [{i}/{len(periods)}] {period}")
+                print(f"   [init] P1 财务 [{i}/{len(periods)}] {period} ✓")
         results["p1"] = {"success": p1_success, "failed": p1_failed}
         print(f"✓ [P1] 完成：成功 {p1_success} 季，失败 {p1_failed} 季")
     except Exception as e:
@@ -288,7 +287,7 @@ async def sync_daily_data(
             td_str = td.strftime("%Y%m%d")
             await manager.sync_concept_daily(trade_date=td_str)
             if i % 10 == 0 or i == len(trading_dates):
-                print(f"   [{i}/{len(trading_dates)}] {td_str}")
+                print(f"   [init] P4 板块日线 [{i}/{len(trading_dates)}] {td_str} ✓")
 
         # 板块成分股
         print("   同步板块成分股...")
@@ -303,7 +302,7 @@ async def sync_daily_data(
             except Exception as e:
                 logger.error("板块 %s 成分股同步失败：%s", code, e)
             if i % 50 == 0 or i == len(concept_codes):
-                print(f"   [{i}/{len(concept_codes)}] 成分股")
+                print(f"   [init] P4 成分股 [{i}/{len(concept_codes)}] {code} ✓")
 
         results["p4"] = {"status": "ok"}
         print("✓ [P4] 完成")
