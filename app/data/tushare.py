@@ -61,11 +61,17 @@ class TushareClient:
     """Tushare Pro API 客户端。
 
     - 令牌桶限流（默认 400 次/分钟，官方限制 500）
+    - 特殊接口独立限流桶（如 limit_list_d 200 次/分钟）
     - asyncio.to_thread 异步包装（Tushare SDK 是同步的）
-    - 指数退避重试
+    - 指数退避重试，限流错误加长退避
     - 实现 DataSourceClient Protocol 的 4 个方法
     - 提供 fetch_raw_* 系列方法获取原始数据
     """
+
+    # 特殊限流接口（接口名 → 每分钟次数），未列出的接口使用全局桶
+    _API_RATE_LIMITS: dict[str, int] = {
+        "limit_list_d": 180,  # 官方 200 次/分钟，留余量
+    }
 
     def __init__(
         self,
@@ -78,6 +84,10 @@ class TushareClient:
         self._retry_count = retry_count
         self._retry_interval = retry_interval
         self._bucket = _TokenBucket(qps_limit)
+        # 为特殊限流接口创建独立令牌桶
+        self._api_buckets: dict[str, _TokenBucket] = {
+            api: _TokenBucket(rate) for api, rate in self._API_RATE_LIMITS.items()
+        }
         # 初始化 Tushare Pro API（同步）
         self._pro = ts.pro_api(token)
 
@@ -528,9 +538,11 @@ class TushareClient:
         import pandas as _pd
 
         last_error: Exception | None = None
+        # 优先使用接口专属限流桶，未配置则使用全局桶
+        bucket = self._api_buckets.get(api_name, self._bucket)
         for attempt in range(self._retry_count + 1):
             try:
-                await self._bucket.acquire()
+                await bucket.acquire()
                 df = await asyncio.to_thread(
                     self._pro.query, api_name, **kwargs
                 )
@@ -540,7 +552,11 @@ class TushareClient:
             except Exception as e:
                 last_error = e
                 if attempt < self._retry_count:
-                    wait = self._retry_interval * (2 ** attempt)
+                    # 限流错误使用更长退避（15s/30s/45s），确保限流窗口过去
+                    if "每分钟最多访问" in str(e):
+                        wait = 15.0 * (attempt + 1)
+                    else:
+                        wait = self._retry_interval * (2 ** attempt)
                     logger.warning(
                         "Tushare %s 重试 %d/%d (%.1fs 后): %s",
                         api_name, attempt + 1, self._retry_count, wait, e,
