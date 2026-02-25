@@ -289,6 +289,7 @@ def _generate_quarter_periods(start_date: date, end_date: date) -> list[str]:
 @cli.command("init-tushare")
 @click.option("--start", default=None, help="开始日期 (YYYY-MM-DD)，默认为 settings.data_start_date")
 @click.option("--end", default=None, help="结束日期 (YYYY-MM-DD)，默认为今天")
+@click.option("--skip-p0", is_flag=True, help="跳过日线数据同步（P0）")
 @click.option("--skip-fina", is_flag=True, help="跳过财务数据同步（P1）")
 @click.option("--skip-p2", is_flag=True, help="跳过资金流向同步（P2）")
 @click.option("--skip-index", is_flag=True, help="跳过指数数据同步（P3）")
@@ -297,6 +298,7 @@ def _generate_quarter_periods(start_date: date, end_date: date) -> list[str]:
 def init_tushare(
     start: str | None,
     end: str | None,
+    skip_p0: bool,
     skip_fina: bool,
     skip_p2: bool,
     skip_index: bool,
@@ -348,17 +350,21 @@ def init_tushare(
         click.echo(f"✓ 交易日历同步完成：{calendar_result.get('inserted', 0)} 个交易日")
         click.echo()
 
-        # 步骤 3: 逐日同步日线数据（P0）
-        click.echo(f"步骤 3/{total_steps}: 同步日线数据（P0）...")
+        # 步骤 3: 逐日同步日线数据（P0，可选）
         trading_dates = await manager.get_trade_calendar(start_date, end_date)
-        click.echo(f"共需同步 {len(trading_dates)} 个交易日")
-        daily_result = await batch_sync_daily(
-            session_factory=async_session_factory,
-            trade_dates=trading_dates,
-            manager=manager,
-        )
-        click.echo(f"✓ P0 日线数据同步完成：成功 {daily_result['success']} 天，失败 {daily_result['failed']} 天")
-        click.echo()
+        if not skip_p0:
+            click.echo(f"步骤 3/{total_steps}: 同步日线数据（P0）...")
+            click.echo(f"共需同步 {len(trading_dates)} 个交易日")
+            daily_result = await batch_sync_daily(
+                session_factory=async_session_factory,
+                trade_dates=trading_dates,
+                manager=manager,
+            )
+            click.echo(f"✓ P0 日线数据同步完成：成功 {daily_result['success']} 天，失败 {daily_result['failed']} 天")
+            click.echo()
+        else:
+            click.echo(f"步骤 3/{total_steps}: 跳过日线数据同步（P0）")
+            click.echo()
 
         # 步骤 4: 同步财务数据（P1，可选）
         if not skip_fina:
