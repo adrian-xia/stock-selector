@@ -11,7 +11,7 @@ import json
 import logging
 import sys
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -22,10 +22,13 @@ class JSONFormatter(logging.Formatter):
     每条日志输出为单行 JSON 对象，便于日志分析工具解析。
     """
 
+    # 东八区时区
+    _TZ_CST = timezone(timedelta(hours=8))
+
     def format(self, record: logging.LogRecord) -> str:
         log_entry = {
             "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
+                record.created, tz=self._TZ_CST
             ).isoformat(),
             "level": record.levelname,
             "logger": record.name,
@@ -80,7 +83,17 @@ def setup_logging(level: str = "INFO") -> None:
     if log_format == "json":
         formatter = JSONFormatter()
     else:
-        formatter = logging.Formatter(
+        # text 格式使用东八区时间
+        class CSTFormatter(logging.Formatter):
+            _TZ_CST = timezone(timedelta(hours=8))
+
+            def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+                dt = datetime.fromtimestamp(record.created, tz=self._TZ_CST)
+                if datefmt:
+                    return dt.strftime(datefmt)
+                return dt.isoformat(timespec="seconds")
+
+        formatter = CSTFormatter(
             "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
