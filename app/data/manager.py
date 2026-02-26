@@ -10,8 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.data.client_base import DataSourceClient
 from app.data.etl import (
     batch_insert,
+    transform_tushare_balancesheet,
+    transform_tushare_cashflow,
     transform_tushare_daily,
     transform_tushare_fina_indicator,
+    transform_tushare_income,
     transform_tushare_index_basic,
     transform_tushare_index_daily,
     transform_tushare_index_technical,
@@ -26,7 +29,7 @@ from app.data.etl import (
     transform_tushare_trade_cal,
 )
 from app.exceptions import DataSyncError
-from app.models.finance import FinanceIndicator
+from app.models.finance import BalanceSheet, CashFlowStatement, FinanceIndicator, IncomeStatement
 from app.models.flow import DragonTiger, MoneyFlow
 from app.models.index import (
     IndexBasic,
@@ -1932,18 +1935,18 @@ class DataManager:
         return counts
 
     async def etl_fina(self, period: str) -> dict:
-        """从 raw 表 ETL 清洗财务数据到业务表（仅 finance_indicator，其他财务表待实现）。
+        """从 raw 表 ETL 清洗财务数据到业务表（finance_indicator + 财务三表）。
 
         Args:
             period: 报告期（季度最后一天），格式 YYYYMMDD
 
         Returns:
-            {"inserted": int} - 写入的记录数
+            {"fina_indicator": int, "income": int, "balancesheet": int, "cashflow": int}
         """
         logger.debug(f"[etl_fina] 开始 ETL 清洗 {period} 财务数据")
 
         async with self._session_factory() as session:
-            # 1. 从 raw_tushare_fina_indicator 读取数据
+            # --- finance_indicator ---
             result = await session.execute(
                 select(RawTushareFinaIndicator).where(
                     RawTushareFinaIndicator.end_date == period
@@ -1952,46 +1955,80 @@ class DataManager:
             raw_rows = result.scalars().all()
             logger.debug(f"  - 从 raw_tushare_fina_indicator 读取 {len(raw_rows)} 条")
 
-            if not raw_rows:
-                logger.warning(f"  - {period} 没有财务指标数据，跳过 ETL")
-                return {"inserted": 0}
+            fina_inserted = 0
+            if raw_rows:
+                raw_dicts = [
+                    {
+                        "ts_code": r.ts_code,
+                        "ann_date": r.ann_date,
+                        "end_date": r.end_date,
+                        "eps": r.eps,
+                        "roe": r.roe,
+                        "roe_dt": r.roe_dt,
+                        "grossprofit_margin": r.grossprofit_margin,
+                        "netprofit_margin": r.netprofit_margin,
+                        "or_yoy": r.or_yoy,
+                        "netprofit_yoy": r.netprofit_yoy,
+                        "current_ratio": r.current_ratio,
+                        "quick_ratio": r.quick_ratio,
+                        "debt_to_assets": r.debt_to_assets,
+                        "ocfps": r.ocfps,
+                        "update_flag": r.update_flag,
+                    }
+                    for r in raw_rows
+                ]
+                cleaned = transform_tushare_fina_indicator(raw_dicts)
+                if cleaned:
+                    fina_inserted = await batch_insert(session, FinanceIndicator.__table__, cleaned)
+                    logger.debug(f"  - 写入 finance_indicator: {fina_inserted} 条")
 
-            # 2. 转换为 dict 格式
-            raw_dicts = [
-                {
-                    "ts_code": r.ts_code,
-                    "ann_date": r.ann_date,
-                    "end_date": r.end_date,
-                    "eps": r.eps,
-                    "roe": r.roe,
-                    "roe_dt": r.roe_dt,
-                    "grossprofit_margin": r.grossprofit_margin,
-                    "netprofit_margin": r.netprofit_margin,
-                    "or_yoy": r.or_yoy,
-                    "netprofit_yoy": r.netprofit_yoy,
-                    "current_ratio": r.current_ratio,
-                    "quick_ratio": r.quick_ratio,
-                    "debt_to_assets": r.debt_to_assets,
-                    "ocfps": r.ocfps,
-                    "update_flag": r.update_flag,
-                }
-                for r in raw_rows
-            ]
+            # --- income_statement ---
+            result = await session.execute(
+                select(RawTushareIncome).where(RawTushareIncome.end_date == period)
+            )
+            income_rows = result.scalars().all()
+            logger.debug(f"  - 从 raw_tushare_income 读取 {len(income_rows)} 条")
 
-            # 3. ETL 转换
-            cleaned = transform_tushare_fina_indicator(raw_dicts)
-            logger.debug(f"  - ETL 转换得到 {len(cleaned)} 条清洗数据")
+            income_inserted = 0
+            if income_rows:
+                income_dicts = [{c.name: getattr(r, c.name) for c in RawTushareIncome.__table__.columns} for r in income_rows]
+                cleaned_income = transform_tushare_income(income_dicts)
+                if cleaned_income:
+                    income_inserted = await batch_insert(session, IncomeStatement.__table__, cleaned_income)
+                    logger.debug(f"  - 写入 income_statement: {income_inserted} 条")
 
-            # 4. 批量写入 finance_indicator
-            inserted = 0
-            if cleaned:
-                inserted = await batch_insert(
-                    session, FinanceIndicator.__table__, cleaned
-                )
-                logger.debug(f"  - 写入 finance_indicator: {inserted} 条")
+            # --- balance_sheet ---
+            result = await session.execute(
+                select(RawTushareBalancesheet).where(RawTushareBalancesheet.end_date == period)
+            )
+            bs_rows = result.scalars().all()
+            logger.debug(f"  - 从 raw_tushare_balancesheet 读取 {len(bs_rows)} 条")
 
-        logger.debug(f"[etl_fina] 完成 {period} 财务数据 ETL")
-        return {"inserted": inserted}
+            bs_inserted = 0
+            if bs_rows:
+                bs_dicts = [{c.name: getattr(r, c.name) for c in RawTushareBalancesheet.__table__.columns} for r in bs_rows]
+                cleaned_bs = transform_tushare_balancesheet(bs_dicts)
+                if cleaned_bs:
+                    bs_inserted = await batch_insert(session, BalanceSheet.__table__, cleaned_bs)
+                    logger.debug(f"  - 写入 balance_sheet: {bs_inserted} 条")
+
+            # --- cash_flow_statement ---
+            result = await session.execute(
+                select(RawTushareCashflow).where(RawTushareCashflow.end_date == period)
+            )
+            cf_rows = result.scalars().all()
+            logger.debug(f"  - 从 raw_tushare_cashflow 读取 {len(cf_rows)} 条")
+
+            cf_inserted = 0
+            if cf_rows:
+                cf_dicts = [{c.name: getattr(r, c.name) for c in RawTushareCashflow.__table__.columns} for r in cf_rows]
+                cleaned_cf = transform_tushare_cashflow(cf_dicts)
+                if cleaned_cf:
+                    cf_inserted = await batch_insert(session, CashFlowStatement.__table__, cleaned_cf)
+                    logger.debug(f"  - 写入 cash_flow_statement: {cf_inserted} 条")
+
+        logger.debug(f"[etl_fina] 完成 {period} 财务数据 ETL: fina={fina_inserted}, income={income_inserted}, bs={bs_inserted}, cf={cf_inserted}")
+        return {"fina_indicator": fina_inserted, "income": income_inserted, "balancesheet": bs_inserted, "cashflow": cf_inserted}
 
     # =====================================================================
     # P3 指数数据同步方法（5 个）

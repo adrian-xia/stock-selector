@@ -799,3 +799,164 @@ def transform_tushare_limit_list_d(raw_rows: list[dict]) -> list[dict]:
         })
     return cleaned
 
+
+# ---------------------------------------------------------------------------
+# P3 财务三表 ETL 清洗函数
+# ---------------------------------------------------------------------------
+
+
+def transform_tushare_income(raw_rows: list[dict]) -> list[dict]:
+    """将 raw_tushare_income 原始数据转换为 income_statement 业务表格式。
+
+    只保留合并报表（report_type="1"），按 (ts_code, end_date, report_type) 去重。
+    """
+    seen: dict[tuple, dict] = {}
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+
+        report_type = _safe_str(raw.get("report_type", "")) or "1"
+        if report_type != "1":
+            continue
+
+        end_date = parse_date(raw.get("end_date"))
+        if end_date is None:
+            continue
+
+        key = (ts_code, end_date, report_type)
+        seen[key] = {
+            "ts_code": ts_code,
+            "end_date": end_date,
+            "report_type": report_type,
+            "ann_date": parse_date(raw.get("ann_date")),
+            "total_revenue": parse_decimal(raw.get("total_revenue")),
+            "revenue": parse_decimal(raw.get("revenue")),
+            "oper_cost": parse_decimal(raw.get("oper_cost")),
+            "total_cogs": parse_decimal(raw.get("total_cogs")),
+            "sell_exp": parse_decimal(raw.get("sell_exp")),
+            "admin_exp": parse_decimal(raw.get("admin_exp")),
+            "fin_exp": parse_decimal(raw.get("fin_exp")),
+            "rd_exp": parse_decimal(raw.get("rd_exp")),
+            "operate_profit": parse_decimal(raw.get("operate_profit")),
+            "total_profit": parse_decimal(raw.get("total_profit")),
+            "income_tax": parse_decimal(raw.get("income_tax")),
+            "n_income": parse_decimal(raw.get("n_income")),
+            "n_income_attr_p": parse_decimal(raw.get("n_income_attr_p")),
+            "basic_eps": parse_decimal(raw.get("basic_eps")),
+            "diluted_eps": parse_decimal(raw.get("diluted_eps")),
+            "ebit": parse_decimal(raw.get("ebit")),
+            "ebitda": parse_decimal(raw.get("ebitda")),
+            "invest_income": parse_decimal(raw.get("invest_income")),
+            "non_oper_income": parse_decimal(raw.get("non_oper_income")),
+            "non_oper_exp": parse_decimal(raw.get("non_oper_exp")),
+            "data_source": "tushare",
+        }
+    return list(seen.values())
+
+
+def transform_tushare_balancesheet(raw_rows: list[dict]) -> list[dict]:
+    """将 raw_tushare_balancesheet 原始数据转换为 balance_sheet 业务表格式。
+
+    只保留合并报表（report_type="1"），按 (ts_code, end_date, report_type) 去重。
+    """
+    seen: dict[tuple, dict] = {}
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+
+        report_type = _safe_str(raw.get("report_type", "")) or "1"
+        if report_type != "1":
+            continue
+
+        end_date = parse_date(raw.get("end_date"))
+        if end_date is None:
+            continue
+
+        key = (ts_code, end_date, report_type)
+        seen[key] = {
+            "ts_code": ts_code,
+            "end_date": end_date,
+            "report_type": report_type,
+            "ann_date": parse_date(raw.get("ann_date")),
+            "total_assets": parse_decimal(raw.get("total_assets")),
+            "total_cur_assets": parse_decimal(raw.get("total_cur_assets")),
+            "total_nca": parse_decimal(raw.get("total_nca")),
+            "money_cap": parse_decimal(raw.get("money_cap")),
+            "accounts_receiv": parse_decimal(raw.get("accounts_receiv")),
+            "notes_receiv": parse_decimal(raw.get("notes_receiv")),
+            "prepayment": parse_decimal(raw.get("prepayment")),
+            "contract_assets": parse_decimal(raw.get("contract_assets")),
+            "inventories": parse_decimal(raw.get("inventories")),
+            "fix_assets": parse_decimal(raw.get("fix_assets")),
+            "intan_assets": parse_decimal(raw.get("intan_assets")),
+            "goodwill": parse_decimal(raw.get("goodwill")),
+            "total_liab": parse_decimal(raw.get("total_liab")),
+            "total_cur_liab": parse_decimal(raw.get("total_cur_liab")),
+            "total_ncl": parse_decimal(raw.get("total_ncl")),
+            "st_borr": parse_decimal(raw.get("st_borr")),
+            "lt_borr": parse_decimal(raw.get("lt_borr")),
+            "bond_payable": parse_decimal(raw.get("bond_payable")),
+            "notes_payable": parse_decimal(raw.get("notes_payable")),
+            "adv_receipts": parse_decimal(raw.get("adv_receipts")),
+            "contract_liab": parse_decimal(raw.get("contract_liab")),
+            "total_hldr_eqy_exc_min_int": parse_decimal(raw.get("total_hldr_eqy_exc_min_int")),
+            "total_hldr_eqy_inc_min_int": parse_decimal(raw.get("total_hldr_eqy_inc_min_int")),
+            "total_share": parse_decimal(raw.get("total_share")),
+            "cap_rese": parse_decimal(raw.get("cap_rese")),
+            "surplus_rese": parse_decimal(raw.get("surplus_rese")),
+            "undistr_porfit": parse_decimal(raw.get("undistr_porfit")),
+            "minority_int": parse_decimal(raw.get("minority_int")),
+            "treasury_share": parse_decimal(raw.get("treasury_share")),
+            "data_source": "tushare",
+        }
+    return list(seen.values())
+
+
+def transform_tushare_cashflow(raw_rows: list[dict]) -> list[dict]:
+    """将 raw_tushare_cashflow 原始数据转换为 cash_flow_statement 业务表格式。
+
+    只保留合并报表（report_type="1"），按 (ts_code, end_date, report_type) 去重。
+    """
+    seen: dict[tuple, dict] = {}
+    for raw in raw_rows:
+        ts_code = raw.get("ts_code", "")
+        if not ts_code:
+            continue
+
+        report_type = _safe_str(raw.get("report_type", "")) or "1"
+        if report_type != "1":
+            continue
+
+        end_date = parse_date(raw.get("end_date"))
+        if end_date is None:
+            continue
+
+        key = (ts_code, end_date, report_type)
+        seen[key] = {
+            "ts_code": ts_code,
+            "end_date": end_date,
+            "report_type": report_type,
+            "ann_date": parse_date(raw.get("ann_date")),
+            "n_cashflow_act": parse_decimal(raw.get("n_cashflow_act")),
+            "n_cashflow_inv_act": parse_decimal(raw.get("n_cashflow_inv_act")),
+            "n_cash_flows_fnc_act": parse_decimal(raw.get("n_cash_flows_fnc_act")),
+            "c_fr_sale_sg": parse_decimal(raw.get("c_fr_sale_sg")),
+            "c_paid_goods_s": parse_decimal(raw.get("c_paid_goods_s")),
+            "c_paid_to_for_empl": parse_decimal(raw.get("c_paid_to_for_empl")),
+            "c_paid_for_taxes": parse_decimal(raw.get("c_paid_for_taxes")),
+            "c_pay_acq_const_fiolta": parse_decimal(raw.get("c_pay_acq_const_fiolta")),
+            "c_recp_borrow": parse_decimal(raw.get("c_recp_borrow")),
+            "c_pay_dist_dpcp_int_exp": parse_decimal(raw.get("c_pay_dist_dpcp_int_exp")),
+            "c_cash_equ_end_period": parse_decimal(raw.get("c_cash_equ_end_period")),
+            "c_cash_equ_beg_period": parse_decimal(raw.get("c_cash_equ_beg_period")),
+            "n_incr_cash_cash_equ": parse_decimal(raw.get("n_incr_cash_cash_equ")),
+            "free_cashflow": parse_decimal(raw.get("free_cashflow")),
+            "net_profit": parse_decimal(raw.get("net_profit")),
+            "depr_fa_coga_dpba": parse_decimal(raw.get("depr_fa_coga_dpba")),
+            "invest_loss": parse_decimal(raw.get("invest_loss")),
+            "data_source": "tushare",
+        }
+    return list(seen.values())
+

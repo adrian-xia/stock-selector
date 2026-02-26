@@ -34,7 +34,7 @@ docs/design/
 
 ## V1 范围（当前阶段）
 
-- 数据采集：Tushare Pro API，引入 raw 层作为数据缓冲（原始表），解耦数据获取和清洗逻辑，按日期批量获取全市场数据；已实施 P0（基础行情 6 张表）、P1（财务数据 10 张表，使用 VIP 接口按季度批量获取，含利润表/资产负债表/现金流量表全量字段，sync_raw_fina 同步四张表含去重逻辑）、P2（资金流向 10 张表）、P3（指数数据 18 张表，含日常同步和静态数据同步，指数技术因子使用 idx_factor_pro 接口提供 80+ 技术指标，全量同步采用批量日期范围模式节省 API 配额）、P4（板块数据 8 张表，含盘后链路集成）和 P5（全部 48 张表数据同步 + 2 张业务表 suspend_info/limit_list_daily + ETL 清洗 + 盘后链路步骤 3.8 集成，含 28 张补充表按频率分组同步）
+- 数据采集：Tushare Pro API，引入 raw 层作为数据缓冲（原始表），解耦数据获取和清洗逻辑，按日期批量获取全市场数据；已实施 P0（基础行情 6 张表）、P1（财务数据 10 张表，使用 VIP 接口按季度批量获取，含利润表/资产负债表/现金流量表全量字段，sync_raw_fina 同步四张表含去重逻辑，etl_fina 清洗为 finance_indicator + income_statement + balance_sheet + cash_flow_statement 四张业务表）、P2（资金流向 10 张表）、P3（指数数据 18 张表，含日常同步和静态数据同步，指数技术因子使用 idx_factor_pro 接口提供 80+ 技术指标，全量同步采用批量日期范围模式节省 API 配额）、P4（板块数据 8 张表，含盘后链路集成）和 P5（全部 48 张表数据同步 + 2 张业务表 suspend_info/limit_list_daily + ETL 清洗 + 盘后链路步骤 3.8 集成，含 28 张补充表按频率分组同步）
 - 性能优化：令牌桶限流（400 QPS，特殊接口独立限流桶：stk_auction/stk_factor/ccass_hold/limit_list_d + 限流错误加长退避），全链路性能日志支持瓶颈分析；COPY 协议批量写入（临时表+COPY+UPSERT 三步法，自动降级），全量导入索引管理（删除→导入→重建），TimescaleDB 超表迁移（stock_daily/technical_daily，可选依赖），raw 表复合索引优化，连接池调优（pool_size=10, max_overflow=20）
 - 自动数据更新：每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警（V1 记录日志，V2 接入企业微信/钉钉），基于 Redis 的任务状态管理；每日自动更新交易日历（获取未来 90 天数据，周末任务作为兜底）
 - 数据完整性：基于累积进度表（`stock_sync_progress`）的断点续传，启动时自动恢复未完成同步，按 365 天/批分批处理数据和指标，退市智能过滤，失败自动重试（每日 20:00），完整性门控（完成率 >= 95% 才执行策略），Redis 分布式锁防并发，环境隔离（APP_ENV_FILE）
@@ -49,7 +49,7 @@ docs/design/
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
 - 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板 + 策略配置页面（启用/禁用策略、自定义参数），WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
-- 数据库：业务表 12 张 + raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log）
+- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log）
 - 不做：用户权限、高手跟投
 
 ## 技术栈
