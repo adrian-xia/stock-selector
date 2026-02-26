@@ -119,7 +119,7 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 raw_result = await manager.sync_raw_fina(period)
                 etl_result = await manager.etl_fina(period)
                 logger.info(
-                    "[P1财务数据] 完成：period=%s, raw=%s, etl=%s，耗时 %.1fs",
+                    "[P1财务数据] 完成（含财务三表）：period=%s, raw=%s, etl=%s，耗时 %.1fs",
                     period, raw_result, etl_result, time.monotonic() - p1_start,
                 )
             else:

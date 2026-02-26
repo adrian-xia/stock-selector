@@ -1,4 +1,5 @@
 import logging
+import traceback
 from datetime import date, timedelta
 
 import pandas as pd
@@ -40,7 +41,10 @@ from app.models.raw import (
     RawTushareAdjFactor,
     RawTushareDaily,
     RawTushareDailyBasic,
+    RawTushareBalancesheet,
+    RawTushareCashflow,
     RawTushareFinaIndicator,
+    RawTushareIncome,
     RawTushareIndexBasic,
     RawTushareIndexClassify,
     RawTushareIndexDaily,
@@ -1871,41 +1875,61 @@ class DataManager:
     # ------------------------------------------------------------------
 
     async def sync_raw_fina(self, period: str) -> dict:
-        """按季度同步财务数据到 raw 表（仅 fina_indicator，其他财务表待实现）。
+        """按季度同步财务数据到 raw 表（fina_indicator + 财务三表）。
 
         Args:
             period: 报告期（季度最后一天），格式 YYYYMMDD，如 20231231 表示 2023 年报
 
         Returns:
-            {"fina_indicator": int} - 各表写入的记录数
+            各表写入的记录数
         """
         logger.debug(f"[sync_raw_fina] 开始同步 {period} 财务数据到 raw 表")
+        from datetime import date as _date
+        sync_date = _date(int(period[:4]), int(period[4:6]), int(period[6:8]))
 
-        async with self._session_factory() as session:
-            # 1. 同步财务指标（fina_indicator_vip）
-            logger.debug(f"  - 获取 fina_indicator 数据（period={period}）")
-            raw_fina = await self._primary_client.fetch_raw_fina_indicator(period)
-            logger.debug(f"  - 获取到 {len(raw_fina)} 条 fina_indicator 数据")
+        counts = {}
 
-            # 批量写入 raw_tushare_fina_indicator
-            fina_count = 0
-            if raw_fina:
-                fina_count = await batch_insert(
-                    session, RawTushareFinaIndicator.__table__, raw_fina
-                )
-                logger.debug(f"  - 写入 raw_tushare_fina_indicator: {fina_count} 条")
+        # 表配置：(名称, fetch方法, ORM模型, progress表名)
+        table_configs = [
+            ("fina_indicator", "fetch_raw_fina_indicator", RawTushareFinaIndicator, "raw_tushare_fina_indicator"),
+            ("income", "fetch_raw_income", RawTushareIncome, "raw_tushare_income"),
+            ("balancesheet", "fetch_raw_balancesheet", RawTushareBalancesheet, "raw_tushare_balancesheet"),
+            ("cashflow", "fetch_raw_cashflow", RawTushareCashflow, "raw_tushare_cashflow"),
+        ]
 
-        # 更新 raw_sync_progress
-        if fina_count > 0:
-            from datetime import date as _date
-            # period 格式 YYYYMMDD，转为 date
-            sync_date = _date(int(period[:4]), int(period[4:6]), int(period[6:8]))
-            await self._update_raw_sync_progress(
-                "raw_tushare_fina_indicator", sync_date, fina_count
-            )
+        for name, fetch_method, model, progress_name in table_configs:
+            try:
+                logger.debug(f"  - 获取 {name} 数据（period={period}）")
+                raw_data = await getattr(self._primary_client, fetch_method)(period)
+                logger.debug(f"  - 获取到 {len(raw_data)} 条 {name} 数据")
 
-        logger.debug(f"[sync_raw_fina] 完成 {period} 财务数据同步")
-        return {"fina_indicator": fina_count}
+                count = 0
+                if raw_data:
+                    # 按主键去重（Tushare 可能返回重复行），保留最后一条
+                    pk_cols = [c.name for c in model.__table__.primary_key.columns]
+                    if pk_cols:
+                        deduped = {}
+                        for row in raw_data:
+                            key = tuple(row.get(c) for c in pk_cols)
+                            deduped[key] = row
+                        before = len(raw_data)
+                        raw_data = list(deduped.values())
+                        if before != len(raw_data):
+                            logger.debug(f"  - {name} 去重: {before} → {len(raw_data)}")
+
+                    async with self._session_factory() as session:
+                        count = await batch_insert(session, model.__table__, raw_data)
+                    logger.debug(f"  - 写入 {progress_name}: {count} 条")
+
+                counts[name] = count
+                if count > 0:
+                    await self._update_raw_sync_progress(progress_name, sync_date, count)
+            except Exception:
+                logger.warning(f"  - {name} 同步失败（继续）\n{traceback.format_exc()}")
+                counts[name] = 0
+
+        logger.debug(f"[sync_raw_fina] 完成 {period} 财务数据同步: {counts}")
+        return counts
 
     async def etl_fina(self, period: str) -> dict:
         """从 raw 表 ETL 清洗财务数据到业务表（仅 finance_indicator，其他财务表待实现）。
