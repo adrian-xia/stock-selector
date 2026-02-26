@@ -407,7 +407,10 @@ async def cache_refresh_step(target_date: date) -> None:
 
 
 async def pipeline_step(target_date: date) -> list:
-    """执行策略管道：使用全部已注册策略。
+    """执行策略管道：仅执行用户启用的策略（注册制）。
+
+    从 strategies 表读取 is_enabled=True 的策略及其自定义参数，
+    传递给 execute_pipeline 执行。
 
     Args:
         target_date: 目标日期
@@ -415,18 +418,54 @@ async def pipeline_step(target_date: date) -> list:
     Returns:
         候选股票列表（StockPick）
     """
+    import json
+    from sqlalchemy import text as sa_text
+
     step_start = time.monotonic()
     logger.info("[策略管道] 开始：%s", target_date)
 
-    # 获取全部策略名称
-    all_strategies = StrategyFactory.get_all()
-    strategy_names = [m.name for m in all_strategies]
+    # 从 strategies 表查询启用的策略
+    async with async_session_factory() as session:
+        result = await session.execute(
+            sa_text("SELECT name, params FROM strategies WHERE is_enabled = true")
+        )
+        rows = result.fetchall()
+
+    if not rows:
+        logger.warning("[策略管道] 没有启用的策略，跳过执行")
+        return []
+
+    strategy_names = []
+    strategy_params: dict[str, dict] = {}
+    for name, params_str in rows:
+        # 校验策略在内存注册表中存在
+        try:
+            StrategyFactory.get_meta(name)
+        except KeyError:
+            logger.warning("[策略管道] 策略 %s 已启用但未注册，跳过", name)
+            continue
+        strategy_names.append(name)
+        # 解析自定义参数
+        if params_str:
+            try:
+                p = json.loads(params_str) if isinstance(params_str, str) else params_str
+                if p:
+                    strategy_params[name] = p
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    if not strategy_names:
+        logger.warning("[策略管道] 没有有效的启用策略，跳过执行")
+        return []
+
+    logger.info("[策略管道] 启用策略 %d 个：%s", len(strategy_names), strategy_names)
 
     result = await execute_pipeline(
         session_factory=async_session_factory,
         strategy_names=strategy_names,
         target_date=target_date,
         top_n=50,
+        strategy_params=strategy_params or None,
     )
 
     elapsed = int(time.monotonic() - step_start)

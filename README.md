@@ -11,7 +11,7 @@
 - **数据初始化向导** — 交互式引导首次数据初始化，支持 1年/3年/自定义范围选项，全量同步 P0-P5 数据
 - **优雅关闭** — 捕获 SIGTERM/SIGINT 信号，等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁
 - **技术指标计算** — 自动计算 MA/EMA/MACD/KDJ/RSI/BOLL/ATR/WR/CCI/BIAS/OBV/DMI/MTM/ROC/PSY/TRIX/EMV/VR/BRAR/CR/MFI 等 80+ 个技术指标（基于 idx_factor_pro 接口）
-- **28 种选股策略** — 16 种技术面策略（趋势跟踪、震荡指标、量价分析）+ 12 种基本面策略（估值、盈利、安全、综合评分），支持自由组合
+- **28 种选股策略** — 16 种技术面策略（趋势跟踪、震荡指标、量价分析）+ 12 种基本面策略（估值、盈利、安全、综合评分），支持自由组合；策略注册制管理，盘后链路仅执行用户启用的策略，支持自定义参数
 - **5 层漏斗筛选** — SQL 粗筛 → 技术面 → 基本面 → 排序 → AI 终审
 - **AI 智能分析** — 接入 Gemini Flash，对候选股票进行综合评分和投资建议；盘后链路自动分析 Top 30 候选股并持久化结果；YAML 模板管理 Prompt；每日调用上限和 Token 用量记录；前端展示 AI 评分、信号和摘要
 - **历史回测** — 基于 Backtrader，支持 A 股佣金、印花税、涨跌停限制
@@ -22,7 +22,7 @@
 - **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
 - **监控与日志** — 结构化日志（JSON/文本自动切换）、日志轮转、API 请求性能中间件（慢请求告警）、深度健康检查（数据库/Redis/Tushare）、任务执行日志持久化与查询 API
-- **前端界面** — React 19 + Ant Design 6 + ECharts 6，选股工作台（含 K 线图）+ 回测中心 + 参数优化 + 新闻舆情 + 实时监控；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割、React Query 统一数据获取
+- **前端界面** — React 19 + Ant Design 6 + ECharts 6，选股工作台（含 K 线图）+ 回测中心 + 参数优化 + 新闻舆情 + 实时监控 + 策略配置（启用/禁用策略、自定义参数）；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割、React Query 统一数据获取
 - **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新、P2 资金流向 ETL、P3 指数数据 ETL、P4 板块数据 ETL、P5 补充数据同步、实时监控（行情采集、告警引擎、通知渠道、WebSocket、告警 API）；集成测试覆盖 P0-P5 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性、综合时间连续性和数据新鲜度）
 
 ## 技术栈
@@ -413,7 +413,7 @@ stock-selector/
 │   │   ├── indicator.py        #   盘中指标计算与信号检测
 │   │   └── alert_engine.py     #   告警规则引擎
 │   └── api/                    # HTTP API
-│       ├── strategy.py         #   策略执行 API
+│       ├── strategy.py         #   策略执行 + 配置管理 API
 │       ├── backtest.py         #   回测 API
 │       ├── data.py             #   数据查询 API（K 线）
 │       ├── alert.py            #   告警规则 CRUD API
@@ -432,7 +432,8 @@ stock-selector/
 │   │   │   ├── backtest/       #   回测中心
 │   │   │   ├── optimization/   #   参数优化
 │   │   │   ├── news/           #   新闻舆情
-│   │   │   └── monitor/        #   实时监控看板（拆分子组件）
+│   │   │   ├── monitor/        #   实时监控看板（拆分子组件）
+│   │   │   └── strategy-config/ #  策略配置（启用/禁用 + 参数管理）
 │   │   ├── utils/              #   工具函数（chartTheme）
 │   │   └── types/              #   TypeScript 类型定义
 │   └── vite.config.ts          #   Vite 配置（含 API 代理 + 代码分割）

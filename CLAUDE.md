@@ -41,14 +41,14 @@ docs/design/
 - 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → P0 日线 → P1 财务 → P2 资金 → P3 指数 → P4 板块 → P5 扩展 → 技术指标）；CLI `init-tushare` 命令支持 `--skip-fina`/`--skip-p2`/`--skip-index`/`--skip-concept`/`--skip-p5` 选项
 - 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁，完整的关闭日志记录
 - 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
-- 策略引擎：28 种核心策略（16 种技术面 + 12 种基本面），扁平继承，单模式接口
+- 策略引擎：28 种核心策略（16 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）
 - AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
 - 新闻舆情：✅ V2 已实施，东方财富/新浪7x24快讯/同花顺三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
-- 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板，WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
+- 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板 + 策略配置页面（启用/禁用策略、自定义参数），WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
 - 数据库：业务表 12 张 + raw 层表 90 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log）
 - 不做：用户权限、高手跟投
 
@@ -327,7 +327,7 @@ stock-selector/
 │   │   ├── indicator.py      # 盘中指标计算与信号检测
 │   │   └── alert_engine.py   # 告警规则引擎
 │   └── api/                  # HTTP API
-│       ├── strategy.py       # 策略 API（未指定日期时自动使用最近有数据的交易日）
+│       ├── strategy.py       # 策略 API（执行 + 配置管理 CRUD，未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
 │       ├── optimization.py   # 参数优化 API
 │       ├── news.py           # 新闻舆情 API
@@ -351,7 +351,8 @@ stock-selector/
 │   │   │   ├── backtest/     # 回测中心页面
 │   │   │   ├── optimization/ # 参数优化页面
 │   │   │   ├── news/         # 新闻舆情页面
-│   │   │   └── monitor/      # 实时监控看板（WatchlistTable + AlertRulePanel + AlertHistoryPanel）
+│   │   │   ├── monitor/      # 实时监控看板（WatchlistTable + AlertRulePanel + AlertHistoryPanel）
+│   │   │   └── strategy-config/ # 策略配置页面（启用/禁用 + 参数管理）
 │   │   ├── utils/            # 工具函数（chartTheme）
 │   │   └── types/            # TypeScript 类型定义
 │   └── vite.config.ts        # Vite 配置（含 /api 代理 + 代码分割）

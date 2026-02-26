@@ -506,3 +506,19 @@ V3 任务分为 **3 个变更**，按依赖关系顺序实施：
 ```
 V3-1 (snapshot-extend) → V3-2 (strategies) → V3-3 (docs-update)
 ```
+
+---
+
+### Change V3-4: `v3-strategy-registry` — 盘后链路策略注册制 ✅ 已完成
+
+**完成日期：** 2026-02-26
+
+**实施内容：**
+- 盘后链路 `pipeline_step()` 改为从 `strategies` 表读取 `is_enabled=True` 的策略执行（注册制），不再硬编码全部策略
+- `execute_pipeline()` 和 `_run_strategies_on_df()` 支持 `strategy_params` 自定义参数覆盖
+- `_sync_strategies_to_db()` 新策略默认 `is_enabled=False`，UPSERT 不覆盖用户的 `is_enabled` 和 `params`
+- 新增策略配置 CRUD API：`GET /config`、`PUT /config/batch`、`PUT /config/{name}`
+- 新增前端策略配置页面：按技术面/基本面分组展示，支持启用/禁用开关和参数编辑
+- 侧边栏新增「策略配置」菜单项
+
+**涉及文件：** `app/main.py`, `app/scheduler/jobs.py`, `app/strategy/pipeline.py`, `app/api/strategy.py`, `web/src/pages/strategy-config/index.tsx`, `web/src/api/strategyConfig.ts`, `web/src/types/strategy.ts`, `web/src/layouts/AppLayout.tsx`, `web/src/App.tsx`

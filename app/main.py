@@ -61,8 +61,13 @@ async def _graceful_shutdown() -> None:
 
 
 async def _sync_strategies_to_db() -> None:
-    """将内存中注册的策略同步到 strategies 表（UPSERT）。"""
+    """将内存中注册的策略同步到 strategies 表（UPSERT）。
+
+    - 新策略默认 is_enabled=False，需要用户在策略配置页面手动启用
+    - 已有策略仅更新元数据（category、description），不覆盖 is_enabled 和 params
+    """
     from sqlalchemy import text
+    import json
 
     all_meta = StrategyFactory.get_all()
     async with async_session_factory() as session:
@@ -70,7 +75,7 @@ async def _sync_strategies_to_db() -> None:
             await session.execute(
                 text("""
                     INSERT INTO strategies (name, category, description, params, is_enabled)
-                    VALUES (:name, :category, :description, :params, true)
+                    VALUES (:name, :category, :description, :params, false)
                     ON CONFLICT (name) DO UPDATE SET
                         category = EXCLUDED.category,
                         description = EXCLUDED.description,
@@ -80,7 +85,7 @@ async def _sync_strategies_to_db() -> None:
                     "name": meta.name,
                     "category": meta.category,
                     "description": meta.description or "",
-                    "params": "{}",
+                    "params": json.dumps(meta.default_params),
                 },
             )
         await session.commit()

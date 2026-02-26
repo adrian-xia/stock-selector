@@ -1,5 +1,5 @@
 import { Layout, Menu } from 'antd'
-import { ExperimentOutlined, LineChartOutlined, ControlOutlined, NotificationOutlined, DashboardOutlined } from '@ant-design/icons'
+import { ExperimentOutlined, LineChartOutlined, ControlOutlined, NotificationOutlined, DashboardOutlined, SettingOutlined } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const { Sider, Content } = Layout
@@ -30,6 +30,11 @@ const menuItems = [
     icon: <DashboardOutlined />,
     label: '实时监控',
   },
+  {
+    key: '/strategy-config',
+    icon: <SettingOutlined />,
+    label: '策略配置',
+  },
 ]
 
 export default function AppLayout() {
@@ -37,7 +42,9 @@ export default function AppLayout() {
   const location = useLocation()
 
   // 根据当前路径确定选中的菜单项
-  const selectedKey = location.pathname.startsWith('/monitor')
+  const selectedKey = location.pathname.startsWith('/strategy-config')
+    ? '/strategy-config'
+    : location.pathname.startsWith('/monitor')
     ? '/monitor'
     : location.pathname.startsWith('/news')
     ? '/news'

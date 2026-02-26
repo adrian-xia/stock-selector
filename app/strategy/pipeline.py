@@ -309,6 +309,7 @@ async def _run_strategies_on_df(
     category: str,
     target_date: date,
     hit_records: dict[str, list[str]],
+    strategy_params: dict[str, dict] | None = None,
 ) -> pd.DataFrame:
     """在 DataFrame 上运行指定分类的策略。
 
@@ -318,6 +319,7 @@ async def _run_strategies_on_df(
         category: 筛选的策略分类（"technical" 或 "fundamental"）
         target_date: 目标日期
         hit_records: ts_code -> 命中策略名称列表（就地更新）
+        strategy_params: 策略名称 -> 自定义参数字典（覆盖默认值）
 
     Returns:
         通过筛选的 DataFrame
@@ -336,7 +338,9 @@ async def _run_strategies_on_df(
     combined = pd.Series(False, index=df.index)
 
     for name in category_strategies:
-        strategy = StrategyFactory.get_strategy(name)
+        # 使用自定义参数实例化策略（如果有）
+        custom_params = (strategy_params or {}).get(name)
+        strategy = StrategyFactory.get_strategy(name, params=custom_params)
         try:
             mask = await strategy.filter_batch(df, target_date)
             # 记录命中的股票
@@ -436,6 +440,7 @@ async def execute_pipeline(
     target_date: date,
     base_filter: dict | None = None,
     top_n: int = 30,
+    strategy_params: dict[str, dict] | None = None,
 ) -> PipelineResult:
     """执行完整的 5 层选股管道。
 
@@ -445,6 +450,7 @@ async def execute_pipeline(
         target_date: 筛选日期
         base_filter: Layer 1 过滤参数覆盖
         top_n: 最终返回的股票数量上限
+        strategy_params: 策略名称 -> 自定义参数字典（覆盖默认值）
 
     Returns:
         PipelineResult 包含选股结果和各层统计
@@ -494,7 +500,8 @@ async def execute_pipeline(
         # Layer 2: 技术面策略筛选
         hit_records: dict[str, list[str]] = {}
         layer2_df = await _run_strategies_on_df(
-            snapshot_df, strategy_names, "technical", target_date, hit_records
+            snapshot_df, strategy_names, "technical", target_date, hit_records,
+            strategy_params=strategy_params,
         )
         layer_stats["layer2"] = len(layer2_df)
 
@@ -506,7 +513,8 @@ async def execute_pipeline(
 
         # Layer 3: 基本面策略筛选
         layer3_df = await _run_strategies_on_df(
-            layer2_df, strategy_names, "fundamental", target_date, hit_records
+            layer2_df, strategy_names, "fundamental", target_date, hit_records,
+            strategy_params=strategy_params,
         )
         layer_stats["layer3"] = len(layer3_df)
 

@@ -12,6 +12,7 @@ const BacktestDetailPage = lazy(() => import('./pages/backtest/BacktestDetailPag
 const OptimizationPage = lazy(() => import('./pages/optimization'))
 const NewsPage = lazy(() => import('./pages/news'))
 const MonitorPage = lazy(() => import('./pages/monitor'))
+const StrategyConfigPage = lazy(() => import('./pages/strategy-config'))
 
 /** 路由切换时重置 ErrorBoundary */
 function ErrorBoundaryResetter({ children }: { children: React.ReactNode }) {
@@ -58,6 +59,11 @@ function App() {
         <Route path="/monitor" element={
           <ErrorBoundaryResetter>
             <Suspense fallback={<PageLoading />}><MonitorPage /></Suspense>
+          </ErrorBoundaryResetter>
+        } />
+        <Route path="/strategy-config" element={
+          <ErrorBoundaryResetter>
+            <Suspense fallback={<PageLoading />}><StrategyConfigPage /></Suspense>
           </ErrorBoundaryResetter>
         } />
       </Route>

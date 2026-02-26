@@ -19,6 +19,22 @@ export interface StrategySchemaResponse {
   default_params: Record<string, number | string | boolean>
 }
 
+/** 策略配置（含启用状态和自定义参数） */
+export interface StrategyConfig {
+  name: string
+  display_name: string
+  category: string
+  description: string
+  default_params: Record<string, number>
+  params: Record<string, number>
+  is_enabled: boolean
+}
+
+/** 策略配置列表响应 */
+export interface StrategyConfigListResponse {
+  strategies: StrategyConfig[]
+}
+
 /** 选股执行请求 */
 export interface StrategyRunRequest {
   strategy_names: string[]
