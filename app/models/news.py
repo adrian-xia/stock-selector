@@ -21,7 +21,7 @@ class Announcement(Base):
     ts_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source: Mapped[str] = mapped_column(String(32), nullable=False)  # eastmoney/taoguba/xueqiu
+    source: Mapped[str] = mapped_column(String(32), nullable=False)  # eastmoney/sina/ths
     pub_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     sentiment_score: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)

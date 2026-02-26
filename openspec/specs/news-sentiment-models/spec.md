@@ -7,7 +7,7 @@ The system SHALL provide an `announcements` database table with the following co
 - `ts_code` (str, not null, indexed)
 - `title` (str, not null)
 - `summary` (text, nullable)
-- `source` (str, not null) — "eastmoney", "taoguba", "xueqiu"
+- `source` (str, not null) — "eastmoney", "sina", "ths"
 - `pub_date` (date, not null, indexed)
 - `url` (str, nullable)
 - `sentiment_score` (numeric(5,4), nullable) — -1.0 to +1.0

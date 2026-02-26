@@ -274,7 +274,7 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 **完成日期：** 2026-02-18
 
 **实施内容：**
-- 数据采集：东方财富公告、淘股吧讨论、雪球讨论（3 个异步爬虫 + 统一采集入口）
+- 数据采集：东方财富公告、新浪7x24快讯、同花顺新闻（3 个异步爬虫 + 统一采集入口）
 - 新增表：`announcements`、`sentiment_daily` + Alembic 迁移
 - AI 情感分析：复用 Gemini Flash，情感评分 -1.0~+1.0，分类利好/利空/中性/重大事件
 - 每日情感聚合：按股票汇总正面/负面/中性计数 + 来源分布
@@ -414,3 +414,95 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 | Prometheus + Grafana 监控（当前日志监控） | Change 14 (monitoring-logging) |
 | Docker 容器化部署（当前直接运行） | 视需求单独变更 |
 | 多数据源故障切换（当前单一数据源） | 暂不实施（Tushare 稳定性足够） |
+
+---
+
+## V3 详细实施计划
+
+> **基于：** `docs/design/05-详细设计-量价综合选股策略.md`
+> **V2 完成状态：** 28 种策略（16 技术面 + 12 基本面）、参数优化、新闻舆情、实时监控、性能优化均已完成
+> **V3 目标：** 量价策略体系扩展（新增 6 个量价策略，总计 34 种），完善量价分析矩阵，为参数优化提供更丰富的策略库
+> **实施方式：** 每个变更使用 OpenSpec 工作流管理
+
+---
+
+### V3 分部计划总览
+
+V3 任务分为 **3 个变更**，按依赖关系顺序实施：
+
+#### 第一批：前置基础
+1. **v3-snapshot-extend** — 扩展 market snapshot SQL（1 天）
+
+#### 第二批：策略实现
+2. **v3-volume-price-strategies** — 6 个量价策略实现 + 注册（3-5 天）
+
+#### 第三批：文档与验证
+3. **v3-docs-update** — 设计文档/README/CLAUDE.md 同步更新（0.5 天）
+
+**V3 总工作量：** 4.5-6.5 天
+
+---
+
+### Change V3-1: `v3-snapshot-extend` — 扩展 market snapshot SQL
+
+**优先级：** P0（前置依赖）
+
+**实施内容：**
+- 修改 `app/strategy/pipeline.py` 的 `_build_market_snapshot()`
+- current_sql 增加：`td.obv`, `td.donchian_upper`, `td.donchian_lower`
+- prev_sql 增加：`sd.open AS open_prev`, `sd.pct_chg AS pct_chg_prev`
+- 这些字段已在 technical_daily / stock_daily 表中存在，仅需扩展查询
+
+**涉及文件：** `app/strategy/pipeline.py`
+**设计文档：** `docs/design/05-详细设计-量价综合选股策略.md` §3
+
+---
+
+### Change V3-2: `v3-volume-price-strategies` — 量价策略实现
+
+**优先级：** P1
+**依赖：** V3-1
+
+**实施内容（6 个新策略）：**
+
+| 策略 | 文件 | 核心逻辑 | 参数数 | 组合数 |
+|------|------|---------|--------|--------|
+| 缩量上涨 `shrink-volume-rise` | `shrink_volume_rise.py` | 上升趋势+收阳+缩量 | 2 | 35 |
+| 量缩价稳 `volume-price-stable` | `volume_price_stable.py` | 量缩+价稳+MA20附近 | 3 | 240 |
+| 首阴反包 `first-negative-reversal` | `first_negative_reversal.py` | 前日阴线+今日阳线反包+放量 | 2 | 162 |
+| 地量见底 `extreme-shrink-bottom` | `extreme_shrink_bottom.py` | 极端缩量+低换手率 | 2 | 36 |
+| 后量超前量 `volume-surge-continuation` | `volume_surge_continuation.py` | 放量+vol_ma5>vol_ma10+上涨 | 3 | 462 |
+| 回调半分位 `pullback-half-rule` | `pullback_half_rule.py` | 多头排列+小幅回调+缩量 | 2 | 81 |
+
+- 所有策略继承 `BaseStrategy`，实现 `filter_batch` 向量化计算
+- 在 `factory.py` 注册 6 个 `StrategyMeta`（含 `param_space`）
+- 单元测试覆盖每个策略的信号生成逻辑
+
+**涉及文件：**
+- `app/strategy/technical/` — 新建 6 个策略文件
+- `app/strategy/factory.py` — 注册 6 个策略
+- `tests/unit/` — 新增策略单元测试
+
+**设计文档：** `docs/design/05-详细设计-量价综合选股策略.md` §2
+
+---
+
+### Change V3-3: `v3-docs-update` — 文档同步更新
+
+**优先级：** P2
+**依赖：** V3-2
+
+**实施内容：**
+- 更新 `docs/design/99-实施范围-V1与V2划分.md`：策略数量 28 → 34
+- 更新 `CLAUDE.md`：V1 范围中策略描述、目录结构
+- 更新 `README.md`：功能特性、策略数量
+
+**涉及文件：** `docs/design/99-实施范围-V1与V2划分.md`, `CLAUDE.md`, `README.md`
+
+---
+
+### V3 变更依赖关系
+
+```
+V3-1 (snapshot-extend) → V3-2 (strategies) → V3-3 (docs-update)
+```

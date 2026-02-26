@@ -45,7 +45,7 @@ docs/design/
 - AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
-- 新闻舆情：✅ V2 已实施，东方财富/淘股吧/雪球三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
+- 新闻舆情：✅ V2 已实施，东方财富/新浪7x24快讯/同花顺三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
 - 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板，WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
@@ -284,8 +284,8 @@ stock-selector/
 │   │   ├── manager.py        # DataManager（sync_raw_daily + etl_daily）
 │   │   └── sources/          # 新闻数据源采集
 │   │       ├── eastmoney.py  # 东方财富公告采集
-│   │       ├── taoguba.py    # 淘股吧讨论采集
-│   │       ├── xueqiu.py     # 雪球讨论采集
+│   │       ├── sina.py       # 新浪 7x24 快讯采集（全市场快讯流 + 本地文本匹配）
+│   │       ├── ths.py        # 同花顺个股新闻采集
 │   │       └── fetcher.py    # 统一采集入口（并行调用 3 个爬虫）
 │   ├── strategy/             # 策略引擎
 │   │   ├── base.py           # BaseStrategy

@@ -18,8 +18,8 @@ class TestAggregateDailySentiment:
 
         announcements = [
             {"ts_code": "600519.SH", "sentiment_score": 0.5, "source": "eastmoney"},
-            {"ts_code": "600519.SH", "sentiment_score": -0.3, "source": "xueqiu"},
-            {"ts_code": "600519.SH", "sentiment_score": 0.1, "source": "taoguba"},
+            {"ts_code": "600519.SH", "sentiment_score": -0.3, "source": "ths"},
+            {"ts_code": "600519.SH", "sentiment_score": 0.1, "source": "sina"},
             {"ts_code": "000001.SZ", "sentiment_score": 0.8, "source": "eastmoney"},
         ]
 
@@ -51,11 +51,11 @@ class TestAggregateDailySentiment:
         announcements = [
             {"ts_code": "600519.SH", "sentiment_score": 0.5, "source": "eastmoney"},
             {"ts_code": "600519.SH", "sentiment_score": 0.3, "source": "eastmoney"},
-            {"ts_code": "600519.SH", "sentiment_score": 0.1, "source": "xueqiu"},
+            {"ts_code": "600519.SH", "sentiment_score": 0.1, "source": "ths"},
         ]
 
         result = aggregate_daily_sentiment(announcements, date(2026, 2, 18))
-        assert result[0]["source_breakdown"] == {"eastmoney": 2, "xueqiu": 1}
+        assert result[0]["source_breakdown"] == {"eastmoney": 2, "ths": 1}
 
     def test_skip_none_ts_code(self):
         """跳过没有 ts_code 的记录。"""
@@ -63,7 +63,7 @@ class TestAggregateDailySentiment:
 
         announcements = [
             {"ts_code": "", "sentiment_score": 0.5, "source": "eastmoney"},
-            {"ts_code": "600519.SH", "sentiment_score": 0.3, "source": "xueqiu"},
+            {"ts_code": "600519.SH", "sentiment_score": 0.3, "source": "ths"},
         ]
 
         result = aggregate_daily_sentiment(announcements, date(2026, 2, 18))

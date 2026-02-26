@@ -187,8 +187,8 @@ export default function NewsPage() {
               onChange={(v) => { setFilterSource(v); setNewsPage(1) }}
               options={[
                 { label: '东方财富', value: 'eastmoney' },
-                { label: '淘股吧', value: 'taoguba' },
-                { label: '雪球', value: 'xueqiu' },
+                { label: '新浪快讯', value: 'sina' },
+                { label: '同花顺', value: 'ths' },
               ]}
             />
           </Space>
