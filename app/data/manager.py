@@ -1895,6 +1895,15 @@ class DataManager:
                 )
                 logger.debug(f"  - 写入 raw_tushare_fina_indicator: {fina_count} 条")
 
+        # 更新 raw_sync_progress
+        if fina_count > 0:
+            from datetime import date as _date
+            # period 格式 YYYYMMDD，转为 date
+            sync_date = _date(int(period[:4]), int(period[4:6]), int(period[6:8]))
+            await self._update_raw_sync_progress(
+                "raw_tushare_fina_indicator", sync_date, fina_count
+            )
+
         logger.debug(f"[sync_raw_fina] 完成 {period} 财务数据同步")
         return {"fina_indicator": fina_count}
 
@@ -2312,6 +2321,15 @@ class DataManager:
             cleaned_inserted = await batch_insert(session, ConceptDaily.__table__, cleaned)
             logger.debug(f"  - 写入 concept_daily: {cleaned_inserted} 条")
 
+        # 更新 raw_sync_progress
+        if raw_inserted > 0 and trade_date:
+            from datetime import date as _date
+            td = trade_date.replace("-", "") if "-" in trade_date else trade_date
+            sync_date = _date(int(td[:4]), int(td[4:6]), int(td[6:8]))
+            await self._update_raw_sync_progress(
+                "raw_tushare_ths_daily", sync_date, raw_inserted
+            )
+
         logger.info(f"[sync_concept_daily] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
 
@@ -2363,6 +2381,18 @@ class DataManager:
             from app.models.concept import ConceptMember
             cleaned_inserted = await batch_insert(session, ConceptMember.__table__, cleaned)
             logger.debug(f"  - 写入 concept_member: {cleaned_inserted} 条")
+
+        # 更新 raw_sync_progress
+        if raw_inserted > 0:
+            from datetime import date as _date
+            raw_table_name = {
+                "THS": "raw_tushare_ths_member",
+                "DC": "raw_tushare_dc_member",
+                "TDX": "raw_tushare_tdx_member",
+            }.get(src, "raw_tushare_ths_member")
+            await self._update_raw_sync_progress(
+                raw_table_name, _date.today(), raw_inserted
+            )
 
         logger.info(f"[sync_concept_member] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
@@ -3449,6 +3479,21 @@ class DataManager:
                 except Exception:
                     logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
                     results[name] = {"error": True}
+
+        # --- 更新 raw_sync_progress ---
+        # 方法名 → raw 表名映射（从 TABLE_GROUP_MAP["p5"] 提取）
+        _method_to_raw: dict[str, str] = {}
+        for raw_table, method_name, freq, _ in self.TABLE_GROUP_MAP.get("p5", []):
+            # method_name 形如 "sync_raw_suspend_d"，去掉 "sync_raw_" 前缀得到 key
+            short = method_name.removeprefix("sync_raw_")
+            _method_to_raw[short] = raw_table
+        for name, result in results.items():
+            if isinstance(result, dict) and not result.get("error"):
+                raw_table = _method_to_raw.get(name)
+                if raw_table:
+                    # 取 result 中第一个 int 值作为行数
+                    rows = next((v for v in result.values() if isinstance(v, int)), 0)
+                    await self._update_raw_sync_progress(raw_table, trade_date, rows)
 
         elapsed = time.monotonic() - start
         error_count = sum(1 for v in results.values() if isinstance(v, dict) and v.get("error"))
