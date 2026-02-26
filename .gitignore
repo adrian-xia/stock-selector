@@ -34,3 +34,4 @@ logs/
 web/node_modules/
 web/dist/
 dist/
+.env.dev.bak
