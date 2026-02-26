@@ -59,7 +59,7 @@ class LimitListDaily(Base):
     first_time: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 首次涨跌停时间
     last_time: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 最后封板时间
     open_times: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 打开次数
-    up_stat: Mapped[str | None] = mapped_column(String(4), nullable=True)  # 涨跌停统计（连板天数）
+    up_stat: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 涨跌停统计（连板天数）
     limit_times: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 涨跌停次数
     data_source: Mapped[str] = mapped_column(String(16), server_default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
