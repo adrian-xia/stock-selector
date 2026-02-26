@@ -2304,7 +2304,7 @@ class RawTushareLimitListD(Base):
     first_time: Mapped[str | None] = mapped_column(String(8), nullable=True)
     last_time: Mapped[str | None] = mapped_column(String(8), nullable=True)
     open_times: Mapped[int | None] = mapped_column(nullable=True)
-    up_stat: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    up_stat: Mapped[str | None] = mapped_column(String(16), nullable=True)
     limit_times: Mapped[int | None] = mapped_column(nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()

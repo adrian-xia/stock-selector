@@ -538,13 +538,16 @@ class DataManager:
 
     # --- P3 指数数据同步 ---
 
-    async def sync_raw_index_daily(self, trade_date: date) -> dict:
+    async def sync_raw_index_daily(self, trade_date: date, *, end_date: date | None = None) -> dict:
         """按日期获取核心指数日线行情写入 raw 表。
 
-        遍历 CORE_INDEX_LIST，逐个调用 Tushare index_daily 接口。
+        支持两种模式：
+        - 单日模式：只传 trade_date（盘后增量用）
+        - 批量模式：传 trade_date + end_date（全量初始化用，每个指数 1 次 API 调用）
 
         Args:
-            trade_date: 交易日期
+            trade_date: 起始日期（单日模式时也是结束日期）
+            end_date: 结束日期（批量模式），None 表示单日模式
 
         Returns:
             {"index_daily": int}
@@ -552,11 +555,14 @@ class DataManager:
         from app.data.tushare import TushareClient
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-        td_str = trade_date.strftime("%Y%m%d")
+        start_str = trade_date.strftime("%Y%m%d")
+        end_str = (end_date or trade_date).strftime("%Y%m%d")
 
         all_rows: list[dict] = []
         for ts_code in CORE_INDEX_LIST:
-            rows = await client.fetch_raw_index_daily(ts_code, td_str, td_str)
+            rows = await client.fetch_raw_index_daily(
+                ts_code=ts_code, start_date=start_str, end_date=end_str
+            )
             all_rows.extend(rows)
 
         counts = {"index_daily": 0}
@@ -567,14 +573,20 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.debug("[sync_raw_index_daily] %s: index_daily=%d", trade_date, counts["index_daily"])
+        label = f"{trade_date}~{end_date}" if end_date else str(trade_date)
+        logger.debug("[sync_raw_index_daily] %s: index_daily=%d", label, counts["index_daily"])
         return counts
 
-    async def sync_raw_index_weight(self, trade_date: date) -> dict:
+    async def sync_raw_index_weight(self, trade_date: date, *, end_date: date | None = None) -> dict:
         """按日期获取核心指数成分股权重写入 raw 表。
 
+        支持两种模式：
+        - 单日模式：只传 trade_date（盘后增量用）
+        - 批量模式：传 trade_date + end_date（全量初始化用，每个指数 1 次 API 调用）
+
         Args:
-            trade_date: 交易日期
+            trade_date: 起始日期（单日模式时也是结束日期）
+            end_date: 结束日期（批量模式），None 表示单日模式
 
         Returns:
             {"index_weight": int}
@@ -582,11 +594,19 @@ class DataManager:
         from app.data.tushare import TushareClient
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-        td_str = trade_date.strftime("%Y%m%d")
+        start_str = trade_date.strftime("%Y%m%d")
+        end_str = (end_date or trade_date).strftime("%Y%m%d")
 
         all_rows: list[dict] = []
         for ts_code in CORE_INDEX_LIST:
-            rows = await client.fetch_raw_index_weight(ts_code, td_str)
+            if end_date:
+                rows = await client.fetch_raw_index_weight(
+                    index_code=ts_code, start_date=start_str, end_date=end_str
+                )
+            else:
+                rows = await client.fetch_raw_index_weight(
+                    index_code=ts_code, trade_date=start_str
+                )
             all_rows.extend(rows)
 
         counts = {"index_weight": 0}
@@ -597,7 +617,8 @@ class DataManager:
                 )
             await session.commit()
 
-        logger.debug("[sync_raw_index_weight] %s: index_weight=%d", trade_date, counts["index_weight"])
+        label = f"{trade_date}~{end_date}" if end_date else str(trade_date)
+        logger.debug("[sync_raw_index_weight] %s: index_weight=%d", label, counts["index_weight"])
         return counts
 
     async def sync_raw_index_technical(self, trade_date: date, *, end_date: date | None = None) -> dict:
@@ -673,7 +694,7 @@ class DataManager:
     async def sync_raw_industry_classify(self) -> dict:
         """全量获取行业分类写入 raw 表。
 
-        尝试获取 L1/L2/L3 三个级别的行业分类并合并。
+        分别获取 SW（旧版）和 SW2021（新版）申万行业分类并合并。
 
         Returns:
             {"index_classify": int}
@@ -682,17 +703,17 @@ class DataManager:
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
 
-        # 尝试获取所有级别的行业分类
+        # 获取不同版本的申万行业分类（不传 level，全量获取）
         raw_rows: list[dict] = []
-        for level in ["L1", "L2", "L3", ""]:
+        for src in ["SW", "SW2021"]:
             try:
-                rows = await client.fetch_raw_index_classify(level=level)
+                rows = await client.fetch_raw_index_classify(level="", src=src)
                 raw_rows.extend(rows)
             except Exception as e:
-                logger.warning("[sync_raw_industry_classify] level=%s 获取失败: %s", level, e)
+                logger.warning("[sync_raw_industry_classify] src=%s 获取失败: %s", src, e)
 
         if not raw_rows:
-            logger.warning("[sync_raw_industry_classify] 所有级别均返回 0 行（可能是接口权限限制）")
+            logger.warning("[sync_raw_industry_classify] 所有来源均返回 0 行（可能是接口权限限制）")
 
         counts = {"index_classify": 0}
         async with self._session_factory() as session:
@@ -708,12 +729,15 @@ class DataManager:
     async def sync_raw_industry_member(self) -> dict:
         """全量获取行业成分股写入 raw 表。
 
+        fetch_raw_index_member_all 已内置 offset/limit 分页，直接调用即可。
+
         Returns:
             {"index_member_all": int}
         """
         from app.data.tushare import TushareClient
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
+
         raw_rows = await client.fetch_raw_index_member_all()
 
         counts = {"index_member_all": 0}
@@ -2422,50 +2446,21 @@ class DataManager:
     async def sync_raw_suspend_d(self, trade_date: date) -> dict:
         """按日期获取停复牌信息写入 raw 表（盘后增量模式）。
 
-        suspend_d 接口不支持按日期过滤，此方法在盘后链路中为空操作。
-        全量同步请使用 sync_raw_suspend_d_full()。
-        """
-        # suspend_d 接口不支持按日期过滤，盘后链路中跳过
-        logger.debug("[sync_raw_suspend_d] 跳过（接口不支持按日期过滤，使用 sync_raw_suspend_d_full 全量同步）")
-        return {"suspend_d": 0}
-
-    async def sync_raw_suspend_d_full(self) -> dict:
-        """全量获取停复牌信息写入 raw 表（按股票遍历）。
-
-        suspend_d 接口只支持按 ts_code 查询，不支持按日期过滤。
-        需要遍历所有股票逐只拉取。
+        suspend_d 接口支持 trade_date 参数，可按日期查询全市场停复牌数据。
         """
         from app.data.tushare import TushareClient
         client: TushareClient = self._primary_client  # type: ignore[assignment]
-
-        # 获取所有上市股票代码
-        stock_list = await self.get_stock_list()
-        total = len(stock_list)
-        total_count = 0
-        failed = 0
-
-        logger.info("[sync_raw_suspend_d_full] 开始全量同步停复牌信息，共 %d 只股票", total)
-
-        for i, stock in enumerate(stock_list, 1):
-            ts_code = stock["ts_code"]
-            try:
-                raw_data = await client.fetch_raw_suspend_d(ts_code=ts_code)
-                if raw_data:
-                    async with self._session_factory() as session:
-                        count = await self._upsert_raw(
-                            session, RawTushareSuspendD.__table__, raw_data
-                        )
-                        await session.commit()
-                    total_count += count
-            except Exception as e:
-                failed += 1
-                logger.warning("[sync_raw_suspend_d_full] %s 失败: %s", ts_code, e)
-
-            if i % 500 == 0 or i == total:
-                logger.info("[sync_raw_suspend_d_full] [%d/%d] 已写入 %d 条", i, total, total_count)
-
-        logger.info("[sync_raw_suspend_d_full] 完成：%d 只股票，%d 条数据，%d 失败", total, total_count, failed)
-        return {"suspend_d": total_count, "failed": failed}
+        td_str = trade_date.strftime("%Y%m%d")
+        raw_data = await client.fetch_raw_suspend_d(trade_date=td_str)
+        counts = {"suspend_d": 0}
+        async with self._session_factory() as session:
+            if raw_data:
+                counts["suspend_d"] = await self._upsert_raw(
+                    session, RawTushareSuspendD.__table__, raw_data
+                )
+                await session.commit()
+        logger.info("[sync_raw_suspend_d] %s: %d 条", td_str, counts["suspend_d"])
+        return counts
 
     async def sync_raw_limit_list_d(self, trade_date: date) -> dict:
         """按日期获取涨跌停统计写入 raw 表。"""
@@ -3481,18 +3476,18 @@ class DataManager:
             ("raw_tushare_top_list", "sync_raw_top_list", "daily", "etl_moneyflow"),
         ],
         "p3_daily": [
-            ("raw_tushare_index_daily", "sync_raw_index_daily", "daily", None),
-            ("raw_tushare_index_weight", "sync_raw_index_weight", "daily", None),
+            ("raw_tushare_index_daily", "sync_raw_index_daily", "bulk_daily", None),
+            ("raw_tushare_index_weight", "sync_raw_index_weight", "bulk_daily", None),
             ("raw_tushare_index_factor_pro", "sync_raw_index_technical", "bulk_daily", "etl_index"),
         ],
         "p3_static": [
             ("raw_tushare_index_basic", "sync_raw_index_basic", "static", None),
             ("raw_tushare_index_classify", "sync_raw_industry_classify", "static", None),
-            ("raw_tushare_index_member_all", "sync_raw_industry_member", "static", None),
+            ("raw_tushare_index_member_all", "sync_raw_industry_member", "static", "etl_index_static"),
         ],
         "p5": [
             # 日频核心
-            ("raw_tushare_suspend_d", "sync_raw_suspend_d_full", "static", "etl_suspend"),
+            ("raw_tushare_suspend_d", "sync_raw_suspend_d", "daily", "etl_suspend"),
             ("raw_tushare_limit_list_d", "sync_raw_limit_list_d", "daily", "etl_limit_list"),
             ("raw_tushare_margin", "sync_raw_margin", "daily", None),
             ("raw_tushare_margin_detail", "sync_raw_margin_detail", "daily", None),
@@ -3706,25 +3701,68 @@ class DataManager:
                             raw_table, td, error_msg,
                         )
 
-            # 执行对应的 ETL（仅对 incremental 模式的最新日期）
-            if etl_method_name and mode == "incremental":
+            # 执行对应的 ETL
+            if etl_method_name and error_msg is None:
                 etl_method = getattr(self, etl_method_name, None)
                 if etl_method:
-                    try:
-                        if freq == "period":
-                            await etl_method(end_date.strftime("%Y%m%d"))
+                    # 静态表 ETL：无参数直接调用
+                    if freq == "static":
+                        try:
+                            await etl_method()
+                            logger.info(
+                                "[sync] ETL %s [表%d/%d] 静态 ✓",
+                                etl_method_name, entry_idx, total_entries,
+                            )
+                        except Exception:
+                            logger.warning(
+                                "[sync] ETL %s [表%d/%d] 静态 ✗ %s",
+                                etl_method_name, entry_idx, total_entries,
+                                traceback.format_exc()[-200:],
+                            )
+                    else:
+                        if mode == "incremental":
+                            # 增量模式：仅对最新日期执行 ETL
+                            etl_dates = [end_date]
+                        elif mode in ("full", "gap_fill") and freq in ("daily", "bulk_daily"):
+                            # 全量/补缺模式：逐日执行 ETL
+                            etl_dates = trading_dates if trading_dates else [end_date]
+                        elif freq == "period":
+                            etl_dates = [end_date]
                         else:
-                            await etl_method(end_date)
-                        logger.info(
-                            "[sync] ETL %s [表%d/%d] %s ✓",
-                            etl_method_name, entry_idx, total_entries, end_date,
-                        )
-                    except Exception:
-                        logger.warning(
-                            "[sync] ETL %s [表%d/%d] %s ✗ %s",
-                            etl_method_name, entry_idx, total_entries,
-                            end_date, traceback.format_exc()[-200:],
-                        )
+                            etl_dates = [end_date]
+
+                        etl_ok = 0
+                        etl_fail = 0
+                        for etl_idx, etl_td in enumerate(etl_dates, 1):
+                            try:
+                                if freq == "period":
+                                    await etl_method(etl_td.strftime("%Y%m%d"))
+                                else:
+                                    await etl_method(etl_td)
+                                etl_ok += 1
+                                if len(etl_dates) > 1 and etl_idx % 100 == 0:
+                                    logger.info(
+                                        "[sync] ETL %s [%d/%d] %s ✓",
+                                        etl_method_name, etl_idx, len(etl_dates), etl_td,
+                                    )
+                            except Exception:
+                                etl_fail += 1
+                                logger.warning(
+                                    "[sync] ETL %s [表%d/%d] %s ✗ %s",
+                                    etl_method_name, entry_idx, total_entries,
+                                    etl_td, traceback.format_exc()[-200:],
+                                )
+                        if len(etl_dates) == 1:
+                            if etl_ok:
+                                logger.info(
+                                    "[sync] ETL %s [表%d/%d] %s ✓",
+                                    etl_method_name, entry_idx, total_entries, end_date,
+                                )
+                        else:
+                            logger.info(
+                                "[sync] ETL %s [表%d/%d] 完成：%d 成功，%d 失败",
+                                etl_method_name, entry_idx, total_entries, etl_ok, etl_fail,
+                            )
 
             results[raw_table] = {"rows": total_rows, "error": error_msg}
 

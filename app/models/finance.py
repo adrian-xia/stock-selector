@@ -20,30 +20,30 @@ class FinanceIndicator(Base):
     ann_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Profitability
-    eps: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    roe: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    roe_diluted: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    gross_margin: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    net_margin: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    eps: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    roe: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    roe_diluted: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    gross_margin: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    net_margin: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
 
     # Growth
-    revenue_yoy: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    profit_yoy: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    revenue_yoy: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    profit_yoy: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
 
     # Valuation
-    pe_ttm: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    pb: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    ps_ttm: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    pe_ttm: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    pb: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ps_ttm: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     total_mv: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
     circ_mv: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)
 
     # Solvency
-    current_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    quick_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    debt_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    current_ratio: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    quick_ratio: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    debt_ratio: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
 
     # Cash flow
-    ocf_per_share: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    ocf_per_share: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
 
     data_source: Mapped[str] = mapped_column(String(16), default="tushare")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

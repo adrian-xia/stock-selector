@@ -70,7 +70,10 @@ class TushareClient:
 
     # 特殊限流接口（接口名 → 每分钟次数），未列出的接口使用全局桶
     _API_RATE_LIMITS: dict[str, int] = {
-        "limit_list_d": 180,  # 官方 200 次/分钟，留余量
+        "limit_list_d": 180,   # 官方 200 次/分钟，留余量
+        "stk_auction": 8,      # 官方 10 次/分钟，留余量
+        "stk_factor": 80,      # 官方 100 次/分钟，留余量
+        "ccass_hold": 250,     # 官方 300 次/分钟，留余量
     }
 
     def __init__(
@@ -595,13 +598,16 @@ class TushareClient:
         return df.to_dict("records")
 
     async def fetch_raw_index_weight(
-        self, index_code: str, trade_date: str
+        self, index_code: str, trade_date: str = "",
+        start_date: str = "", end_date: str = "",
     ) -> list[dict]:
         """获取指数成分股权重（对应 index_weight 接口）。
 
         Args:
             index_code: 指数代码（如 000300.SH）
-            trade_date: 交易日期（YYYYMMDD）
+            trade_date: 交易日期（YYYYMMDD），单日模式
+            start_date: 开始日期（YYYYMMDD），批量模式
+            end_date: 结束日期（YYYYMMDD），批量模式
 
         Returns:
             成分股权重列表
@@ -610,6 +616,8 @@ class TushareClient:
             "index_weight",
             index_code=index_code,
             trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
         )
         return df.to_dict("records")
 
@@ -743,21 +751,49 @@ class TushareClient:
     ) -> list[dict]:
         """获取申万行业成分股（对应 index_member_all 接口）。
 
+        Tushare index_member_all 单次最多返回 3000 行，需用 offset/limit 分页。
+        index_code 参数实测无效（传任何值都返回全市场数据），故仅用分页获取。
+
+        API 返回字段与 raw 表列名映射：
+            l3_code → index_code, ts_code → con_code
+
         Args:
-            index_code: 指数代码（如 801010.SI）
+            index_code: 指数代码（实测无效，保留兼容）
             ts_code: 股票代码（如 600519.SH）
             is_new: 是否最新（Y/N）
 
         Returns:
-            行业成分股列表
+            行业成分股列表（已映射为 raw 表列名）
         """
-        df = await self._call(
-            "index_member_all",
-            index_code=index_code,
-            ts_code=ts_code,
-            is_new=is_new,
+        all_rows: list[dict] = []
+        page_size = 3000
+        offset = 0
+        while True:
+            df = await self._call(
+                "index_member_all",
+                is_new=is_new,
+                offset=offset,
+                limit=page_size,
+            )
+            if df.empty:
+                break
+            # 映射字段名：l3_code → index_code, ts_code → con_code
+            for row in df.to_dict("records"):
+                all_rows.append({
+                    "index_code": row.get("l3_code", ""),
+                    "con_code": row.get("ts_code", ""),
+                    "in_date": row.get("in_date", ""),
+                    "out_date": row.get("out_date"),
+                    "is_new": row.get("is_new"),
+                })
+            if len(df) < page_size:
+                break
+            offset += page_size
+        logger.info(
+            "[fetch_raw_index_member_all] 分页获取完成: %d 行 (%d 页)",
+            len(all_rows), (offset // page_size) + 1,
         )
-        return df.to_dict("records")
+        return all_rows
 
     async def fetch_raw_sw_daily(
         self, ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = ""
@@ -1062,18 +1098,18 @@ class TushareClient:
         df = await self._call("monthly", ts_code=ts_code, trade_date=trade_date, start_date=start_date, end_date=end_date)
         return df.to_dict("records")
 
-    async def fetch_raw_suspend_d(self, ts_code: str = "", suspend_date: str = "", resume_date: str = "") -> list[dict]:
+    async def fetch_raw_suspend_d(self, ts_code: str = "", trade_date: str = "", suspend_type: str = "") -> list[dict]:
         """获取停复牌信息（对应 suspend_d 接口）。
 
         Args:
             ts_code: 股票代码
-            suspend_date: 停牌日期（YYYYMMDD）
-            resume_date: 复牌日期（YYYYMMDD）
+            trade_date: 交易日期（YYYYMMDD），支持按日期查询全市场数据
+            suspend_type: 停复牌类型（S-停牌，R-复牌）
 
         Returns:
             停复牌信息列表（字段已映射为 raw 表字段名）
         """
-        df = await self._call("suspend_d", ts_code=ts_code, suspend_date=suspend_date, resume_date=resume_date)
+        df = await self._call("suspend_d", ts_code=ts_code, trade_date=trade_date, suspend_type=suspend_type)
         records = df.to_dict("records")
         # API 返回 trade_date → raw 表主键 suspend_date
         for r in records:
