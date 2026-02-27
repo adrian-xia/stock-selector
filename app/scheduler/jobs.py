@@ -299,6 +299,7 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 completion_rate * 100, threshold * 100,
             )
             picks = []
+            plans = []
             try:
                 picks = await pipeline_step(target)
             except Exception:
@@ -400,6 +401,36 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         "===== [盘后链路] 完成：%s，总耗时 %d分%d秒 (%.1fs) =====",
         target, elapsed_minutes, elapsed_seconds, elapsed,
     )
+
+    # 步骤 7：发送 Telegram 通知
+    try:
+        from app.notification import NotificationManager, NotificationLevel
+        notifier = NotificationManager()
+        pick_count = len(picks) if picks else 0
+        plan_count = len(plans) if plans else 0
+        msg_lines = [
+            f"📅 日期: {target}",
+            f"⏱ 耗时: {elapsed_minutes}分{elapsed_seconds}秒",
+            f"📊 数据同步: {summary.get('data_done', 'N/A')} 只股票",
+            f"🎯 选股: {pick_count} 条",
+            f"📋 交易计划: {plan_count} 条",
+        ]
+        if picks:
+            # 附上 Top 10 选股结果
+            msg_lines.append("\n🏆 Top 10 候选:")
+            for i, p in enumerate(picks[:10], 1):
+                name = getattr(p, 'name', '') or p.ts_code
+                close = getattr(p, 'close', '')
+                score = getattr(p, 'weighted_score', '')
+                msg_lines.append(f"  {i}. {p.ts_code} {name} 收盘:{close} 得分:{score}")
+        await notifier.send(
+            NotificationLevel.INFO,
+            f"✅ 盘后链路完成",
+            "\n".join(msg_lines),
+        )
+        logger.info("[Telegram通知] 已发送")
+    except Exception:
+        logger.warning("[Telegram通知] 发送失败\n%s", traceback.format_exc())
 
     # 记录任务完成
     await _task_logger.finish(
