@@ -45,6 +45,10 @@ docs/design/
 - 策略命中率追踪：选股结果自动记录到 strategy_picks 表，盘后链路回填 N 日收益率（1d/3d/5d/10d/20d）+ 最大收益/回撤，compute_hit_stats 按策略统计命中率；API: GET /hit-stats、GET /picks/history
 - 策略引擎：34 种核心策略（22 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）；V3 新增 6 个量价策略（缩量上涨、量缩价稳、首阴反包、地量见底、后量超前量、回调半分位）
 - 命中率追踪：每次策略选股结果自动写入 strategy_picks 表；盘后链路步骤 5.1 回填 N 日收益率（1/3/5/10/20 日，考虑停牌跳过）；步骤 5.2 计算命中率统计写入 strategy_hit_stats；API 端点 GET /api/v1/strategy/hit-stats 和 GET /api/v1/strategy/picks/history
+- 策略权重：基于 5d 命中率动态加权排序（weighted_score），权重范围 [0.3, 3.0]，替代简单 match_count 排序；命中率高的策略在结果中权重更大
+- 行业/市场筛选：选股 API 支持 industries/markets 参数过滤，覆盖 110 个行业 + 4 个市场（主板/创业板/科创板/北交所）；API 端点 GET /api/v1/strategy/industries 和 GET /api/v1/strategy/markets
+- 交易计划引擎：基于选股结果自动生成 T+1 触发条件/止损/止盈，4 种触发类型（breakout/reversal/value/volume_signal），盈亏比 2:1；结果写入 trade_plans 表；API 端点 POST /api/v1/strategy/plan/generate、GET /api/v1/strategy/plan/latest、GET /api/v1/strategy/plan/history
+- 启动同步：数据完整性检查和初始化同步改为后台异步执行，不阻塞端口监听，服务启动更快
 - AI 分析：已由 OpenClaw 接管，每日盘后 cron 自动触发深度分析（策略表现、重叠分析、个股点评、风险提示），结果推送 Discord
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
@@ -52,7 +56,7 @@ docs/design/
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
 - 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板 + 策略配置页面（启用/禁用策略、自定义参数），WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
-- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results，已停用） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log） + 命中率追踪表 2 张（strategy_picks、strategy_hit_stats）
+- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results，已停用） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log） + 命中率追踪表 2 张（strategy_picks、strategy_hit_stats） + 交易计划表 1 张（trade_plans，含触发条件/止损/止盈/盈亏比，索引 idx_plan_date/idx_plan_code_date）
 - 不做：用户权限、高手跟投
 
 ## 技术栈
@@ -298,7 +302,8 @@ stock-selector/
 │   │   ├── technical/        # 技术面策略
 │   │   ├── fundamental/      # 基本面策略
 │   │   ├── pipeline.py       # 执行管道
-│   │   └── factory.py        # 策略注册
+│   │   ├── factory.py        # 策略注册
+│   │   └── trade_plan.py     # 交易计划引擎（T+1 触发条件/止损/止盈生成）
 │   ├── backtest/             # 回测引擎
 │   │   ├── engine.py         # Cerebro 配置
 │   │   ├── strategy.py       # AStockStrategy 基类
@@ -333,7 +338,7 @@ stock-selector/
 │   │   ├── indicator.py      # 盘中指标计算与信号检测
 │   │   └── alert_engine.py   # 告警规则引擎
 │   └── api/                  # HTTP API
-│       ├── strategy.py       # 策略 API（执行 + 配置管理 CRUD，未指定日期时自动使用最近有数据的交易日）
+│       ├── strategy.py       # 策略 API（执行 + 配置管理 CRUD + 行业/市场筛选 + 交易计划，未指定日期时自动使用最近有数据的交易日）
 │       ├── backtest.py       # 回测 API
 │       ├── optimization.py   # 参数优化 API
 │       ├── news.py           # 新闻舆情 API
