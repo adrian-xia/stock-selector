@@ -37,7 +37,7 @@ docs/design/
 - 数据采集：Tushare Pro API，引入 raw 层作为数据缓冲（原始表），解耦数据获取和清洗逻辑，按日期批量获取全市场数据；已实施 P0（基础行情 6 张表）、P1（财务数据 10 张表，使用 VIP 接口按季度批量获取，含利润表/资产负债表/现金流量表全量字段，sync_raw_fina 同步四张表含去重逻辑，etl_fina 清洗为 finance_indicator + income_statement + balance_sheet + cash_flow_statement 四张业务表）、P2（资金流向 10 张表）、P3（指数数据 18 张表，含日常同步和静态数据同步，指数技术因子使用 idx_factor_pro 接口提供 80+ 技术指标，全量同步采用批量日期范围模式节省 API 配额）、P4（板块数据 8 张表，含盘后链路集成）和 P5（全部 48 张表数据同步 + 2 张业务表 suspend_info/limit_list_daily + ETL 清洗 + 盘后链路步骤 3.8 集成，含 28 张补充表按频率分组同步）
 - 性能优化：令牌桶限流（400 QPS，特殊接口独立限流桶：stk_auction/stk_factor/ccass_hold/limit_list_d + 限流错误加长退避），全链路性能日志支持瓶颈分析；COPY 协议批量写入（临时表+COPY+UPSERT 三步法，自动降级），全量导入索引管理（删除→导入→重建），TimescaleDB 超表迁移（stock_daily/technical_daily，可选依赖），raw 表复合索引优化，连接池调优（pool_size=10, max_overflow=20）
 - 自动数据更新：每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警（V1 记录日志，V2 接入企业微信/钉钉），基于 Redis 的任务状态管理；每日自动更新交易日历（获取未来 90 天数据，周末任务作为兜底）
-- 数据完整性：基于累积进度表（`stock_sync_progress`）的断点续传，启动时自动恢复未完成同步，按 365 天/批分批处理数据和指标，退市智能过滤，失败自动重试（每日 20:00），完整性门控（完成率 >= 95% 才执行策略），Redis 分布式锁防并发，环境隔离（APP_ENV_FILE）
+- 数据完整性：基于累积进度表（`stock_sync_progress`）的断点续传，启动时自动恢复未完成同步，退市智能过滤，失败自动重试（每日 20:00），完整性门控（完成率 >= 95% 才执行策略），Redis 分布式锁防并发，环境隔离（APP_ENV_FILE）；新增 `sync_daily_by_date(dates)` 统一入口，按日期批量同步（sync_raw_daily → etl_daily → compute_incremental），3 次 API 调用拉全市场数据，单日耗时约 57s（原逐只方式需数小时）
 - 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → P0 日线 → P1 财务 → P2 资金 → P3 指数 → P4 板块 → P5 扩展 → 技术指标）；CLI `init-tushare` 命令支持 `--skip-fina`/`--skip-p2`/`--skip-index`/`--skip-concept`/`--skip-p5` 选项
 - 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁，完整的关闭日志记录
 - 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
@@ -48,7 +48,7 @@ docs/design/
 - 策略权重：基于 5d 命中率动态加权排序（weighted_score），权重范围 [0.3, 3.0]，替代简单 match_count 排序；命中率高的策略在结果中权重更大
 - 行业/市场筛选：选股 API 支持 industries/markets 参数过滤，覆盖 110 个行业 + 4 个市场（主板/创业板/科创板/北交所）；API 端点 GET /api/v1/strategy/industries 和 GET /api/v1/strategy/markets
 - 交易计划引擎：基于选股结果自动生成 T+1 触发条件/止损/止盈，4 种触发类型（breakout/reversal/value/volume_signal），盈亏比 2:1；结果写入 trade_plans 表；API 端点 POST /api/v1/strategy/plan/generate、GET /api/v1/strategy/plan/latest、GET /api/v1/strategy/plan/history
-- 启动同步：数据完整性检查和初始化同步改为后台异步执行，不阻塞端口监听，服务启动更快
+- 启动同步：数据完整性检查和初始化同步改为后台异步执行，不阻塞端口监听，服务启动更快；`sync_from_progress` 改为查找交易日历中缺失日期（stock_daily 无数据的交易日），用 `sync_daily_by_date` 批量补齐，不再逐只查 stock_sync_progress
 - AI 分析：已由 OpenClaw 接管，每日盘后 cron 自动触发深度分析（策略表现、重叠分析、个股点评、风险提示），结果推送 Discord
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
