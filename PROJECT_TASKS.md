@@ -431,13 +431,13 @@ V2 任务分为 **15 个独立变更**，按优先级和依赖关系分为 4 个
 V3 任务分为 **3 个变更**，按依赖关系顺序实施：
 
 #### 第一批：前置基础
-1. **v3-snapshot-extend** — 扩展 market snapshot SQL（1 天）
+1. ✅ **v3-snapshot-extend** — 扩展 market snapshot SQL（1 天）
 
 #### 第二批：策略实现
-2. **v3-volume-price-strategies** — 6 个量价策略实现 + 注册（3-5 天）
+2. ✅ **v3-volume-price-strategies** — 6 个量价策略实现 + 注册（3-5 天）
 
 #### 第三批：文档与验证
-3. **v3-docs-update** — 设计文档/README/CLAUDE.md 同步更新（0.5 天）
+3. ✅ **v3-docs-update** — 设计文档/README/CLAUDE.md 同步更新（0.5 天）
 
 **V3 总工作量：** 4.5-6.5 天
 

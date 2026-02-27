@@ -119,6 +119,12 @@ from app.strategy.technical.bias_oversold import BIASStrategy  # noqa: E402
 from app.strategy.technical.volume_contraction import VolumeContractionPullbackStrategy  # noqa: E402
 from app.strategy.technical.volume_price_divergence import VolumePriceDivergenceStrategy  # noqa: E402
 from app.strategy.technical.obv_breakthrough import OBVBreakthroughStrategy  # noqa: E402
+from app.strategy.technical.shrink_volume_rise import ShrinkVolumeRiseStrategy  # noqa: E402
+from app.strategy.technical.volume_price_stable import VolumePriceStableStrategy  # noqa: E402
+from app.strategy.technical.first_negative_reversal import FirstNegativeReversalStrategy  # noqa: E402
+from app.strategy.technical.extreme_shrink_bottom import ExtremeShrinkBottomStrategy  # noqa: E402
+from app.strategy.technical.volume_surge_continuation import VolumeSurgeContinuationStrategy  # noqa: E402
+from app.strategy.technical.pullback_half_rule import PullbackHalfRuleStrategy  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 策略注册：基本面（12 种）
@@ -448,4 +454,62 @@ _register(StrategyMeta(
     param_space={
         "score_min": {"type": "float", "min": 40.0, "max": 80.0, "step": 5.0},
     },
+))
+
+# ---------------------------------------------------------------------------
+# 策略注册：量价策略（6 种）
+# ---------------------------------------------------------------------------
+_register(StrategyMeta(
+    name="shrink-volume-rise",
+    display_name="缩量上涨",
+    category="technical",
+    description="上升趋势中缩量上涨，筹码锁定良好",
+    strategy_cls=ShrinkVolumeRiseStrategy,
+    default_params={"max_vol_ratio": 0.8, "min_pct_chg": 0.5},
+    param_space={"max_vol_ratio": (0.4, 1.0, 0.1), "min_pct_chg": (0.0, 2.0, 0.5)},
+))
+_register(StrategyMeta(
+    name="volume-price-stable",
+    display_name="量缩价稳",
+    category="technical",
+    description="量缩价稳，抛压耗尽的底部企稳信号",
+    strategy_cls=VolumePriceStableStrategy,
+    default_params={"max_vol_ratio": 0.5, "max_pct_chg": 2.0, "ma_position": 1.02},
+    param_space={"max_vol_ratio": (0.3, 0.8, 0.1), "max_pct_chg": (1.0, 3.0, 0.5), "ma_position": (0.98, 1.05, 0.01)},
+))
+_register(StrategyMeta(
+    name="first-negative-reversal",
+    display_name="首阴反包",
+    category="technical",
+    description="强势股首阴后阳线反包，多头重新占优",
+    strategy_cls=FirstNegativeReversalStrategy,
+    default_params={"min_pct_chg": 2.0, "min_vol_ratio": 1.0},
+    param_space={"min_pct_chg": (1.0, 4.0, 0.5), "min_vol_ratio": (0.8, 2.0, 0.2)},
+))
+_register(StrategyMeta(
+    name="extreme-shrink-bottom",
+    display_name="地量见底",
+    category="technical",
+    description="极端缩量+低换手率，阶段性底部信号",
+    strategy_cls=ExtremeShrinkBottomStrategy,
+    default_params={"extreme_ratio": 0.3, "max_turnover": 1.0},
+    param_space={"extreme_ratio": (0.1, 0.5, 0.05), "max_turnover": (0.5, 2.0, 0.25)},
+))
+_register(StrategyMeta(
+    name="volume-surge-continuation",
+    display_name="后量超前量",
+    category="technical",
+    description="资金加速流入，量能持续放大的趋势加速信号",
+    strategy_cls=VolumeSurgeContinuationStrategy,
+    default_params={"surge_ratio": 2.0, "vol_ma_ratio": 1.2, "min_pct_chg": 1.0},
+    param_space={"surge_ratio": (1.5, 3.0, 0.25), "vol_ma_ratio": (1.0, 1.5, 0.1), "min_pct_chg": (0.5, 2.0, 0.25)},
+))
+_register(StrategyMeta(
+    name="pullback-half-rule",
+    display_name="回调半分位",
+    category="technical",
+    description="多头排列中小幅回调不超半分位，多头力量仍强",
+    strategy_cls=PullbackHalfRuleStrategy,
+    default_params={"max_pullback_pct": 3.0, "max_vol_ratio": 0.8},
+    param_space={"max_pullback_pct": (1.0, 5.0, 0.5), "max_vol_ratio": (0.5, 1.0, 0.1)},
 ))

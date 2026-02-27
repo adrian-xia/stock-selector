@@ -143,7 +143,8 @@ async def _build_market_snapshot(
             td.rsi6, td.rsi12, td.rsi24,
             td.boll_upper, td.boll_mid, td.boll_lower,
             td.vol_ma5, td.vol_ma10, td.vol_ratio,
-            td.atr14
+            td.atr14,
+            td.obv, td.donchian_upper, td.donchian_lower
         FROM stock_daily sd
         LEFT JOIN technical_daily td
             ON sd.ts_code = td.ts_code AND sd.trade_date = td.trade_date
@@ -168,6 +169,7 @@ async def _build_market_snapshot(
         "boll_upper", "boll_mid", "boll_lower",
         "vol_ma5", "vol_ma10", "vol_ratio",
         "atr14",
+        "obv", "donchian_upper", "donchian_lower",
     ]
     df = pd.DataFrame(rows, columns=columns)
 
@@ -182,7 +184,9 @@ async def _build_market_snapshot(
                 td.kdj_k AS kdj_k_prev, td.kdj_d AS kdj_d_prev,
                 td.rsi6 AS rsi6_prev, td.rsi12 AS rsi12_prev,
                 td.boll_lower AS boll_lower_prev,
-                sd.close AS close_prev
+                sd.close AS close_prev,
+                sd.open AS open_prev,
+                sd.pct_chg AS pct_chg_prev
             FROM technical_daily td
             JOIN stock_daily sd
                 ON td.ts_code = sd.ts_code AND td.trade_date = sd.trade_date
@@ -201,6 +205,7 @@ async def _build_market_snapshot(
                 "kdj_k_prev", "kdj_d_prev",
                 "rsi6_prev", "rsi12_prev",
                 "boll_lower_prev", "close_prev",
+                "open_prev", "pct_chg_prev",
             ]
             prev_df = pd.DataFrame(prev_rows, columns=prev_columns)
             df = df.merge(prev_df, on="ts_code", how="left")
