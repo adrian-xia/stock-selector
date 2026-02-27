@@ -33,6 +33,7 @@ class StockPick:
     pct_chg: float
     matched_strategies: list[str] = field(default_factory=list)
     match_count: int = 0
+    weighted_score: float = 0.0
     ai_score: int | None = None
     ai_signal: str | None = None
     ai_summary: str | None = None
@@ -370,19 +371,64 @@ async def _run_strategies_on_df(
     return passed_df
 
 
+async def _get_strategy_weights(
+    session_factory: async_sessionmaker,
+    period: str = "5d",
+    min_samples: int = 20,
+) -> dict[str, float]:
+    """从 strategy_hit_stats 读取命中率，计算策略权重。
+
+    权重公式: base(1.0) + hit_rate_bonus + return_bonus
+    - hit_rate_bonus = (hit_rate - 50) * 0.02  (命中率每高于50%加0.02)
+    - return_bonus = clamp(avg_return * 0.1, -0.3, 0.3)
+    - 最终权重 clamp 到 [0.3, 3.0]
+
+    样本不足 min_samples 的策略使用基础权重 1.0。
+    """
+    weights: dict[str, float] = {}
+    try:
+        async with session_factory() as session:
+            result = await session.execute(
+                text("""
+                    SELECT strategy_name, hit_rate, avg_return, total_picks
+                    FROM strategy_hit_stats
+                    WHERE period = :period
+                """),
+                {"period": period},
+            )
+            for row in result.fetchall():
+                name, hit_rate, avg_return, total_picks = row
+                if total_picks < min_samples or hit_rate is None:
+                    weights[name] = 1.0
+                    continue
+                hr = float(hit_rate)
+                ar = float(avg_return) if avg_return is not None else 0.0
+                hit_bonus = (hr - 50) * 0.02
+                return_bonus = max(-0.3, min(0.3, ar * 0.1))
+                w = 1.0 + hit_bonus + return_bonus
+                weights[name] = max(0.3, min(3.0, w))
+    except Exception:
+        logger.warning("读取策略权重失败，使用默认权重", exc_info=True)
+    return weights
+
+
 def _layer4_rank_and_topn(
     df: pd.DataFrame,
     name_map: dict[str, str],
     hit_records: dict[str, list[str]],
     top_n: int,
+    strategy_weights: dict[str, float] | None = None,
 ) -> list[StockPick]:
-    """Layer 4: 按命中策略数降序排序，取 Top N。
+    """Layer 4: 按加权得分降序排序，取 Top N。
+
+    加权得分 = Σ(每个命中策略的权重)，无权重数据时退化为 match_count。
 
     Args:
         df: 通过 Layer 2-3 的 DataFrame
         name_map: ts_code -> 股票名称映射
         hit_records: ts_code -> 命中的策略名称列表
         top_n: 返回数量上限
+        strategy_weights: 策略名 -> 权重映射（可选）
 
     Returns:
         排序后的 StockPick 列表
@@ -390,10 +436,13 @@ def _layer4_rank_and_topn(
     if df.empty:
         return []
 
+    weights = strategy_weights or {}
+
     picks: list[StockPick] = []
     for _, row in df.iterrows():
         ts_code = row["ts_code"]
         strategies = hit_records.get(ts_code, [])
+        score = sum(weights.get(s, 1.0) for s in strategies)
         picks.append(StockPick(
             ts_code=ts_code,
             name=name_map.get(ts_code, ""),
@@ -401,10 +450,11 @@ def _layer4_rank_and_topn(
             pct_chg=float(row.get("pct_chg", 0) or 0),
             matched_strategies=strategies,
             match_count=len(strategies),
+            weighted_score=round(score, 2),
         ))
 
-    # 按命中策略数降序排序
-    picks.sort(key=lambda p: p.match_count, reverse=True)
+    # 按加权得分降序排序（得分相同时按命中数）
+    picks.sort(key=lambda p: (p.weighted_score, p.match_count), reverse=True)
 
     return picks[:top_n]
 
@@ -593,8 +643,11 @@ async def execute_pipeline(
         )
         layer_stats["layer3"] = len(layer3_df)
 
-    # Layer 4: 排序取 Top N
-    picks = _layer4_rank_and_topn(layer3_df, name_map, hit_records, top_n)
+    # Layer 4: 加权排序取 Top N
+    strategy_weights = await _get_strategy_weights(session_factory)
+    if strategy_weights:
+        logger.info("Layer 4 加权排序：%d 个策略有权重数据", len(strategy_weights))
+    picks = _layer4_rank_and_topn(layer3_df, name_map, hit_records, top_n, strategy_weights)
     layer_stats["layer4"] = len(picks)
 
     # Layer 5: AI 分析
