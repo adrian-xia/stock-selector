@@ -248,7 +248,7 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                     rows = await session.execute(
                         sa_text(
                             "SELECT ts_code FROM stocks "
-                            "WHERE is_active = true "
+                            "WHERE list_status = 'L' "
                             "ORDER BY ts_code LIMIT 100"
                         )
                     )
