@@ -51,6 +51,7 @@ class StockPickResponse(BaseModel):
     pct_chg: float
     matched_strategies: list[str]
     match_count: int
+    weighted_score: float = 0.0
     ai_score: int | None = None
     ai_signal: str | None = None
     ai_summary: str | None = None
@@ -145,6 +146,7 @@ async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
                 pct_chg=p.pct_chg,
                 matched_strategies=p.matched_strategies,
                 match_count=p.match_count,
+                weighted_score=p.weighted_score,
                 ai_score=p.ai_score,
                 ai_signal=p.ai_signal,
                 ai_summary=p.ai_summary,
