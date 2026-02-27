@@ -371,6 +371,27 @@ async def _run_strategies_on_df(
     return passed_df
 
 
+async def _get_filtered_codes(
+    session: AsyncSession,
+    industries: list[str] | None = None,
+    markets: list[str] | None = None,
+) -> set[str]:
+    """从 stocks 表获取符合行业/市场条件的股票代码集合。"""
+    conditions = ["list_status = 'L'"]
+    params: dict = {}
+    if industries:
+        conditions.append("industry = ANY(:industries)")
+        params["industries"] = industries
+    if markets:
+        conditions.append("market = ANY(:markets)")
+        params["markets"] = markets
+    where = " AND ".join(conditions)
+    result = await session.execute(
+        text(f"SELECT ts_code FROM stocks WHERE {where}"), params
+    )
+    return {row[0] for row in result.fetchall()}
+
+
 async def _get_strategy_weights(
     session_factory: async_sessionmaker,
     period: str = "5d",
@@ -566,6 +587,8 @@ async def execute_pipeline(
     base_filter: dict | None = None,
     top_n: int = 30,
     strategy_params: dict[str, dict] | None = None,
+    industries: list[str] | None = None,
+    markets: list[str] | None = None,
 ) -> PipelineResult:
     """执行完整的 5 层选股管道。
 
@@ -576,6 +599,8 @@ async def execute_pipeline(
         base_filter: Layer 1 过滤参数覆盖
         top_n: 最终返回的股票数量上限
         strategy_params: 策略名称 -> 自定义参数字典（覆盖默认值）
+        industries: 行业过滤列表（如 ["电子", "计算机"]）
+        markets: 市场过滤列表（如 ["主板", "创业板"]）
 
     Returns:
         PipelineResult 包含选股结果和各层统计
@@ -621,6 +646,12 @@ async def execute_pipeline(
         if not snapshot_df.empty:
             name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
             snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
+
+        # 行业/市场过滤（Layer 1.5）
+        if industries or markets:
+            filter_codes = await _get_filtered_codes(session, industries, markets)
+            snapshot_df = snapshot_df[snapshot_df["ts_code"].isin(filter_codes)].reset_index(drop=True)
+            logger.info("行业/市场过滤后：%d 只股票（industries=%s, markets=%s）", len(snapshot_df), industries, markets)
 
         # Layer 2: 技术面策略筛选
         hit_records: dict[str, list[str]] = {}

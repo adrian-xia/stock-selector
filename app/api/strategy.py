@@ -34,6 +34,12 @@ class StrategyRunRequest(BaseModel):
         None, description="Layer 1 过滤参数覆盖"
     )
     top_n: int = Field(30, ge=1, le=200, description="返回数量上限")
+    industries: list[str] | None = Field(
+        None, description="行业过滤（如 ['电子', '计算机']）"
+    )
+    markets: list[str] | None = Field(
+        None, description="市场过滤（如 ['主板', '创业板']）"
+    )
 
 
 class StockPickResponse(BaseModel):
@@ -121,6 +127,8 @@ async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
         target_date=target,
         base_filter=req.base_filter,
         top_n=req.top_n,
+        industries=req.industries,
+        markets=req.markets,
     )
 
     return StrategyRunResponse(
@@ -144,6 +152,26 @@ async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
             for p in result.picks
         ],
     )
+
+
+@router.get("/industries")
+async def list_industries():
+    """获取所有行业列表（去重）。"""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("SELECT DISTINCT industry FROM stocks WHERE list_status = 'L' AND industry IS NOT NULL ORDER BY industry")
+        )
+        return [row[0] for row in result.fetchall()]
+
+
+@router.get("/markets")
+async def list_markets():
+    """获取所有市场列表。"""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("SELECT DISTINCT market FROM stocks WHERE list_status = 'L' AND market IS NOT NULL ORDER BY market")
+        )
+        return [row[0] for row in result.fetchall()]
 
 
 @router.get("/list", response_model=StrategyListResponse)
@@ -493,6 +521,177 @@ async def get_pick_history(
             return_20d=_f(r[10]),
             max_return=_f(r[11]),
             max_drawdown=_f(r[12]),
+        )
+        for r in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 交易计划端点
+# ---------------------------------------------------------------------------
+
+class TradePlanResponse(BaseModel):
+    """单条交易计划响应。"""
+    id: int
+    ts_code: str
+    plan_date: date
+    valid_date: date
+    direction: str
+    trigger_type: str
+    trigger_condition: str
+    trigger_price: float | None
+    stop_loss: float | None
+    take_profit: float | None
+    risk_reward_ratio: float | None
+    source_strategy: str
+    confidence: float | None
+    triggered: bool | None
+    actual_price: float | None
+
+
+@router.post("/plan/generate")
+async def generate_trade_plan(target_date: date | None = None) -> dict:
+    """生成交易计划。基于最新选股结果。"""
+    import json as _json
+    from app.strategy.trade_plan import TradePlanGenerator
+
+    # 确定目标日期
+    target = target_date
+    if target is None:
+        async with async_session_factory() as session:
+            row = await session.execute(
+                text("SELECT MAX(trade_date) FROM stock_daily WHERE vol > 0")
+            )
+            target = row.scalar()
+        if target is None:
+            raise HTTPException(status_code=400, detail="数据库中无日线数据")
+
+    # 读取启用的策略
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("SELECT name, params FROM strategies WHERE is_enabled = true")
+        )
+        rows = result.fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="没有启用的策略")
+
+    strategy_names = []
+    strategy_params: dict[str, dict] = {}
+    for name, params_raw in rows:
+        strategy_names.append(name)
+        if params_raw:
+            try:
+                p = _json.loads(params_raw) if isinstance(params_raw, str) else params_raw
+                if p:
+                    strategy_params[name] = p
+            except (ValueError, TypeError):
+                pass
+
+    # 执行选股
+    from app.strategy.pipeline import execute_pipeline
+    pipeline_result = await execute_pipeline(
+        session_factory=async_session_factory,
+        strategy_names=strategy_names,
+        target_date=target,
+        top_n=50,
+        strategy_params=strategy_params or None,
+    )
+
+    if not pipeline_result.picks:
+        return {"target_date": str(target), "generated": 0, "message": "选股结果为空"}
+
+    # 生成交易计划
+    generator = TradePlanGenerator()
+    plans = await generator.generate(async_session_factory, pipeline_result.picks, target)
+
+    return {
+        "target_date": str(target),
+        "generated": len(plans),
+        "picks": len(pipeline_result.picks),
+    }
+
+
+@router.get("/plan/latest", response_model=list[TradePlanResponse])
+async def get_latest_plan(limit: int = Query(20, ge=1, le=200)) -> list[TradePlanResponse]:
+    """获取最新交易计划。"""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                SELECT id, ts_code, plan_date, valid_date,
+                       direction, trigger_type, trigger_condition, trigger_price,
+                       stop_loss, take_profit, risk_reward_ratio,
+                       source_strategy, confidence, triggered, actual_price
+                FROM trade_plans
+                WHERE plan_date = (SELECT MAX(plan_date) FROM trade_plans)
+                ORDER BY id
+                LIMIT :limit
+            """),
+            {"limit": limit},
+        )
+        rows = result.fetchall()
+
+    def _f(v) -> float | None:
+        return float(v) if v is not None else None
+
+    return [
+        TradePlanResponse(
+            id=r[0], ts_code=r[1], plan_date=r[2], valid_date=r[3],
+            direction=r[4], trigger_type=r[5], trigger_condition=r[6],
+            trigger_price=_f(r[7]), stop_loss=_f(r[8]), take_profit=_f(r[9]),
+            risk_reward_ratio=_f(r[10]), source_strategy=r[11],
+            confidence=_f(r[12]), triggered=r[13], actual_price=_f(r[14]),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/plan/history", response_model=list[TradePlanResponse])
+async def get_plan_history(
+    ts_code: str | None = Query(None, description="股票代码，不传则返回所有"),
+    days: int = Query(7, ge=1, le=90, description="查询最近 N 天"),
+) -> list[TradePlanResponse]:
+    """获取历史交易计划。"""
+    async with async_session_factory() as session:
+        if ts_code:
+            result = await session.execute(
+                text("""
+                    SELECT id, ts_code, plan_date, valid_date,
+                           direction, trigger_type, trigger_condition, trigger_price,
+                           stop_loss, take_profit, risk_reward_ratio,
+                           source_strategy, confidence, triggered, actual_price
+                    FROM trade_plans
+                    WHERE ts_code = :ts_code
+                      AND plan_date >= CURRENT_DATE - :days * INTERVAL '1 day'
+                    ORDER BY plan_date DESC, id
+                """),
+                {"ts_code": ts_code, "days": days},
+            )
+        else:
+            result = await session.execute(
+                text("""
+                    SELECT id, ts_code, plan_date, valid_date,
+                           direction, trigger_type, trigger_condition, trigger_price,
+                           stop_loss, take_profit, risk_reward_ratio,
+                           source_strategy, confidence, triggered, actual_price
+                    FROM trade_plans
+                    WHERE plan_date >= CURRENT_DATE - :days * INTERVAL '1 day'
+                    ORDER BY plan_date DESC, id
+                """),
+                {"days": days},
+            )
+        rows = result.fetchall()
+
+    def _f(v) -> float | None:
+        return float(v) if v is not None else None
+
+    return [
+        TradePlanResponse(
+            id=r[0], ts_code=r[1], plan_date=r[2], valid_date=r[3],
+            direction=r[4], trigger_type=r[5], trigger_condition=r[6],
+            trigger_price=_f(r[7]), stop_loss=_f(r[8]), take_profit=_f(r[9]),
+            risk_reward_ratio=_f(r[10]), source_strategy=r[11],
+            confidence=_f(r[12]), triggered=r[13], actual_price=_f(r[14]),
         )
         for r in rows
     ]

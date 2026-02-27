@@ -301,6 +301,23 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
             except Exception:
                 logger.error("[盘后链路] 策略管道执行失败\n%s", traceback.format_exc())
 
+            # 步骤 5.05：生成交易计划（非关键，失败不阻断）
+            if picks:
+                plan_start = time.monotonic()
+                try:
+                    from app.strategy.trade_plan import TradePlanGenerator
+                    generator = TradePlanGenerator()
+                    plans = await generator.generate(async_session_factory, picks, target)
+                    logger.info(
+                        "[交易计划] 生成完成：%d 条，耗时 %.1fs",
+                        len(plans), time.monotonic() - plan_start,
+                    )
+                except Exception:
+                    logger.warning(
+                        "[交易计划] 生成失败（继续执行），耗时 %.1fs\n%s",
+                        time.monotonic() - plan_start, traceback.format_exc(),
+                    )
+
             # 步骤 5.1：回填选股收益率（非关键，失败不阻断）
             returns_start = time.monotonic()
             try:

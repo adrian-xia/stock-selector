@@ -7,6 +7,42 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
+class TradePlan(Base):
+    """交易计划：基于 T 日数据生成 T+1 触发条件。"""
+
+    __tablename__ = "trade_plans"
+    __table_args__ = (
+        Index("idx_plan_date", "plan_date"),
+        Index("idx_plan_code_date", "ts_code", "plan_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    plan_date: Mapped[date] = mapped_column(Date, nullable=False)   # 生成日期（T日）
+    valid_date: Mapped[date] = mapped_column(Date, nullable=False)  # 有效日期（T+1）
+
+    # 触发条件
+    direction: Mapped[str] = mapped_column(String(8), nullable=False, default="buy")
+    trigger_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    trigger_condition: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+
+    # 风控
+    stop_loss: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    take_profit: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    risk_reward_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+
+    # 来源
+    source_strategy: Mapped[str] = mapped_column(String(64), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+
+    # 执行结果（盘后回填）
+    triggered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    actual_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Strategy(Base):
     __tablename__ = "strategies"
 
