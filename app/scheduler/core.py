@@ -1,5 +1,6 @@
 """调度器核心：创建、配置、启动和停止 APScheduler。"""
 
+import asyncio
 import logging
 import time
 from datetime import date, timedelta
@@ -283,14 +284,22 @@ async def start_scheduler(skip_integrity_check: bool = False) -> None:
     # 启动时更新股票列表
     await sync_stock_list_on_startup()
 
-    # 基于进度表恢复同步
-    await sync_from_progress(skip_check=skip_integrity_check)
+    # 基于进度表恢复同步（后台执行，不阻塞启动）
+    asyncio.create_task(_background_sync(skip_integrity_check))
 
     # 创建并启动调度器
     _scheduler = create_scheduler()
     register_jobs(_scheduler)
     _scheduler.start()
     logger.info("调度器已启动")
+
+
+async def _background_sync(skip_check: bool = False) -> None:
+    """后台执行启动同步，不阻塞 uvicorn 端口监听。"""
+    try:
+        await sync_from_progress(skip_check=skip_check)
+    except Exception:
+        logger.exception("[后台同步] 启动同步异常")
 
 
 async def stop_scheduler() -> None:

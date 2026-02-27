@@ -7,9 +7,9 @@ set -e
 cd /Users/adrian/Developer/Codes/stock-selector
 
 # 加载生产环境变量（过滤注释和空行）
-if [ -f .env.prod ]; then
+if [ -f .env ]; then
     set -a
-    source <(cat .env.prod | grep -v '^#' | grep -v '^$' | sed 's/#.*$//')
+    source <(cat .env | grep -v '^#' | grep -v '^$' | sed 's/#.*$//')
     set +a
 fi
 
