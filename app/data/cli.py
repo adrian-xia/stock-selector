@@ -495,5 +495,30 @@ def init_tushare(
     asyncio.run(_run())
 
 
+@cli.command("cleanup-delisted")
+def cleanup_delisted() -> None:
+    """清理退市股票的所有业务表和 raw 表数据。"""
+    manager = _build_manager()
+
+    async def _run() -> None:
+        # 1. 先刷新股票列表（更新退市状态）
+        click.echo("刷新股票列表...")
+        sync_result = await manager.sync_stock_list()
+        click.echo(f"✓ 股票列表已更新: {sync_result}")
+
+        # 2. 清理退市股数据
+        click.echo("开始清理退市股数据...")
+        result = await manager.cleanup_delisted()
+        click.echo(f"✓ 清理完成:")
+        click.echo(f"  退市股数量: {result['delisted_count']}")
+        click.echo(f"  总删除行数: {result['total_deleted']:,}")
+        if result['tables']:
+            click.echo("  各表删除明细:")
+            for tbl, cnt in sorted(result['tables'].items(), key=lambda x: -x[1]):
+                click.echo(f"    {tbl}: {cnt:,}")
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     cli()

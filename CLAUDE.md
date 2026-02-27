@@ -41,6 +41,7 @@ docs/design/
 - 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → P0 日线 → P1 财务 → P2 资金 → P3 指数 → P4 板块 → P5 扩展 → 技术指标）；CLI `init-tushare` 命令支持 `--skip-fina`/`--skip-p2`/`--skip-index`/`--skip-concept`/`--skip-p5` 选项
 - 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁，完整的关闭日志记录
 - 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
+- 数据维护：退市股自动清理（cleanup_delisted），每周日 10:00 通过 OpenClaw cron 执行，刷新股票列表后删除退市股在所有业务表和 raw 表的数据，结果推送到 Discord
 - 策略引擎：28 种核心策略（16 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）
 - AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
@@ -245,6 +246,9 @@ uv run python -m app.data.cli sync-daily
 
 # 更新技术指标
 uv run python -m app.data.cli update-indicators
+
+# 清理退市股数据（刷新股票列表 + 删除退市股在所有业务表和 raw 表的数据）
+uv run python -m app.data.cli cleanup-delisted
 ```
 
 ### 配置项

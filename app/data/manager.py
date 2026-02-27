@@ -3971,3 +3971,116 @@ class DataManager:
             "stale": stale,
             "never_synced": never_synced,
         }
+
+    # ===================================================================
+    # 退市股清理
+    # ===================================================================
+
+    async def cleanup_delisted(self) -> dict:
+        """清理退市股票的所有业务表和 raw 表数据。
+
+        流程：
+        1. 从 stocks 表获取 list_status='D' 的股票代码
+        2. 逐表删除这些股票的数据
+        3. 在 stock_sync_progress 中标记为 delisted
+
+        Returns:
+            {"delisted_count": int, "tables": {table_name: deleted_rows}}
+        """
+        logger.info("[cleanup_delisted] 开始清理退市股数据")
+
+        async with self._session_factory() as session:
+            # 1. 获取退市股代码
+            result = await session.execute(
+                select(Stock.ts_code).where(Stock.list_status == "D")
+            )
+            delisted_codes = [r[0] for r in result.all()]
+
+            if not delisted_codes:
+                logger.info("[cleanup_delisted] 没有退市股，跳过")
+                return {"delisted_count": 0, "tables": {}}
+
+            logger.info("[cleanup_delisted] 发现 %d 只退市股", len(delisted_codes))
+
+            # 2. 需要清理的表（个股相关，排除指数/板块/全市场表）
+            tables_to_clean = [
+                # 业务表
+                "stock_daily", "technical_daily", "stock_min",
+                "finance_indicator", "income_statement", "balance_sheet",
+                "cash_flow_statement", "money_flow", "dragon_tiger",
+                "suspend_info", "limit_list_daily",
+                "ai_analysis_results", "sentiment_daily",
+                "alert_history",
+                # raw 表（个股相关）
+                "raw_tushare_daily", "raw_tushare_adj_factor",
+                "raw_tushare_daily_basic", "raw_tushare_stk_limit",
+                "raw_tushare_fina_indicator", "raw_tushare_income",
+                "raw_tushare_balancesheet", "raw_tushare_cashflow",
+                "raw_tushare_dividend", "raw_tushare_forecast",
+                "raw_tushare_express", "raw_tushare_fina_audit",
+                "raw_tushare_fina_mainbz", "raw_tushare_disclosure_date",
+                "raw_tushare_moneyflow", "raw_tushare_moneyflow_dc",
+                "raw_tushare_top_list", "raw_tushare_top_inst",
+                "raw_tushare_top10_holders", "raw_tushare_top10_floatholders",
+                "raw_tushare_stk_holdernumber", "raw_tushare_stk_holdertrade",
+                "raw_tushare_stk_managers", "raw_tushare_stk_rewards",
+                "raw_tushare_pledge_stat", "raw_tushare_pledge_detail",
+                "raw_tushare_repurchase", "raw_tushare_share_float",
+                "raw_tushare_stk_surv", "raw_tushare_margin_detail",
+                "raw_tushare_margin_target", "raw_tushare_stk_factor",
+                "raw_tushare_stk_factor_pro", "raw_tushare_suspend_d",
+                "raw_tushare_namechange", "raw_tushare_stk_auction",
+                "raw_tushare_stk_auction_o", "raw_tushare_report_rc",
+                "raw_tushare_cyq_perf", "raw_tushare_cyq_chips",
+                "raw_tushare_hk_hold", "raw_tushare_slb_len",
+                "raw_tushare_limit_step", "raw_tushare_hm_detail",
+                "raw_tushare_hm_list", "raw_tushare_block_trade",
+                "raw_tushare_stk_holdertrade",
+                "raw_tushare_monthly", "raw_tushare_weekly",
+                "raw_tushare_ccass_hold", "raw_tushare_ccass_hold_detail",
+                "raw_tushare_broker_recommend",
+            ]
+
+            deleted = {}
+            # 分批处理代码列表（避免 SQL 参数过多）
+            batch_size = 100
+            for tbl in tables_to_clean:
+                total_deleted = 0
+                try:
+                    for i in range(0, len(delisted_codes), batch_size):
+                        batch = delisted_codes[i:i + batch_size]
+                        result = await session.execute(
+                            text(f'DELETE FROM "{tbl}" WHERE ts_code = ANY(:codes)'),
+                            {"codes": batch},
+                        )
+                        total_deleted += result.rowcount
+                    if total_deleted > 0:
+                        deleted[tbl] = total_deleted
+                        logger.info("  - %s: 删除 %d 行", tbl, total_deleted)
+                except Exception as e:
+                    logger.warning("  - %s: 跳过 (%s)", tbl, str(e)[:80])
+
+            # 3. 更新 stock_sync_progress 状态为 delisted
+            try:
+                await session.execute(
+                    text(
+                        "UPDATE stock_sync_progress SET status = 'delisted' "
+                        "WHERE ts_code = ANY(:codes) AND status != 'delisted'"
+                    ),
+                    {"codes": delisted_codes},
+                )
+            except Exception as e:
+                logger.warning("  - stock_sync_progress 更新失败: %s", str(e)[:80])
+
+            await session.commit()
+
+        total_rows = sum(deleted.values())
+        logger.info(
+            "[cleanup_delisted] 完成: %d 只退市股, %d 张表, 共删除 %d 行",
+            len(delisted_codes), len(deleted), total_rows,
+        )
+        return {
+            "delisted_count": len(delisted_codes),
+            "tables": deleted,
+            "total_deleted": total_rows,
+        }
