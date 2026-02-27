@@ -373,7 +373,7 @@ stock-selector/
 │   ├── main.py                 # FastAPI 入口
 │   ├── config.py               # 配置管理（pydantic-settings）
 │   ├── database.py             # SQLAlchemy 异步引擎
-│   ├── models/                 # ORM 模型（36 张业务表 + 99 张 raw 层表）
+│   ├── models/                 # ORM 模型（38 张业务表 + 99 张 raw 层表）
 │   ├── data/                   # 数据采集模块
 │   │   ├── tushare.py          #   TushareClient（令牌桶限流 + 异步包装）
 │   │   ├── batch.py            #   批量日线同步

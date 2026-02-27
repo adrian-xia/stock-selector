@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Date, Index, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,10 +30,61 @@ class DataSourceConfig(Base):
     priority: Mapped[int] = mapped_column(Integer, default=1)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
-    last_health_check: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
-    )
+    last_health_check: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class StrategyPick(Base):
+    """策略选股记录：记录每次策略选出的股票，用于追踪后续涨跌表现。"""
+
+    __tablename__ = "strategy_picks"
+    __table_args__ = (
+        Index("idx_picks_strategy_date", "strategy_name", "pick_date"),
+        Index("idx_picks_date", "pick_date"),
+        Index("idx_picks_code", "ts_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy_name: Mapped[str] = mapped_column(String(64), nullable=False)  # 策略名
+    pick_date: Mapped[date] = mapped_column(Date, nullable=False)            # 选股日期
+    ts_code: Mapped[str] = mapped_column(String(16), nullable=False)         # 股票代码
+    pick_score: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)   # 选股评分
+    pick_close: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)   # 选股日收盘价
+
+    # N日后收益追踪（盘后链路回填）
+    return_1d: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)    # 1日收益率%
+    return_3d: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)    # 3日收益率%
+    return_5d: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)    # 5日收益率%
+    return_10d: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)   # 10日收益率%
+    return_20d: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)   # 20日收益率%
+    max_return: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)   # 期间最大收益%
+    max_drawdown: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True) # 期间最大回撤%
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class StrategyHitStat(Base):
+    """策略命中率统计：按策略、日期、周期汇总命中率和收益分布。"""
+
+    __tablename__ = "strategy_hit_stats"
+    __table_args__ = (
+        Index("idx_hit_stats_strategy", "strategy_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    stat_date: Mapped[date] = mapped_column(Date, nullable=False)    # 统计日期
+    period: Mapped[str] = mapped_column(String(8), nullable=False)   # 统计周期: 1d/3d/5d/10d/20d
+    total_picks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 总选股数
+    win_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)    # 盈利数（收益>0）
+    hit_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)       # 命中率%
+    avg_return: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)     # 平均收益率%
+    median_return: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)  # 中位数收益率%
+    best_return: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)    # 最佳收益率%
+    worst_return: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)   # 最差收益率%
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

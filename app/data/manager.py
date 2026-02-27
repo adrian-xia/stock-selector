@@ -4084,3 +4084,261 @@ class DataManager:
             "tables": deleted,
             "total_deleted": total_rows,
         }
+
+    # --- 策略命中率追踪 ---
+
+    async def update_pick_returns(self, target_date: date | None = None) -> dict:
+        """回填策略选股记录的 N 日收益率。
+
+        查找 return_1d/3d/5d/10d/20d 为 NULL 的记录，
+        根据 pick_date 和 ts_code 从 stock_daily 获取后续收盘价，
+        计算收益率并更新。停牌（无数据）的日期自动跳过。
+
+        Args:
+            target_date: 基准日期，默认今天
+
+        Returns:
+            {"updated": int, "skipped": int}
+        """
+        today = target_date or date.today()
+        updated = 0
+        skipped = 0
+
+        # 查询需要回填的记录：任意 return_Nd 为 NULL 且 pick_date 足够早
+        # 用最宽松条件（return_1d IS NULL）先拉出候选，逐条判断
+        async with self._session_factory() as session:
+            result = await session.execute(
+                text("""
+                    SELECT id, strategy_name, pick_date, ts_code, pick_close,
+                           return_1d, return_3d, return_5d, return_10d, return_20d,
+                           max_return, max_drawdown
+                    FROM strategy_picks
+                    WHERE pick_close IS NOT NULL
+                      AND (
+                          return_1d IS NULL OR return_3d IS NULL OR return_5d IS NULL
+                          OR return_10d IS NULL OR return_20d IS NULL
+                      )
+                    ORDER BY pick_date
+                """)
+            )
+            records = result.fetchall()
+
+        if not records:
+            logger.info("[update_pick_returns] 无需回填的记录")
+            return {"updated": 0, "skipped": 0}
+
+        logger.info("[update_pick_returns] 待回填记录 %d 条", len(records))
+
+        # 按 (pick_date, ts_code) 分组，批量查询后续收盘价
+        # 先收集所有需要查询的 (ts_code, pick_date) 对
+        from collections import defaultdict
+        code_dates: dict[str, set[date]] = defaultdict(set)
+        for row in records:
+            code_dates[row.ts_code].add(row.pick_date)
+
+        # 对每只股票，查询 pick_date 后 30 个交易日的收盘价
+        # 用 trade_calendar 确定交易日偏移
+        close_cache: dict[tuple[str, date], list[tuple[date, float]]] = {}
+
+        async with self._session_factory() as session:
+            for ts_code, pick_dates in code_dates.items():
+                for pick_date in pick_dates:
+                    result = await session.execute(
+                        text("""
+                            SELECT sd.trade_date, sd.close
+                            FROM stock_daily sd
+                            JOIN trade_calendar tc ON sd.trade_date = tc.cal_date
+                            WHERE sd.ts_code = :ts_code
+                              AND sd.trade_date > :pick_date
+                              AND sd.trade_date <= :today
+                              AND tc.is_open = true
+                              AND sd.close IS NOT NULL
+                              AND sd.vol > 0
+                            ORDER BY sd.trade_date
+                            LIMIT 25
+                        """),
+                        {"ts_code": ts_code, "pick_date": pick_date, "today": today},
+                    )
+                    rows = result.fetchall()
+                    close_cache[(ts_code, pick_date)] = [(r.trade_date, float(r.close)) for r in rows]
+
+        # 逐条计算并批量更新
+        async with self._session_factory() as session:
+            for row in records:
+                closes = close_cache.get((row.ts_code, row.pick_date), [])
+                if not closes:
+                    skipped += 1
+                    continue
+
+                pick_close = float(row.pick_close)
+                if pick_close == 0:
+                    skipped += 1
+                    continue
+
+                # 按交易日序号取对应收盘价（1/3/5/10/20 日）
+                def get_return(n: int) -> float | None:
+                    if len(closes) >= n:
+                        c = closes[n - 1][1]
+                        return round((c - pick_close) / pick_close * 100, 4)
+                    return None
+
+                # 计算各期收益率（仅回填 NULL 字段）
+                r1 = row.return_1d if row.return_1d is not None else get_return(1)
+                r3 = row.return_3d if row.return_3d is not None else get_return(3)
+                r5 = row.return_5d if row.return_5d is not None else get_return(5)
+                r10 = row.return_10d if row.return_10d is not None else get_return(10)
+                r20 = row.return_20d if row.return_20d is not None else get_return(20)
+
+                # 计算 20 日内最大收益和最大回撤
+                max_ret = row.max_return
+                max_dd = row.max_drawdown
+                if max_ret is None or max_dd is None:
+                    returns_20 = [
+                        (c - pick_close) / pick_close * 100
+                        for _, c in closes[:20]
+                    ]
+                    if returns_20:
+                        max_ret = round(max(returns_20), 4)
+                        max_dd = round(min(returns_20), 4)
+
+                await session.execute(
+                    text("""
+                        UPDATE strategy_picks SET
+                            return_1d  = COALESCE(return_1d,  :r1),
+                            return_3d  = COALESCE(return_3d,  :r3),
+                            return_5d  = COALESCE(return_5d,  :r5),
+                            return_10d = COALESCE(return_10d, :r10),
+                            return_20d = COALESCE(return_20d, :r20),
+                            max_return   = COALESCE(max_return,   :max_ret),
+                            max_drawdown = COALESCE(max_drawdown, :max_dd),
+                            updated_at = NOW()
+                        WHERE id = :id
+                    """),
+                    {
+                        "id": row.id,
+                        "r1": r1, "r3": r3, "r5": r5, "r10": r10, "r20": r20,
+                        "max_ret": max_ret, "max_dd": max_dd,
+                    },
+                )
+                updated += 1
+
+            await session.commit()
+
+        logger.info("[update_pick_returns] 完成：更新 %d 条，跳过 %d 条", updated, skipped)
+        return {"updated": updated, "skipped": skipped}
+
+    async def compute_hit_stats(self, target_date: date | None = None) -> dict:
+        """计算策略命中率统计并写入 strategy_hit_stats。
+
+        对每个策略，统计最近 30 个交易日的选股记录，
+        按 period (1d/3d/5d/10d/20d) 分别计算命中率和收益分布，
+        UPSERT 到 strategy_hit_stats 表。
+
+        Args:
+            target_date: 统计基准日期，默认今天
+
+        Returns:
+            {"upserted": int, "strategies": int}
+        """
+        import statistics
+
+        stat_date = target_date or date.today()
+        upserted = 0
+
+        # 查询最近 30 个交易日内有收益数据的选股记录
+        async with self._session_factory() as session:
+            result = await session.execute(
+                text("""
+                    SELECT strategy_name, ts_code,
+                           return_1d, return_3d, return_5d, return_10d, return_20d
+                    FROM strategy_picks
+                    WHERE pick_date >= (
+                        SELECT cal_date FROM trade_calendar
+                        WHERE is_open = true AND cal_date <= :stat_date
+                        ORDER BY cal_date DESC
+                        OFFSET 29 LIMIT 1
+                    )
+                    AND pick_date <= :stat_date
+                    AND pick_close IS NOT NULL
+                """),
+                {"stat_date": stat_date},
+            )
+            rows = result.fetchall()
+
+        if not rows:
+            logger.info("[compute_hit_stats] 无选股记录，跳过统计")
+            return {"upserted": 0, "strategies": 0}
+
+        # 按策略分组
+        from collections import defaultdict
+        strategy_data: dict[str, dict[str, list[float]]] = defaultdict(lambda: {
+            "1d": [], "3d": [], "5d": [], "10d": [], "20d": []
+        })
+
+        period_col = {
+            "1d": "return_1d", "3d": "return_3d", "5d": "return_5d",
+            "10d": "return_10d", "20d": "return_20d",
+        }
+
+        for row in rows:
+            sname = row.strategy_name
+            for period, col in period_col.items():
+                val = getattr(row, col)
+                if val is not None:
+                    strategy_data[sname][period].append(float(val))
+
+        # 计算统计并 UPSERT
+        async with self._session_factory() as session:
+            for strategy_name, periods in strategy_data.items():
+                for period, returns in periods.items():
+                    if not returns:
+                        continue
+                    total = len(returns)
+                    wins = sum(1 for r in returns if r > 0)
+                    hit_rate = round(wins / total * 100, 4)
+                    avg_ret = round(sum(returns) / total, 4)
+                    med_ret = round(statistics.median(returns), 4)
+                    best = round(max(returns), 4)
+                    worst = round(min(returns), 4)
+
+                    await session.execute(
+                        text("""
+                            INSERT INTO strategy_hit_stats
+                                (strategy_name, stat_date, period, total_picks, win_count,
+                                 hit_rate, avg_return, median_return, best_return, worst_return)
+                            VALUES
+                                (:strategy_name, :stat_date, :period, :total_picks, :win_count,
+                                 :hit_rate, :avg_return, :median_return, :best_return, :worst_return)
+                            ON CONFLICT ON CONSTRAINT uq_hit_stats_strategy_date_period
+                            DO UPDATE SET
+                                total_picks   = EXCLUDED.total_picks,
+                                win_count     = EXCLUDED.win_count,
+                                hit_rate      = EXCLUDED.hit_rate,
+                                avg_return    = EXCLUDED.avg_return,
+                                median_return = EXCLUDED.median_return,
+                                best_return   = EXCLUDED.best_return,
+                                worst_return  = EXCLUDED.worst_return
+                        """),
+                        {
+                            "strategy_name": strategy_name,
+                            "stat_date": stat_date,
+                            "period": period,
+                            "total_picks": total,
+                            "win_count": wins,
+                            "hit_rate": hit_rate,
+                            "avg_return": avg_ret,
+                            "median_return": med_ret,
+                            "best_return": best,
+                            "worst_return": worst,
+                        },
+                    )
+                    upserted += 1
+
+            await session.commit()
+
+        strategies_count = len(strategy_data)
+        logger.info(
+            "[compute_hit_stats] 完成：%d 个策略，写入 %d 条统计记录（日期：%s）",
+            strategies_count, upserted, stat_date,
+        )
+        return {"upserted": upserted, "strategies": strategies_count}

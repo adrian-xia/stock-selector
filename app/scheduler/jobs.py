@@ -301,6 +301,34 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
             except Exception:
                 logger.error("[盘后链路] 策略管道执行失败\n%s", traceback.format_exc())
 
+            # 步骤 5.1：回填选股收益率（非关键，失败不阻断）
+            returns_start = time.monotonic()
+            try:
+                returns_result = await manager.update_pick_returns(target)
+                logger.info(
+                    "[选股收益回填] 完成：%s，耗时 %.1fs",
+                    returns_result, time.monotonic() - returns_start,
+                )
+            except Exception:
+                logger.warning(
+                    "[选股收益回填] 失败（继续执行），耗时 %.1fs\n%s",
+                    time.monotonic() - returns_start, traceback.format_exc(),
+                )
+
+            # 步骤 5.2：计算命中率统计（非关键，失败不阻断）
+            stats_start = time.monotonic()
+            try:
+                stats_result = await manager.compute_hit_stats(target)
+                logger.info(
+                    "[命中率统计] 完成：%s，耗时 %.1fs",
+                    stats_result, time.monotonic() - stats_start,
+                )
+            except Exception:
+                logger.warning(
+                    "[命中率统计] 失败（继续执行），耗时 %.1fs\n%s",
+                    time.monotonic() - stats_start, traceback.format_exc(),
+                )
+
             # 步骤 5.5：AI 分析（非关键，失败不阻断）
             if picks:
                 ai_start = time.monotonic()

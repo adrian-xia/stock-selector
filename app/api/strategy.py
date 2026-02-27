@@ -351,3 +351,148 @@ async def update_strategy_config(
         params=current_params,
         is_enabled=is_enabled,
     )
+
+
+# ---------------------------------------------------------------------------
+# 命中率追踪端点
+# ---------------------------------------------------------------------------
+
+class HitStatResponse(BaseModel):
+    """单条命中率统计记录。"""
+    strategy_name: str
+    stat_date: date
+    period: str
+    total_picks: int
+    win_count: int
+    hit_rate: float | None
+    avg_return: float | None
+    median_return: float | None
+    best_return: float | None
+    worst_return: float | None
+
+
+class PickHistoryResponse(BaseModel):
+    """单条历史选股记录。"""
+    id: int
+    strategy_name: str
+    pick_date: date
+    ts_code: str
+    pick_score: float | None
+    pick_close: float | None
+    return_1d: float | None
+    return_3d: float | None
+    return_5d: float | None
+    return_10d: float | None
+    return_20d: float | None
+    max_return: float | None
+    max_drawdown: float | None
+
+
+@router.get("/hit-stats", response_model=list[HitStatResponse])
+async def get_hit_stats(
+    strategy_name: str | None = Query(None, description="策略名称，不传则返回所有策略"),
+) -> list[HitStatResponse]:
+    """获取策略命中率统计。
+
+    返回每个策略最新一次统计日期的各周期命中率数据。
+    """
+    async with async_session_factory() as session:
+        if strategy_name:
+            result = await session.execute(
+                text("""
+                    SELECT strategy_name, stat_date, period, total_picks, win_count,
+                           hit_rate, avg_return, median_return, best_return, worst_return
+                    FROM strategy_hit_stats
+                    WHERE strategy_name = :name
+                      AND stat_date = (
+                          SELECT MAX(stat_date) FROM strategy_hit_stats
+                          WHERE strategy_name = :name
+                      )
+                    ORDER BY period
+                """),
+                {"name": strategy_name},
+            )
+        else:
+            result = await session.execute(
+                text("""
+                    SELECT s.strategy_name, s.stat_date, s.period, s.total_picks, s.win_count,
+                           s.hit_rate, s.avg_return, s.median_return, s.best_return, s.worst_return
+                    FROM strategy_hit_stats s
+                    INNER JOIN (
+                        SELECT strategy_name, MAX(stat_date) AS max_date
+                        FROM strategy_hit_stats
+                        GROUP BY strategy_name
+                    ) latest ON s.strategy_name = latest.strategy_name
+                           AND s.stat_date = latest.max_date
+                    ORDER BY s.strategy_name, s.period
+                """)
+            )
+        rows = result.fetchall()
+
+    return [
+        HitStatResponse(
+            strategy_name=r[0],
+            stat_date=r[1],
+            period=r[2],
+            total_picks=r[3],
+            win_count=r[4],
+            hit_rate=float(r[5]) if r[5] is not None else None,
+            avg_return=float(r[6]) if r[6] is not None else None,
+            median_return=float(r[7]) if r[7] is not None else None,
+            best_return=float(r[8]) if r[8] is not None else None,
+            worst_return=float(r[9]) if r[9] is not None else None,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/picks/history", response_model=list[PickHistoryResponse])
+async def get_pick_history(
+    strategy_name: str = Query(..., description="策略名称"),
+    days: int = Query(30, ge=1, le=365, description="查询最近 N 个交易日"),
+) -> list[PickHistoryResponse]:
+    """获取策略历史选股记录。
+
+    返回指定策略最近 N 个交易日的选股记录，包含收益回填数据。
+    """
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                SELECT id, strategy_name, pick_date, ts_code, pick_score, pick_close,
+                       return_1d, return_3d, return_5d, return_10d, return_20d,
+                       max_return, max_drawdown
+                FROM strategy_picks
+                WHERE strategy_name = :strategy_name
+                  AND pick_date >= (
+                      SELECT cal_date FROM trade_calendar
+                      WHERE is_open = true AND cal_date <= CURRENT_DATE
+                      ORDER BY cal_date DESC
+                      OFFSET :offset LIMIT 1
+                  )
+                ORDER BY pick_date DESC, ts_code
+            """),
+            {"strategy_name": strategy_name, "offset": days - 1},
+        )
+        rows = result.fetchall()
+
+    def _f(v) -> float | None:
+        return float(v) if v is not None else None
+
+    return [
+        PickHistoryResponse(
+            id=r[0],
+            strategy_name=r[1],
+            pick_date=r[2],
+            ts_code=r[3],
+            pick_score=_f(r[4]),
+            pick_close=_f(r[5]),
+            return_1d=_f(r[6]),
+            return_3d=_f(r[7]),
+            return_5d=_f(r[8]),
+            return_10d=_f(r[9]),
+            return_20d=_f(r[10]),
+            max_return=_f(r[11]),
+            max_drawdown=_f(r[12]),
+        )
+        for r in rows
+    ]

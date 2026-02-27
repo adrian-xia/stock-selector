@@ -42,7 +42,9 @@ docs/design/
 - 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁，完整的关闭日志记录
 - 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
 - 数据维护：退市股自动清理（cleanup_delisted），每周日 10:00 通过 OpenClaw cron 执行，刷新股票列表后删除退市股在所有业务表和 raw 表的数据，结果推送到 Discord
+- 策略命中率追踪：选股结果自动记录到 strategy_picks 表，盘后链路回填 N 日收益率（1d/3d/5d/10d/20d）+ 最大收益/回撤，compute_hit_stats 按策略统计命中率；API: GET /hit-stats、GET /picks/history
 - 策略引擎：34 种核心策略（22 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）；V3 新增 6 个量价策略（缩量上涨、量缩价稳、首阴反包、地量见底、后量超前量、回调半分位）
+- 命中率追踪：每次策略选股结果自动写入 strategy_picks 表；盘后链路步骤 5.1 回填 N 日收益率（1/3/5/10/20 日，考虑停牌跳过）；步骤 5.2 计算命中率统计写入 strategy_hit_stats；API 端点 GET /api/v1/strategy/hit-stats 和 GET /api/v1/strategy/picks/history
 - AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
@@ -50,7 +52,7 @@ docs/design/
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
 - 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板 + 策略配置页面（启用/禁用策略、自定义参数），WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
-- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log）
+- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log） + 命中率追踪表 2 张（strategy_picks、strategy_hit_stats）
 - 不做：用户权限、高手跟投
 
 ## 技术栈
