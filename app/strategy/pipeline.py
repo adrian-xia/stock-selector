@@ -176,6 +176,11 @@ async def _build_market_snapshot(
     ]
     df = pd.DataFrame(rows, columns=columns)
 
+    # 将所有 Decimal 列转为 float（PostgreSQL numeric 返回 Decimal，策略需要 float）
+    for col in df.columns:
+        if col != "ts_code" and df[col].dtype == object:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
     # 前日技术指标（_prev 后缀）
     if prev_date is not None:
         prev_sql = text(f"""
@@ -187,6 +192,7 @@ async def _build_market_snapshot(
                 td.kdj_k AS kdj_k_prev, td.kdj_d AS kdj_d_prev,
                 td.rsi6 AS rsi6_prev, td.rsi12 AS rsi12_prev,
                 td.boll_lower AS boll_lower_prev,
+                td.donchian_upper AS donchian_upper_prev,
                 sd.close AS close_prev,
                 sd.open AS open_prev,
                 sd.pct_chg AS pct_chg_prev
@@ -207,10 +213,14 @@ async def _build_market_snapshot(
                 "macd_dif_prev", "macd_dea_prev",
                 "kdj_k_prev", "kdj_d_prev",
                 "rsi6_prev", "rsi12_prev",
-                "boll_lower_prev", "close_prev",
+                "boll_lower_prev", "donchian_upper_prev", "close_prev",
                 "open_prev", "pct_chg_prev",
             ]
             prev_df = pd.DataFrame(prev_rows, columns=prev_columns)
+            # Decimal → float
+            for col in prev_df.columns:
+                if col != "ts_code" and prev_df[col].dtype == object:
+                    prev_df[col] = pd.to_numeric(prev_df[col], errors="coerce")
             df = df.merge(prev_df, on="ts_code", how="left")
 
     logger.info("市场快照构建完成：%d 只股票，%d 列", len(df), len(df.columns))
@@ -260,6 +270,10 @@ async def _enrich_finance_data(
             "gross_margin", "net_margin",
         ]
         fin_df = pd.DataFrame(rows, columns=fin_columns)
+        # Decimal → float
+        for col in fin_df.columns:
+            if col != "ts_code" and fin_df[col].dtype == object:
+                fin_df[col] = pd.to_numeric(fin_df[col], errors="coerce")
         df = df.merge(fin_df, on="ts_code", how="left")
 
     # 从 raw_tushare_daily_basic 补充每日估值指标（pe_ttm、pb、ps_ttm、dividend_yield 等）
