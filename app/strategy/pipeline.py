@@ -193,6 +193,7 @@ async def _build_market_snapshot(
                 td.rsi6 AS rsi6_prev, td.rsi12 AS rsi12_prev,
                 td.boll_lower AS boll_lower_prev,
                 td.donchian_upper AS donchian_upper_prev,
+                td.obv AS obv_prev,
                 sd.close AS close_prev,
                 sd.open AS open_prev,
                 sd.pct_chg AS pct_chg_prev
@@ -213,7 +214,7 @@ async def _build_market_snapshot(
                 "macd_dif_prev", "macd_dea_prev",
                 "kdj_k_prev", "kdj_d_prev",
                 "rsi6_prev", "rsi12_prev",
-                "boll_lower_prev", "donchian_upper_prev", "close_prev",
+                "boll_lower_prev", "donchian_upper_prev", "obv_prev", "close_prev",
                 "open_prev", "pct_chg_prev",
             ]
             prev_df = pd.DataFrame(prev_rows, columns=prev_columns)
@@ -305,6 +306,10 @@ async def _enrich_finance_data(
             "dividend_yield", "db_total_mv", "db_circ_mv",
         ]
         db_df = pd.DataFrame(db_rows, columns=db_columns)
+        # Decimal → float
+        for col in db_df.columns:
+            if col != "ts_code" and db_df[col].dtype == object:
+                db_df[col] = pd.to_numeric(db_df[col], errors="coerce")
         df = df.merge(db_df, on="ts_code", how="left")
 
         # daily_basic 的估值指标覆盖 finance_indicator 的（更实时）
