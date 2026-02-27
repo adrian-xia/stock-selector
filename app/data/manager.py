@@ -416,6 +416,126 @@ class DataManager:
         logger.debug("[etl_daily] %s: 写入 %d 条", trade_date, count)
         return {"inserted": count}
 
+    async def sync_daily_by_date(self, dates: list[date]) -> dict:
+        """按日期批量同步日线数据：sync_raw_daily → etl_daily → compute_incremental。
+
+        支持单日和日期范围，一次 API 调用拉全市场数据，比逐只拉快 100 倍。
+
+        Args:
+            dates: 交易日期列表
+
+        Returns:
+            {
+                "dates_processed": int,
+                "total_rows": int,
+                "raw_daily": int,
+                "etl_daily": int,
+                "indicators": int,
+                "elapsed_seconds": float
+            }
+        """
+        import time
+        from app.data.indicator import compute_incremental
+
+        start_time = time.monotonic()
+        total_rows = 0
+        raw_daily_count = 0
+        etl_daily_count = 0
+
+        logger.info("[sync_daily_by_date] 开始按日期批量同步，共 %d 个交易日", len(dates))
+
+        # 步骤 1：逐日同步 raw 数据 + ETL
+        for td in dates:
+            try:
+                # 1.1 同步 raw 表
+                raw_result = await self.sync_raw_daily(td)
+                raw_count = raw_result.get("daily", 0)
+                raw_daily_count += raw_count
+
+                # 1.2 ETL 到 stock_daily
+                etl_result = await self.etl_daily(td)
+                etl_count = etl_result.get("inserted", 0)
+                etl_daily_count += etl_count
+                total_rows += etl_count
+
+                logger.info(
+                    "[sync_daily_by_date] %s: raw=%d, etl=%d",
+                    td, raw_count, etl_count,
+                )
+            except Exception as e:
+                logger.warning("[sync_daily_by_date] %s 失败: %s", td, e)
+                raise
+
+        # 步骤 2：计算最后一个日期的技术指标
+        indicator_count = 0
+        if dates:
+            last_date = dates[-1]
+            try:
+                logger.info("[sync_daily_by_date] 计算 %s 的技术指标", last_date)
+                indicator_result = await compute_incremental(
+                    self._session_factory,
+                    target_date=last_date,
+                )
+                indicator_count = indicator_result.get("success", 0)
+                logger.info(
+                    "[sync_daily_by_date] 技术指标计算完成：%d 只股票",
+                    indicator_count,
+                )
+            except Exception as e:
+                logger.warning("[sync_daily_by_date] 技术指标计算失败: %s", e)
+                raise
+
+        # 步骤 3：批量更新进度表
+        try:
+            async with self._session_factory() as session:
+                # 更新 data_date：所有在这些日期有数据的股票
+                await session.execute(
+                    update(StockSyncProgress)
+                    .where(
+                        StockSyncProgress.ts_code.in_(
+                            select(StockDaily.ts_code)
+                            .where(StockDaily.trade_date.in_(dates))
+                            .distinct()
+                        )
+                    )
+                    .values(data_date=dates[-1] if dates else date.today())
+                )
+
+                # 更新 indicator_date：最后一个日期的所有股票
+                if dates:
+                    await session.execute(
+                        update(StockSyncProgress)
+                        .where(
+                            StockSyncProgress.ts_code.in_(
+                                select(StockDaily.ts_code)
+                                .where(StockDaily.trade_date == dates[-1])
+                                .distinct()
+                            )
+                        )
+                        .values(indicator_date=dates[-1])
+                    )
+
+                await session.commit()
+                logger.info("[sync_daily_by_date] 进度表已更新")
+        except Exception as e:
+            logger.warning("[sync_daily_by_date] 进度表更新失败: %s", e)
+            raise
+
+        elapsed = time.monotonic() - start_time
+        logger.info(
+            "[sync_daily_by_date] 完成：%d 日期，raw=%d，etl=%d，指标=%d，耗时 %.1fs",
+            len(dates), raw_daily_count, etl_daily_count, indicator_count, elapsed,
+        )
+
+        return {
+            "dates_processed": len(dates),
+            "total_rows": total_rows,
+            "raw_daily": raw_daily_count,
+            "etl_daily": etl_daily_count,
+            "indicators": indicator_count,
+            "elapsed_seconds": elapsed,
+        }
+
     # --- P2 资金流向同步 ---
 
     async def sync_raw_moneyflow(self, trade_date: date) -> dict:

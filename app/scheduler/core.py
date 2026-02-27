@@ -7,8 +7,10 @@ from datetime import date, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import select
 
 from app.config import settings
+from app.models.market import StockDaily, TradeCalendar
 
 logger = logging.getLogger(__name__)
 
@@ -205,27 +207,41 @@ async def sync_from_progress(skip_check: bool = False) -> None:
             # 同步退市状态
             delisted_result = await manager.sync_delisted_status()
 
-            # 查询待处理股票
-            needing_sync = await manager.get_stocks_needing_sync(target_date)
+            # 查找缺失日期：交易日历中有但 stock_daily 中没有的日期
+            async with async_session_factory() as session:
+                # 获取交易日历中的所有交易日
+                trade_dates_result = await session.execute(
+                    select(TradeCalendar.cal_date)
+                    .where(TradeCalendar.is_open == True)
+                    .order_by(TradeCalendar.cal_date.asc())
+                )
+                all_trade_dates = [row[0] for row in trade_dates_result.all()]
 
-            if not needing_sync:
+                # 获取 stock_daily 中已有的日期
+                existing_dates_result = await session.execute(
+                    select(StockDaily.trade_date)
+                    .distinct()
+                    .order_by(StockDaily.trade_date.asc())
+                )
+                existing_dates = set(row[0] for row in existing_dates_result.all())
+
+            # 找出缺失的日期
+            missing_dates = [d for d in all_trade_dates if d not in existing_dates]
+
+            if not missing_dates:
                 summary = await manager.get_sync_summary(target_date)
                 elapsed = time.monotonic() - start
                 logger.info(
-                    "[启动同步] 无需同步，完成率 %.1f%%，耗时 %.1fs",
+                    "[启动同步] 无缺失日期，完成率 %.1f%%，耗时 %.1fs",
                     summary["completion_rate"] * 100, elapsed,
                 )
                 return
 
-            logger.info("[启动同步] 待同步股票 %d 只", len(needing_sync))
+            logger.info("[启动同步] 发现 %d 个缺失日期，开始补齐", len(missing_dates))
 
-            # 批量处理（P0 日线 raw-first）
-            await manager.process_stocks_batch(
-                needing_sync,
-                target_date,
-                concurrency=settings.daily_sync_concurrency,
-                timeout=settings.sync_batch_timeout,
-            )
+            # 按日期批量补齐（比逐只拉快 100 倍）
+            sync_result = await manager.sync_daily_by_date(missing_dates)
+            logger.info("[启动同步] 日期补齐完成：%s", sync_result)
 
             # raw 表缺口补齐：按优先级 P0 → P2 → P3 → P5 补齐
             logger.info("[启动同步] 开始 raw 表缺口补齐")
@@ -249,10 +265,8 @@ async def sync_from_progress(skip_check: bool = False) -> None:
             summary = await manager.get_sync_summary(target_date)
             elapsed = time.monotonic() - start
             logger.info(
-                "[启动同步] 完成：完成率 %.1f%%（%d/%d），失败 %d，耗时 %.1fs",
-                summary["completion_rate"] * 100,
-                summary["data_done"], summary["total"],
-                summary["failed"], elapsed,
+                "[启动同步] 完成：缺失日期 %d 个已补齐，耗时 %.1fs",
+                len(missing_dates), elapsed,
             )
         finally:
             await manager.release_sync_lock()
