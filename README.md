@@ -13,12 +13,12 @@
 - **技术指标计算** — 自动计算 MA/EMA/MACD/KDJ/RSI/BOLL/ATR/WR/CCI/BIAS/OBV/DMI/MTM/ROC/PSY/TRIX/EMV/VR/BRAR/CR/MFI 等 80+ 个技术指标（基于 idx_factor_pro 接口）
 - **34 种选股策略** — 22 种技术面策略（趋势跟踪、震荡指标、量价分析）+ 12 种基本面策略（估值、盈利、安全、综合评分），支持自由组合；策略注册制管理，盘后链路仅执行用户启用的策略，支持自定义参数
 - **5 层漏斗筛选** — SQL 粗筛 → 技术面 → 基本面 → 排序 → AI 终审
-- **AI 智能分析** — 接入 Gemini Flash，对候选股票进行综合评分和投资建议；盘后链路自动分析 Top 30 候选股并持久化结果；YAML 模板管理 Prompt；每日调用上限和 Token 用量记录；前端展示 AI 评分、信号和摘要
+- **AI 智能分析** — 由 OpenClaw 接管，每日盘后自动深度分析选股结果并推送报告
 - **历史回测** — 基于 Backtrader，支持 A 股佣金、印花税、涨跌停限制
 - **参数优化** — 网格搜索 + 遗传算法自动寻找策略最优参数，支持任务管理和结果可视化
-- **新闻舆情** — 东方财富/新浪7x24快讯/同花顺三源采集，Gemini AI 情感分析（-1.0~+1.0），每日情感聚合，盘后链路自动执行，前端新闻仪表盘（新闻列表 + 情感趋势图 + 每日摘要）
+- **新闻舆情** — 东方财富/新浪7x24快讯/同花顺三源采集，AI 情感分析已暂停，每日情感聚合，盘后链路自动执行，前端新闻仪表盘（新闻列表 + 情感趋势图 + 每日摘要）
 - **实时监控** — WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub 分发），告警规则引擎（价格预警 + 策略信号），多渠道通知（企业微信/Telegram），前端监控看板（自选股行情、告警管理、连接状态指示）
-- **定时任务** — 盘后自动执行数据同步、指标计算、缓存刷新、策略筛选、AI 分析、新闻采集全链路
+- **定时任务** — 盘后自动执行数据同步、指标计算、缓存刷新、策略筛选、新闻采集全链路
 - **Redis 缓存** — 技术指标 Cache-Aside 缓存 + 选股结果缓存，Redis 不可用时自动降级到数据库
 - **HTTP API** — RESTful 接口，支持策略执行、回测提交和结果查询
 - **监控与日志** — 结构化日志（JSON/文本自动切换）、日志轮转、API 请求性能中间件（慢请求告警）、深度健康检查（数据库/Redis/Tushare）、任务执行日志持久化与查询 API
@@ -35,7 +35,7 @@
 | 数据库 | PostgreSQL + asyncpg + TimescaleDB（可选） |
 | 缓存 | Redis + hiredis |
 | 回测引擎 | Backtrader |
-| AI 分析 | Google Gemini Flash (`google-genai`) |
+| AI 分析 | OpenClaw (外部 AI 分析) |
 | 定时任务 | APScheduler |
 | 包管理 | uv |
 | 前端框架 | React 19 + TypeScript |
@@ -66,7 +66,7 @@ uv sync
 
 # 复制环境变量配置
 cp .env.example .env
-# 编辑 .env，填入数据库连接和 Gemini API Key
+# 编辑 .env，填入数据库连接（AI 分析由 OpenClaw 接管，无需 Gemini API Key）
 ```
 
 ### 配置
@@ -80,13 +80,11 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selecto
 # Tushare API Token（必填）
 TUSHARE_TOKEN=your-tushare-token-here
 
-# AI 分析（可选，不填则跳过 AI 评分）
-# 方式一：API Key
-GEMINI_API_KEY=your-gemini-api-key
-# 方式二：Google ADC 认证（Vertex AI，需要 GCP 项目和 Billing）
-GEMINI_USE_ADC=true
-GEMINI_GCP_PROJECT=your-gcp-project-id   # ADC 模式必填
-GEMINI_GCP_LOCATION=us-central1           # ADC 模式，默认 us-central1
+# AI 分析（已禁用，由 OpenClaw 接管，以下配置可忽略）
+# GEMINI_API_KEY=your-gemini-api-key
+# GEMINI_USE_ADC=true
+# GEMINI_GCP_PROJECT=your-gcp-project-id
+# GEMINI_GCP_LOCATION=us-central1
 
 # Redis（可选，不配置则缓存功能自动降级）
 REDIS_HOST=localhost
@@ -223,7 +221,7 @@ uv sync
 
 # 4. 配置环境变量
 cp .env.example .env
-vim .env  # 填入数据库连接、Redis、Gemini API Key 等
+vim .env  # 填入数据库连接、Redis 等（AI 分析由 OpenClaw 接管，无需 Gemini Key）
 
 # 5. 初始化数据库
 uv run alembic upgrade head
@@ -387,11 +385,11 @@ stock-selector/
 │   │   ├── fundamental/        #   12 种基本面策略
 │   │   ├── factory.py          #   策略注册工厂
 │   │   └── pipeline.py         #   5 层执行管道
-│   ├── ai/                     # AI 分析模块
-│   │   ├── clients/gemini.py   #   Gemini Flash 客户端
+│   ├── ai/                     # AI 分析模块（已停用，分析由 OpenClaw 接管）
+│   │   ├── clients/gemini.py   #   Gemini Flash 客户端（已停用）
 │   │   ├── prompts.py          #   Prompt 模板
 │   │   ├── schemas.py          #   响应校验模型
-│   │   └── manager.py          #   AIManager 编排器
+│   │   └── manager.py          #   AIManager 编排器（已停用）
 │   ├── backtest/               # 回测引擎
 │   │   ├── engine.py           #   Cerebro 配置
 │   │   ├── strategy.py         #   AStockStrategy 基类

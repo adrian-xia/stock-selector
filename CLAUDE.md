@@ -45,14 +45,14 @@ docs/design/
 - 策略命中率追踪：选股结果自动记录到 strategy_picks 表，盘后链路回填 N 日收益率（1d/3d/5d/10d/20d）+ 最大收益/回撤，compute_hit_stats 按策略统计命中率；API: GET /hit-stats、GET /picks/history
 - 策略引擎：34 种核心策略（22 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）；V3 新增 6 个量价策略（缩量上涨、量缩价稳、首阴反包、地量见底、后量超前量、回调半分位）
 - 命中率追踪：每次策略选股结果自动写入 strategy_picks 表；盘后链路步骤 5.1 回填 N 日收益率（1/3/5/10/20 日，考虑停牌跳过）；步骤 5.2 计算命中率统计写入 strategy_hit_stats；API 端点 GET /api/v1/strategy/hit-stats 和 GET /api/v1/strategy/picks/history
-- AI 分析：✅ 已实施，Gemini Flash 单模型，盘后链路自动分析 Top 30 候选股，结果持久化到 ai_analysis_results 表，YAML Prompt 模板管理，每日调用上限，Token 用量记录，前端展示评分/信号/摘要
+- AI 分析：已由 OpenClaw 接管，每日盘后 cron 自动触发深度分析（策略表现、重叠分析、个股点评、风险提示），结果推送 Discord
 - 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
 - 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
-- 新闻舆情：✅ V2 已实施，东方财富/新浪7x24快讯/同花顺三源采集，Gemini AI 情感分析，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
+- 新闻舆情：✅ V2 已实施，东方财富/新浪7x24快讯/同花顺三源采集，AI 情感分析已暂停，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
 - 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
 - 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
 - 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板 + 策略配置页面（启用/禁用策略、自定义参数），WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
-- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log） + 命中率追踪表 2 张（strategy_picks、strategy_hit_stats）
+- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results，已停用） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log） + 命中率追踪表 2 张（strategy_picks、strategy_hit_stats）
 - 不做：用户权限、高手跟投
 
 ## 技术栈
@@ -64,7 +64,7 @@ docs/design/
 - **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
 - **性能优化：** 按日期批量获取全市场数据 + 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
 - **自动更新：** 数据嗅探 + 智能重试 + 任务状态管理（Redis）+ 通知报警（V1 日志，V2 企业微信/钉钉）+ 交易日历自动更新（每日获取未来 90 天数据）
-- **AI：** Gemini Flash（V1 单模型，支持 API Key 和 ADC/Vertex AI 两种认证）
+- **AI：** OpenClaw 接管（原 Gemini Flash 已禁用）
 - **前端：** React 19 + TypeScript + Ant Design 6 + ECharts 6
 - **前端构建：** Vite 7 + pnpm
 - **前端数据层：** TanStack React Query 5 + Axios + Zustand 5
@@ -259,7 +259,7 @@ uv run python -m app.data.cli cleanup-delisted
 - `DATABASE_URL` — PostgreSQL 连接字符串
 - `TUSHARE_TOKEN` — Tushare Pro API Token（必填）
 - `REDIS_HOST` / `REDIS_PORT` — Redis 连接（可选，不配置则缓存降级）
-- `GEMINI_API_KEY` — Gemini API Key（可选，不配置则跳过 AI 分析）
+- `GEMINI_API_KEY` — Gemini API Key（已禁用，AI 分析由 OpenClaw 接管）
 - `DATA_INTEGRITY_CHECK_ENABLED` — 启动时是否检查数据完整性（默认 true）
 - `DATA_INTEGRITY_CHECK_DAYS` — 检查最近 N 天（默认 30）
 - `SKIP_INTEGRITY_CHECK` — 环境变量，跳过启动时检查
@@ -309,11 +309,11 @@ stock-selector/
 │   │   ├── param_space.py     # 参数空间工具函数
 │   │   ├── grid_search.py     # 网格搜索优化器
 │   │   └── genetic.py         # 遗传算法优化器
-│   ├── ai/                   # AI 分析
-│   │   ├── clients/          # Gemini 客户端
+│   ├── ai/                   # AI 分析（已停用，分析由 OpenClaw 接管）
+│   │   ├── clients/          # Gemini 客户端（已停用）
 │   │   ├── prompts/          # Prompt 模板（YAML）
-│   │   ├── news_analyzer.py  # 新闻情感分析器
-│   │   └── manager.py        # AIManager
+│   │   ├── news_analyzer.py  # 新闻情感分析器（已停用）
+│   │   └── manager.py        # AIManager（已停用）
 │   ├── cache/                # Redis 缓存
 │   │   ├── redis_client.py   # 连接管理（init/get/close）
 │   │   ├── tech_cache.py     # 技术指标缓存（Cache-Aside）
