@@ -805,9 +805,10 @@ async def get_post_market_overview(
         # 最近任务执行日志
         tasks_result = await session.execute(
             text("""
-                SELECT task_type, task_date, status, duration_ms, error_message, created_at
+                SELECT task_name, trade_date, status,
+                       duration_seconds, error_message, started_at
                 FROM task_execution_log
-                ORDER BY created_at DESC
+                ORDER BY started_at DESC
                 LIMIT :limit
             """),
             {"limit": days * 5},
@@ -817,7 +818,7 @@ async def get_post_market_overview(
                 "task_type": r[0],
                 "task_date": str(r[1]) if r[1] else None,
                 "status": r[2],
-                "duration_ms": r[3],
+                "duration_ms": int(float(r[3]) * 1000) if r[3] else None,
                 "error_message": r[4],
                 "created_at": str(r[5]) if r[5] else None,
             }

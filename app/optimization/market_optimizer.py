@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -55,7 +56,7 @@ class MarketOptimizer:
         param_space: dict,
         lookback_days: int = 120,
         top_n: int = 10,
-        progress_callback: callable | None = None,
+        progress_callback: Callable | None = None,
     ) -> list[MarketOptResult]:
         """执行全市场选股回放优化。
 
