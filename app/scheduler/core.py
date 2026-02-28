@@ -49,7 +49,6 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     from app.scheduler.jobs import retry_failed_stocks_job, sync_stock_list_job
     from app.scheduler.market_opt_job import weekly_market_opt_job
     from app.scheduler.v4_opt_job import weekly_v4_opt_job
-    from app.scheduler.v4_opt_job import weekly_v4_opt_job
 
     # 自动数据更新任务：默认周一至周五 15:30（替换原有盘后链路任务）
     if settings.auto_update_enabled:
@@ -132,28 +131,6 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         logger.info("注册任务：每周全市场参数优化 [%s]", mopt_cron)
     else:
         logger.info("每周全市场参数优化已禁用（MARKET_OPT_ENABLED=false）")
-
-    # V4 量价配合策略独立优化：默认周六 12:00
-    if settings.v4_opt_enabled:
-        v4_cron = settings.v4_opt_cron
-        parts = v4_cron.split()
-        scheduler.add_job(
-            func=weekly_v4_opt_job,
-            trigger=CronTrigger(
-                minute=parts[0],
-                hour=parts[1],
-                day=parts[2],
-                month=parts[3],
-                day_of_week=parts[4],
-                timezone="Asia/Shanghai",
-            ),
-            id="weekly_v4_optimization",
-            name="V4量价配合策略优化",
-            replace_existing=True,
-        )
-        logger.info("注册任务：V4量价配合策略优化 [%s]", v4_cron)
-    else:
-        logger.info("V4量价配合策略优化已禁用（V4_OPT_ENABLED=false）")
 
     # V4 量价配合策略独立优化：默认周六 12:00
     if settings.v4_opt_enabled:
