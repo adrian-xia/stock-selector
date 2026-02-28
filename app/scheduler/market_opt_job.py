@@ -48,6 +48,13 @@ async def weekly_market_opt_job() -> None:
         return
 
     # 过滤有 param_space 的策略
+    # 基本面策略 Layer 3 计算量过大，暂时跳过优化
+    SKIP_STRATEGIES = {
+        "growth-stock", "financial-safety", "pb-value", "peg-value",
+        "ps-value", "high-dividend", "gross-margin-up", "cashflow-quality",
+        "profit-continuous-growth", "cashflow-coverage", "quality-score",
+        "low-pe-high-roe",
+    }
     candidates: list[tuple[str, dict]] = []
     for name in enabled_names:
         try:
@@ -55,6 +62,9 @@ async def weekly_market_opt_job() -> None:
         except KeyError:
             continue
         if not meta.param_space:
+            continue
+        if name in SKIP_STRATEGIES:
+            logger.info("策略 %s 为基本面策略，暂时跳过优化", name)
             continue
         combos = count_combinations(meta.param_space)
         if combos > settings.market_opt_max_combinations:
