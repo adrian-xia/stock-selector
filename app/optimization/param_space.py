@@ -4,15 +4,26 @@ import itertools
 import math
 
 
-def _generate_range(spec: dict) -> list:
+def _normalize_spec(spec) -> dict:
+    """将 tuple 格式 (min, max, step) 转换为 dict 格式。"""
+    if isinstance(spec, (tuple, list)):
+        min_val, max_val, step = spec[0], spec[1], spec[2]
+        param_type = "int" if all(isinstance(v, int) for v in (min_val, max_val, step)) else "float"
+        return {"type": param_type, "min": min_val, "max": max_val, "step": step}
+    return spec
+
+
+def _generate_range(spec) -> list:
     """根据参数规格生成取值列表。
 
     Args:
         spec: {"type": "int"|"float", "min": N, "max": N, "step": N}
+              或 (min, max, step) tuple
 
     Returns:
         参数取值列表
     """
+    spec = _normalize_spec(spec)
     param_type = spec["type"]
     min_val = spec["min"]
     max_val = spec["max"]
@@ -72,6 +83,7 @@ def count_combinations(param_space: dict) -> int:
 
     total = 1
     for spec in param_space.values():
+        spec = _normalize_spec(spec)
         min_val = spec["min"]
         max_val = spec["max"]
         step = spec["step"]
