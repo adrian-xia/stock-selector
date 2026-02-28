@@ -97,8 +97,9 @@ class MarketOptimizer:
 
         # 3. 预热缓存：对每个采样日先跑一次完整 Pipeline 填充 Layer 1-2 缓存 + 市场快照
         snapshot_cache: dict = {}
+        layer_cache: dict = {}
         logger.info("预热 Pipeline 缓存：%d 个采样日...", len(sample_dates))
-        await self._warmup_cache(strategy_name, sample_dates, snapshot_cache)
+        await self._warmup_cache(strategy_name, sample_dates, snapshot_cache, layer_cache)
         logger.info("缓存预热完成（快照缓存 %d 天）", len(snapshot_cache))
 
         # 4. 并发评估每组参数（复用缓存）
@@ -109,7 +110,7 @@ class MarketOptimizer:
             nonlocal completed
             async with self._semaphore:
                 result = await self._evaluate_params(
-                    strategy_name, params, sample_dates, snapshot_cache,
+                    strategy_name, params, sample_dates, snapshot_cache, layer_cache,
                 )
                 completed += 1
                 if progress_callback:
@@ -131,6 +132,7 @@ class MarketOptimizer:
         strategy_name: str,
         sample_dates: list[date],
         snapshot_cache: dict | None = None,
+        layer_cache: dict | None = None,
     ) -> None:
         """对每个采样日执行一次完整 Pipeline，填充 Layer 1-2 缓存 + 市场快照缓存。
 
@@ -150,6 +152,7 @@ class MarketOptimizer:
                         strategy_params=None,
                         use_cache=True,
                         snapshot_cache=snapshot_cache,
+                        layer_cache=layer_cache,
                     )
                 except Exception as e:
                     logger.warning("缓存预热失败 date=%s: %s", target_date, e)
@@ -184,6 +187,7 @@ class MarketOptimizer:
         params: dict,
         sample_dates: list[date],
         snapshot_cache: dict | None = None,
+        layer_cache: dict | None = None,
     ) -> MarketOptResult:
         """评估单组参数在采样交易日上的选股效果（复用 Layer 1-2 缓存 + 快照缓存）。"""
         all_returns: list[float] = []
@@ -199,6 +203,7 @@ class MarketOptimizer:
                     strategy_params={strategy_name: params} if params else None,
                     use_cache=True,
                     snapshot_cache=snapshot_cache,
+                    layer_cache=layer_cache,
                 )
 
                 if not pipeline_result.picks:

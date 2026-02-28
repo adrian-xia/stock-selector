@@ -675,6 +675,7 @@ async def execute_pipeline(
     markets: list[str] | None = None,
     use_cache: bool = False,
     snapshot_cache: dict | None = None,
+    layer_cache: dict | None = None,
 ) -> PipelineResult:
     """执行完整的 5 层选股管道。
 
@@ -689,6 +690,7 @@ async def execute_pipeline(
         markets: 市场过滤列表（如 ["主板", "创业板"]）
         use_cache: 是否使用 pipeline_cache 缓存 Layer 1-2 结果（优化器专用，默认 False）
         snapshot_cache: 可选的市场快照内存缓存（优化器专用，key=target_date, value=snapshot_df）
+        layer_cache: 可选的 Layer 缓存内存缓存（优化器专用，key=(target_date, layer), value=list[dict]）
 
     Returns:
         PipelineResult 包含选股结果和各层统计
@@ -713,21 +715,24 @@ async def execute_pipeline(
         name_map: dict[str, str]
 
         if use_cache:
-            cached_l1 = await _cache_read_layer(session, target_date, 1)
+            # 优先从内存缓存读取
+            lc_key_1 = (target_date, 1)
+            cached_l1 = layer_cache.get(lc_key_1) if layer_cache is not None else None
+            if cached_l1 is None:
+                cached_l1 = await _cache_read_layer(session, target_date, 1)
+                if cached_l1 is not None and layer_cache is not None:
+                    layer_cache[lc_key_1] = cached_l1
             if cached_l1 is not None:
-                # 从缓存恢复：只保留 passed=True 的行
                 passed = [r for r in cached_l1 if r["passed"]]
                 if passed:
                     layer1_df = pd.DataFrame(
                         [{"ts_code": r["ts_code"], "name": r["raw_data"].get("name", "") if r["raw_data"] else ""} for r in passed]
                     )
                     name_map = dict(zip(layer1_df["ts_code"], layer1_df["name"]))
-                    logger.info("Layer 1 缓存命中：%d 只股票（%s）", len(layer1_df), target_date)
                 else:
                     layer1_df = pd.DataFrame()
                     name_map = {}
             else:
-                # 计算并写入缓存
                 layer1_df = await _layer1_base_filter(session, target_date, base_filter)
                 name_map = dict(zip(layer1_df["ts_code"], layer1_df["name"]))
                 records = [
@@ -735,6 +740,8 @@ async def execute_pipeline(
                     for _, row in layer1_df.iterrows()
                 ]
                 await _cache_write_layer(session, target_date, 1, records)
+                if layer_cache is not None:
+                    layer_cache[lc_key_1] = records
                 logger.info("Layer 1 缓存写入：%d 只股票（%s）", len(layer1_df), target_date)
         else:
             layer1_df = await _layer1_base_filter(session, target_date, base_filter)
@@ -757,7 +764,12 @@ async def execute_pipeline(
         snapshot_df: pd.DataFrame
 
         if use_cache:
-            cached_l2 = await _cache_read_layer(session, target_date, 2)
+            lc_key_2 = (target_date, 2)
+            cached_l2 = layer_cache.get(lc_key_2) if layer_cache is not None else None
+            if cached_l2 is None:
+                cached_l2 = await _cache_read_layer(session, target_date, 2)
+                if cached_l2 is not None and layer_cache is not None:
+                    layer_cache[lc_key_2] = cached_l2
             if cached_l2 is not None:
                 # Layer 2 缓存命中：恢复通过行业/市场过滤的股票列表
                 passed_l2 = [r for r in cached_l2 if r["passed"]]
@@ -803,6 +815,8 @@ async def execute_pipeline(
                     for code in all_codes
                 ]
                 await _cache_write_layer(session, target_date, 2, l2_records)
+                if layer_cache is not None:
+                    layer_cache[lc_key_2] = l2_records
                 logger.info("Layer 2 缓存写入：%d/%d 只股票通过（%s）", len(passed_codes_l2), len(all_codes), target_date)
 
             # 策略计算（每次都重新跑，因为参数不同）
