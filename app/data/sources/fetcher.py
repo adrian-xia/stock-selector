@@ -19,7 +19,7 @@ async def _load_stock_names() -> dict[str, str]:
     失败时返回空 dict（降级为仅代码匹配）。
     """
     try:
-        from app.models.base import async_session_factory
+        from app.database import async_session_factory
         async with async_session_factory() as session:
             result = await session.execute(text("SELECT ts_code, name FROM stocks"))
             return {row[0]: row[1] for row in result.fetchall()}
