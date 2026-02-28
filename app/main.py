@@ -17,6 +17,7 @@ from app.api.realtime import router as realtime_router
 from app.api.strategy import router as strategy_router
 from app.api.task_log import router as task_log_router
 from app.api.websocket import router as ws_router
+from app.v4backtest.router import router as v4backtest_router
 from app.cache.redis_client import close_redis, get_redis, init_redis
 from app.cache.tech_cache import warmup_cache
 from app.config import settings
@@ -174,3 +175,4 @@ app.include_router(alert_router)
 app.include_router(realtime_router)
 app.include_router(task_log_router)
 app.include_router(ws_router)
+app.include_router(v4backtest_router)

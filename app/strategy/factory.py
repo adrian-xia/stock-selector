@@ -513,3 +513,27 @@ _register(StrategyMeta(
     default_params={"max_pullback_pct": 3.0, "max_vol_ratio": 0.8},
     param_space={"max_pullback_pct": (1.0, 5.0, 0.5), "max_vol_ratio": (0.5, 1.0, 0.1)},
 ))
+
+# ---------------------------------------------------------------------------
+# 策略注册：V4 量价配合策略（1 种）
+# ---------------------------------------------------------------------------
+from app.strategy.technical.volume_price_pattern import VolumePricePatternStrategy  # noqa: E402
+
+_register(StrategyMeta(
+    name="volume-price-pattern",
+    display_name="量价配合（龙回头）",
+    category="technical",
+    description="放量突破后缩量回踩企稳，捕捉主升浪启动点",
+    strategy_cls=VolumePricePatternStrategy,
+    default_params=VolumePricePatternStrategy.default_params,
+    param_space={
+        "accumulation_days": {"type": "int", "min": 30, "max": 60, "step": 15},
+        "min_t0_pct_chg": {"type": "float", "min": 5.0, "max": 7.0, "step": 1.0},
+        "min_t0_vol_ratio": {"type": "float", "min": 2.0, "max": 3.0, "step": 0.5},
+        "min_washout_days": {"type": "int", "min": 2, "max": 4, "step": 1},
+        "max_washout_days": {"type": "int", "min": 6, "max": 10, "step": 2},
+        "max_vol_shrink_ratio": {"type": "float", "min": 0.30, "max": 0.50, "step": 0.10},
+        "max_tk_amplitude": {"type": "float", "min": 2.0, "max": 4.0, "step": 1.0},
+        "ma_support_tolerance": {"type": "float", "min": 0.010, "max": 0.020, "step": 0.005},
+    },
+))

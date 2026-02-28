@@ -22,6 +22,9 @@ _VOLUME_STRATEGIES = {
     "shrink-volume-rise", "volume-price-stable", "extreme-shrink-bottom",
     "volume-surge-continuation", "pullback-half-rule",
 }
+_STABILIZATION_STRATEGIES = {
+    "volume-price-pattern",
+}
 
 RISK_REWARD_RATIO = 2.0
 
@@ -36,6 +39,8 @@ def _classify_strategy(strategy_name: str) -> str:
         return "value"
     if strategy_name in _VOLUME_STRATEGIES:
         return "volume_signal"
+    if strategy_name in _STABILIZATION_STRATEGIES:
+        return "stabilization"
     return "breakout"  # 默认归为突破型
 
 
@@ -77,6 +82,13 @@ def _build_plan(
         trigger_price = round(close * 0.98, 2)
         trigger_condition = f"回调至 {trigger_price:.2f} 附近买入"
         stop_loss = round(close * 0.95, 2)
+
+    elif trigger_type == "stabilization":
+        # 量价配合：缩量回踩企稳买入，止损用 T0 最低价
+        trigger_price = close
+        trigger_condition = "缩量回踩企稳，次日开盘买入"
+        stop_loss = recent_low  # 会被观察池的 t0_low 覆盖（见下方增强）
+        take_profit = round(close * 1.15, 2)  # 15% 止盈
 
     else:  # volume_signal
         # 量价型：当前收盘价，放量突破 MA5
@@ -198,6 +210,30 @@ class TradePlanGenerator:
 
         return indicators
 
+    async def _get_watchpool_data(
+        self, session, ts_codes: list[str], target_date: date
+    ) -> dict[str, dict]:
+        """从观察池获取已触发股票的 T0 数据。"""
+        if not ts_codes:
+            return {}
+        placeholders = ", ".join(f":c{i}" for i in range(len(ts_codes)))
+        code_params = {f"c{i}": code for i, code in enumerate(ts_codes)}
+        result = await session.execute(
+            text(f"""
+                SELECT ts_code, t0_date, t0_low, t0_open, washout_days
+                FROM strategy_watchpool
+                WHERE status = 'triggered'
+                  AND triggered_date = :target_date
+                  AND ts_code IN ({placeholders})
+            """),
+            {"target_date": target_date, **code_params},
+        )
+        return {
+            r.ts_code: {"t0_date": r.t0_date, "t0_low": r.t0_low,
+                         "t0_open": r.t0_open, "washout_days": r.washout_days}
+            for r in result.fetchall()
+        }
+
     async def generate(
         self,
         session_factory,
@@ -227,6 +263,9 @@ class TradePlanGenerator:
             # 获取技术指标
             indicators_map = await self._get_indicators(session, ts_codes, target_date)
 
+            # 获取观察池数据（用于量价配合策略的精确止损）
+            watchpool_map = await self._get_watchpool_data(session, ts_codes, target_date)
+
             plans: list[dict] = []
             for pick in picks:
                 indicators = indicators_map.get(pick.ts_code, {})
@@ -234,9 +273,7 @@ class TradePlanGenerator:
                     logger.warning("[TradePlan] %s 无行情数据，跳过", pick.ts_code)
                     continue
 
-                # 每只股票可能命中多个策略，取第一个（主策略）
                 primary_strategy = pick.matched_strategies[0] if pick.matched_strategies else "unknown"
-
                 plan = _build_plan(
                     ts_code=pick.ts_code,
                     plan_date=target_date,
@@ -244,6 +281,16 @@ class TradePlanGenerator:
                     strategy_name=primary_strategy,
                     indicators=indicators,
                 )
+
+                # 量价配合策略：用观察池 T0 数据覆盖止损
+                wp = watchpool_map.get(pick.ts_code)
+                if wp and primary_strategy == "volume-price-pattern":
+                    plan["stop_loss"] = round(float(wp["t0_low"]), 4)
+                    plan["trigger_condition"] = (
+                        f"缩量回踩企稳：T0日期{wp['t0_date']}，"
+                        f"回踩{wp['washout_days']}天"
+                    )
+
                 plans.append(plan)
 
             if not plans:

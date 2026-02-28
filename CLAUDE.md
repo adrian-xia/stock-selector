@@ -43,7 +43,7 @@ docs/design/
 - 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
 - 数据维护：退市股自动清理（cleanup_delisted），每周日 10:00 通过 OpenClaw cron 执行，刷新股票列表后删除退市股在所有业务表和 raw 表的数据，结果推送到 Discord
 - 策略命中率追踪：选股结果自动记录到 strategy_picks 表，盘后链路回填 N 日收益率（1d/3d/5d/10d/20d）+ 最大收益/回撤，compute_hit_stats 按策略统计命中率；API: GET /hit-stats、GET /picks/history
-- 策略引擎：34 种核心策略（22 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）；V3 新增 6 个量价策略（缩量上涨、量缩价稳、首阴反包、地量见底、后量超前量、回调半分位）
+- 策略引擎：35 种核心策略（23 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）；V3 新增 6 个量价策略（缩量上涨、量缩价稳、首阴反包、地量见底、后量超前量、回调半分位）
 - 命中率追踪：每次策略选股结果自动写入 strategy_picks 表；盘后链路步骤 5.1 回填 N 日收益率（1/3/5/10/20 日，考虑停牌跳过）；步骤 5.2 计算命中率统计写入 strategy_hit_stats；API 端点 GET /api/v1/strategy/hit-stats 和 GET /api/v1/strategy/picks/history
 - 策略权重：基于 5d 命中率动态加权排序（weighted_score），权重范围 [0.3, 3.0]，替代简单 match_count 排序；命中率高的策略在结果中权重更大
 - 行业/市场筛选：选股 API 支持 industries/markets 参数过滤，覆盖 110 个行业 + 4 个市场（主板/创业板/科创板/北交所）；API 端点 GET /api/v1/strategy/industries 和 GET /api/v1/strategy/markets
