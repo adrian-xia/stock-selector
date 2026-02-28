@@ -760,24 +760,17 @@ async def execute_pipeline(
         if use_cache:
             cached_l2 = await _cache_read_layer(session, target_date, 2)
             if cached_l2 is not None:
-                # Layer 2 缓存命中：直接恢复通过的股票列表，跳过全量快照构建
+                # Layer 2 缓存命中：恢复通过行业/市场过滤的股票列表
                 passed_l2 = [r for r in cached_l2 if r["passed"]]
                 passed_codes = {r["ts_code"] for r in passed_l2}
-                # 仍需构建快照供 Layer 3 使用（只对通过 Layer 2 的股票）
+                # 构建快照供策略计算使用
                 snapshot_df = await _build_market_snapshot(session, list(passed_codes), target_date)
                 if not snapshot_df.empty:
                     name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
                     snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
-                # 仍需跑策略计算以填充 hit_records
-                hit_records = {}
-                layer2_df = await _run_strategies_on_df(
-                    snapshot_df, strategy_names, "technical", target_date, hit_records,
-                    strategy_params=strategy_params,
-                )
-                layer_stats["layer2"] = len(layer2_df)
-                logger.info("Layer 2 缓存命中：%d 只股票（%s）", len(layer2_df), target_date)
+                logger.info("Layer 2 缓存命中：%d 只股票（%s）", len(passed_codes), target_date)
             else:
-                # 计算 Layer 2 并写入缓存
+                # 构建快照 + 行业/市场过滤，然后写入缓存
                 snapshot_df = await _build_market_snapshot(
                     session, layer1_df["ts_code"].tolist(), target_date
                 )
@@ -789,21 +782,23 @@ async def execute_pipeline(
                     filter_codes = await _get_filtered_codes(session, industries, markets)
                     snapshot_df = snapshot_df[snapshot_df["ts_code"].isin(filter_codes)].reset_index(drop=True)
 
-                hit_records = {}
-                layer2_df = await _run_strategies_on_df(
-                    snapshot_df, strategy_names, "technical", target_date, hit_records,
-                    strategy_params=strategy_params,
-                )
-                # 写入 Layer 2 缓存（记录所有 snapshot 股票的通过状态）
-                all_codes = set(snapshot_df["ts_code"].tolist()) if not snapshot_df.empty else set()
-                passed_codes_l2 = set(layer2_df["ts_code"].tolist()) if not layer2_df.empty else set()
+                # 写入 Layer 2 缓存（只记录通过行业/市场过滤的股票，不含策略计算）
+                all_codes = set(layer1_df["ts_code"].tolist())
+                passed_codes_l2 = set(snapshot_df["ts_code"].tolist()) if not snapshot_df.empty else set()
                 l2_records = [
                     {"ts_code": code, "passed": code in passed_codes_l2, "raw_data": None}
                     for code in all_codes
                 ]
                 await _cache_write_layer(session, target_date, 2, l2_records)
-                layer_stats["layer2"] = len(layer2_df)
-                logger.info("Layer 2 缓存写入：%d/%d 只股票通过（%s）", len(layer2_df), len(all_codes), target_date)
+                logger.info("Layer 2 缓存写入：%d/%d 只股票通过（%s）", len(passed_codes_l2), len(all_codes), target_date)
+
+            # 策略计算（每次都重新跑，因为参数不同）
+            hit_records = {}
+            layer2_df = await _run_strategies_on_df(
+                snapshot_df, strategy_names, "technical", target_date, hit_records,
+                strategy_params=strategy_params,
+            )
+            layer_stats["layer2"] = len(layer2_df)
         else:
             # 非缓存模式：原始流程
             snapshot_df = await _build_market_snapshot(
