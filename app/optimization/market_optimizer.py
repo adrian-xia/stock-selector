@@ -98,9 +98,15 @@ class MarketOptimizer:
         # 3. 预热缓存：对每个采样日先跑一次完整 Pipeline 填充 Layer 1-2 缓存 + 市场快照
         snapshot_cache: dict = {}
         layer_cache: dict = {}
+        returns_cache: dict = {}  # (base_date, ts_code) -> return_5d
         logger.info("预热 Pipeline 缓存：%d 个采样日...", len(sample_dates))
         await self._warmup_cache(strategy_name, sample_dates, snapshot_cache, layer_cache)
         logger.info("缓存预热完成（快照缓存 %d 天）", len(snapshot_cache))
+
+        # 4. 预热收益率缓存：一次性查所有采样日的 5 日收益率
+        logger.info("预热收益率缓存：%d 个采样日...", len(sample_dates))
+        await self._warmup_returns(sample_dates, returns_cache)
+        logger.info("收益率缓存完成（%d 条记录）", len(returns_cache))
 
         # 4. 并发评估每组参数（复用缓存）
         completed = 0
@@ -109,9 +115,13 @@ class MarketOptimizer:
         async def _evaluate_one(params: dict) -> MarketOptResult:
             nonlocal completed
             async with self._semaphore:
-                result = await self._evaluate_params(
-                    strategy_name, params, sample_dates, snapshot_cache, layer_cache,
-                )
+                try:
+                    result = await self._evaluate_params(
+                        strategy_name, params, sample_dates, snapshot_cache, layer_cache, returns_cache,
+                    )
+                except Exception as e:
+                    logger.error("参数评估异常 params=%s: %s", params, e)
+                    result = MarketOptResult(params=params)
                 completed += 1
                 if progress_callback:
                     try:
@@ -188,6 +198,7 @@ class MarketOptimizer:
         sample_dates: list[date],
         snapshot_cache: dict | None = None,
         layer_cache: dict | None = None,
+        returns_cache: dict | None = None,
     ) -> MarketOptResult:
         """评估单组参数在采样交易日上的选股效果（复用 Layer 1-2 缓存 + 快照缓存）。"""
         all_returns: list[float] = []
@@ -212,8 +223,15 @@ class MarketOptimizer:
                 ts_codes = [p.ts_code for p in pipeline_result.picks]
                 total_picks += len(ts_codes)
 
-                returns_5d = await self._calc_returns(ts_codes, target_date, days=5)
-                all_returns.extend(returns_5d)
+                # 优先从内存缓存读取收益率
+                if returns_cache is not None:
+                    for code in ts_codes:
+                        ret = returns_cache.get((target_date, code))
+                        if ret is not None:
+                            all_returns.append(ret)
+                else:
+                    returns_5d = await self._calc_returns(ts_codes, target_date, days=5)
+                    all_returns.extend(returns_5d)
 
             except Exception as e:
                 logger.debug("评估失败 date=%s params=%s: %s", target_date, params, e)
@@ -296,4 +314,55 @@ class MarketOptimizer:
             returns.append(ret)
 
         return returns
+
+    async def _warmup_returns(
+        self,
+        sample_dates: list[date],
+        returns_cache: dict,
+        days: int = 5,
+    ) -> None:
+        """一次性预热所有采样日的 5 日收益率缓存。
+
+        对每个采样日，查出所有股票的买入价和 N 日后卖出价，
+        计算收益率存入 returns_cache[(base_date, ts_code)]。
+        """
+        async with self._session_factory() as session:
+            for base_date in sample_dates:
+                # 查 N 日后的交易日
+                future_result = await session.execute(
+                    text("""
+                        SELECT cal_date FROM trade_calendar
+                        WHERE is_open = true AND cal_date > :base_date
+                        ORDER BY cal_date
+                        LIMIT :days
+                    """),
+                    {"base_date": base_date, "days": days},
+                )
+                future_dates = [row[0] for row in future_result.fetchall()]
+                if not future_dates:
+                    continue
+
+                target_date_n = future_dates[-1]
+
+                result = await session.execute(
+                    text("""
+                        SELECT
+                            b.ts_code,
+                            b.close AS buy_close,
+                            s.close AS sell_close
+                        FROM stock_daily b
+                        JOIN stock_daily s ON b.ts_code = s.ts_code AND s.trade_date = :sell_date
+                        WHERE b.trade_date = :buy_date
+                          AND b.close > 0
+                          AND s.close > 0
+                    """),
+                    {"buy_date": base_date, "sell_date": target_date_n},
+                )
+                rows = result.fetchall()
+                for row in rows:
+                    ts_code = row[0]
+                    buy_close = float(row[1])
+                    sell_close = float(row[2])
+                    ret = (sell_close - buy_close) / buy_close
+                    returns_cache[(base_date, ts_code)] = ret
 

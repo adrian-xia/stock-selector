@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     market_opt_cron: str = "0 10 * * 6"                    # cron 表达式（默认周六 10:00）
     market_opt_lookback_days: int = 120                    # 回看交易日数
     market_opt_auto_apply: bool = True                     # 完成后是否自动应用最佳参数
-    market_opt_max_concurrency: int = 8                    # 最大并发参数组合数
+    market_opt_max_concurrency: int = 4                    # 最大并发参数组合数
     market_opt_sample_interval: int = 4                    # 采样间隔天数（越大越快，精度越低）
     market_opt_max_combinations: int = 500                 # 单策略最大参数组合数
 
