@@ -1,5 +1,5 @@
 import { Layout, Menu } from 'antd'
-import { ExperimentOutlined, LineChartOutlined, ControlOutlined, NotificationOutlined, DashboardOutlined, SettingOutlined } from '@ant-design/icons'
+import { ExperimentOutlined, LineChartOutlined, ControlOutlined, NotificationOutlined, DashboardOutlined, SettingOutlined, CalendarOutlined, FundOutlined } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const { Sider, Content } = Layout
@@ -9,6 +9,16 @@ const menuItems = [
     key: '/workbench',
     icon: <ExperimentOutlined />,
     label: '选股工作台',
+  },
+  {
+    key: '/daily-picks',
+    icon: <CalendarOutlined />,
+    label: '每日选股',
+  },
+  {
+    key: '/post-market',
+    icon: <FundOutlined />,
+    label: '盘后概览',
   },
   {
     key: '/backtest',
@@ -52,6 +62,10 @@ export default function AppLayout() {
     ? '/optimization'
     : location.pathname.startsWith('/backtest')
     ? '/backtest'
+    : location.pathname.startsWith('/daily-picks')
+    ? '/daily-picks'
+    : location.pathname.startsWith('/post-market')
+    ? '/post-market'
     : '/workbench'
 
   return (

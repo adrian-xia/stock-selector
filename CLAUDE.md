@@ -1,380 +1,205 @@
-# A股智能选股系统 - 项目指南
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 语言要求
+
 对话全程中文
 
 ## 项目概述
 
 面向个人投资者的 A 股智能选股与回测平台。单机部署、单人使用。
+后端 Python 3.13 + FastAPI，前端 React 19 + TypeScript + Ant Design 6。
 
-## 设计文档
+## 常用命令
 
-设计文档已复制到项目中，位于 `docs/design/` 目录：
+### 后端
 
+```bash
+# 安装依赖
+uv sync
+
+# 启动开发服务器
+uv run uvicorn app.main:app --reload
+
+# 跳过启动时数据完整性检查（开发时常用）
+SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app --reload
+
+# 数据库迁移
+uv run alembic upgrade head                          # 执行迁移
+uv run alembic revision --autogenerate -m "描述"    # 生成新迁移
+
+# 数据管理 CLI
+uv run python -m app.data.cli sync-daily             # 同步每日数据
+uv run python -m app.data.cli init-tushare           # 交互式数据初始化向导
+uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
+uv run python -m app.data.cli cleanup-delisted       # 清理退市股数据
 ```
-docs/design/
-├── 00-概要设计-v2.md              # 系统总体架构、模块划分、数据模型
-├── 01-详细设计-数据采集.md         # 多源数据采集、ETL、智能数据自动更新系统
-├── 02-详细设计-策略引擎.md         # 79 种策略、Pipeline 架构、策略注册
-├── 03-详细设计-AI与回测.md         # AI 三模型、Backtrader 回测、涨跌停
-├── 04-详细设计-前端与交互.md       # 页面交互、路由、API 契约、状态管理
-├── 10-系统设计-定时任务调度.md     # 每日任务编排、APScheduler、智能数据自动更新
-├── 11-系统设计-缓存策略.md         # Redis 缓存设计
-├── 13-系统设计-测试策略.md         # 测试分层、Mock、核心用例
-├── 99-实施范围-V1与V2划分.md       # ⚠️ 关键：V1/V2 范围划分，V1 已实施功能，V2 计划功能
-└── task-设计补全.md                # 任务跟踪
+
+### 测试
+
+```bash
+# pytest 配置在 pyproject.toml，asyncio_mode = "auto"
+pytest tests/                                        # 全部测试
+pytest tests/unit/                                   # 仅单元测试
+pytest tests/integration/                            # 仅集成测试
+pytest tests/unit/test_api_backtest_run.py           # 单个文件
+pytest tests/unit/test_api_backtest_run.py::TestRunBacktestApi::test_invalid_date_range_returns_400  # 单个用例
+pytest --cov=app tests/                              # 带覆盖率
 ```
 
-**编码前必读 `docs/design/99-实施范围-V1与V2划分.md`**，它标注了每个章节是 V1 必须、V1 简化、V1 已实施还是 V2 再加。
+### 前端
 
-**V2 详细实施计划见：** `PROJECT_TASKS.md` 中的"V2 详细实施计划"章节。
+```bash
+cd web
+pnpm install                                         # 安装依赖
+pnpm dev                                             # 开发服务器 http://localhost:5173
+pnpm build                                           # 生产构建
+pnpm lint                                            # ESLint 检查
+tsc -b                                               # TypeScript 类型检查
+```
 
-**设计文档源仓库：** `~/Developer/Design/stock-selector-design/`（独立 Git 仓库，已推送到 GitHub）
+前端开发时 Vite 代理 `/api` → `http://localhost:8000`。
 
+## 核心架构
 
-## V1 范围（当前阶段）
+### 数据流（盘后链路）
 
-- 数据采集：Tushare Pro API，引入 raw 层作为数据缓冲（原始表），解耦数据获取和清洗逻辑，按日期批量获取全市场数据；已实施 P0（基础行情 6 张表）、P1（财务数据 10 张表，使用 VIP 接口按季度批量获取，含利润表/资产负债表/现金流量表全量字段，sync_raw_fina 同步四张表含去重逻辑，etl_fina 清洗为 finance_indicator + income_statement + balance_sheet + cash_flow_statement 四张业务表）、P2（资金流向 10 张表）、P3（指数数据 18 张表，含日常同步和静态数据同步，指数技术因子使用 idx_factor_pro 接口提供 80+ 技术指标，全量同步采用批量日期范围模式节省 API 配额）、P4（板块数据 8 张表，含盘后链路集成）和 P5（全部 48 张表数据同步 + 2 张业务表 suspend_info/limit_list_daily + ETL 清洗 + 盘后链路步骤 3.8 集成，含 28 张补充表按频率分组同步）
-- 性能优化：令牌桶限流（400 QPS，特殊接口独立限流桶：stk_auction/stk_factor/ccass_hold/limit_list_d + 限流错误加长退避），全链路性能日志支持瓶颈分析；COPY 协议批量写入（临时表+COPY+UPSERT 三步法，自动降级），全量导入索引管理（删除→导入→重建），TimescaleDB 超表迁移（stock_daily/technical_daily，可选依赖），raw 表复合索引优化，连接池调优（pool_size=10, max_overflow=20）
-- 自动数据更新：每日自动触发数据同步，数据未就绪时智能嗅探重试（每 15 分钟），超时自动报警（V1 记录日志，V2 接入企业微信/钉钉），基于 Redis 的任务状态管理；每日自动更新交易日历（获取未来 90 天数据，周末任务作为兜底）
-- 数据完整性：基于累积进度表（`stock_sync_progress`）的断点续传，启动时自动恢复未完成同步，退市智能过滤，失败自动重试（每日 20:00），完整性门控（完成率 >= 95% 才执行策略），Redis 分布式锁防并发，环境隔离（APP_ENV_FILE）；新增 `sync_daily_by_date(dates)` 统一入口，按日期批量同步（sync_raw_daily → etl_daily → compute_incremental），3 次 API 调用拉全市场数据，单日耗时约 57s（原逐只方式需数小时）
-- 数据初始化：交互式向导引导首次数据初始化，支持 1年/3年/自定义范围选项，自动执行完整流程（股票列表 → 交易日历 → P0 日线 → P1 财务 → P2 资金 → P3 指数 → P4 板块 → P5 扩展 → 技术指标）；CLI `init-tushare` 命令支持 `--skip-fina`/`--skip-p2`/`--skip-index`/`--skip-concept`/`--skip-p5` 选项
-- 优雅关闭：利用 uvicorn 内置信号处理机制，在 lifespan shutdown 阶段等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁，完整的关闭日志记录
-- 打包部署：提供打包脚本生成 tarball，自动收集必需文件并排除开发文件，支持版本号管理（git tag / commit hash）
-- 数据维护：退市股自动清理（cleanup_delisted），每周日 10:00 通过 OpenClaw cron 执行，刷新股票列表后删除退市股在所有业务表和 raw 表的数据，结果推送到 Discord
-- 策略命中率追踪：选股结果自动记录到 strategy_picks 表，盘后链路回填 N 日收益率（1d/3d/5d/10d/20d）+ 最大收益/回撤，compute_hit_stats 按策略统计命中率；API: GET /hit-stats、GET /picks/history
-- 策略引擎：35 种核心策略（23 种技术面 + 12 种基本面），扁平继承，单模式接口；策略注册制管理（盘后链路从 strategies 表读取启用策略，支持自定义参数覆盖，新策略默认禁用）；V3 新增 6 个量价策略（缩量上涨、量缩价稳、首阴反包、地量见底、后量超前量、回调半分位）
-- 命中率追踪：每次策略选股结果自动写入 strategy_picks 表；盘后链路步骤 5.1 回填 N 日收益率（1/3/5/10/20 日，考虑停牌跳过）；步骤 5.2 计算命中率统计写入 strategy_hit_stats；API 端点 GET /api/v1/strategy/hit-stats 和 GET /api/v1/strategy/picks/history
-- 策略权重：基于 5d 命中率动态加权排序（weighted_score），权重范围 [0.3, 3.0]，替代简单 match_count 排序；命中率高的策略在结果中权重更大
-- 行业/市场筛选：选股 API 支持 industries/markets 参数过滤，覆盖 110 个行业 + 4 个市场（主板/创业板/科创板/北交所）；API 端点 GET /api/v1/strategy/industries 和 GET /api/v1/strategy/markets
-- 交易计划引擎：基于选股结果自动生成 T+1 触发条件/止损/止盈，4 种触发类型（breakout/reversal/value/volume_signal），盈亏比 2:1；结果写入 trade_plans 表；API 端点 POST /api/v1/strategy/plan/generate、GET /api/v1/strategy/plan/latest、GET /api/v1/strategy/plan/history
-- 启动同步：数据完整性检查和初始化同步改为后台异步执行，不阻塞端口监听，服务启动更快；`sync_from_progress` 改为查找交易日历中缺失日期（stock_daily 无数据的交易日），用 `sync_daily_by_date` 批量补齐，不再逐只查 stock_sync_progress
-- AI 分析：已由 OpenClaw 接管，每日盘后 cron 自动触发深度分析（策略表现、重叠分析、个股点评、风险提示），结果推送 Discord
-- 回测：✅ V1 已实施，Backtrader 同步执行，无 Redis 队列
-- 参数优化：✅ V2 已实施，网格搜索 + 遗传算法，优化任务持久化，前端参数优化页面
-- 新闻舆情：✅ V2 已实施，东方财富/新浪7x24快讯/同花顺三源采集，AI 情感分析已暂停，每日情感聚合，盘后链路步骤 3.9，前端新闻仪表盘
-- 实时监控：✅ V2 已实施，WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub），告警规则引擎（价格预警 + 策略信号 + 冷却机制），多渠道通知（企业微信/Telegram），前端监控看板
-- 监控与日志：✅ V2 已实施，结构化日志（JSON/文本环境感知切换 + 日志轮转），API 性能中间件（慢请求告警），深度健康检查（/health 检测数据库/Redis/Tushare），任务执行日志持久化（task_execution_log 表 + TaskLogger + 查询 API）
-- 前端：选股工作台（含 K 线图）+ 回测中心 + 参数优化页面 + 新闻舆情页面 + 实时监控看板 + 策略配置页面（启用/禁用策略、自定义参数），WebSocket 实时推送；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割（vendor-react/antd/echarts）、React Query 统一数据获取、ECharts 公共主题
-- 数据库：业务表 12 张 + 财务三表 3 张（income_statement、balance_sheet、cash_flow_statement）+ raw 层表 99 张（P0 基础行情 6 张 + P1 财务数据 10 张 + P2 资金流向 10 张 + P3 指数 18 张 + P4 板块 8 张 + P5 扩展 48 张全部已接入同步） + 指数业务表 6 张 + 板块业务表 4 张 + P5 业务表 2 张（suspend_info、limit_list_daily，up_stat 字段 varchar(16)） + AI 分析结果表 1 张（ai_analysis_results，已停用） + 参数优化表 2 张（optimization_tasks、optimization_results） + 新闻舆情表 2 张（announcements、sentiment_daily） + 告警表 2 张（alert_rules、alert_history） + 任务执行日志表 1 张（task_execution_log） + 命中率追踪表 2 张（strategy_picks、strategy_hit_stats） + 交易计划表 1 张（trade_plans，含触发条件/止损/止盈/盈亏比，索引 idx_plan_date/idx_plan_code_date）
-- 不做：用户权限、高手跟投
+每日收盘后自动执行的完整链路（`app/scheduler/jobs.py`）：
+
+1. 数据嗅探 — 检测 Tushare 数据是否就绪（`app/data/probe.py`）
+2. Raw 层同步 — 从 Tushare 拉取原始数据到 raw 表（`app/data/manager.py` → `sync_raw_daily`）
+3. ETL 清洗 — raw 表 → 业务表（`app/data/etl.py` → `etl_daily`）
+4. 技术指标计算 — 增量计算 MA/MACD/KDJ 等（`app/data/batch.py` → `compute_incremental`）
+5. 策略执行 — Pipeline 执行已启用策略（`app/strategy/pipeline.py`）
+6. 命中率回填 — 回填历史选股结果的 N 日收益率（`app/strategy/pipeline.py`）
+7. 缓存刷新 — 刷新 Redis 缓存
+
+核心入口：`sync_daily_by_date(dates)` — 按日期批量同步全市场数据（3 次 API 调用拉全市场）。
+
+### 数据分层
+
+- **Raw 层**（99 张表，`raw_` 前缀）— Tushare API 原始数据，按日期批量获取
+- **业务层**（30+ 张表）— ETL 清洗后的结构化数据
+- 分为 P0-P5 优先级：P0 基础行情、P1 财务、P2 资金流向、P3 指数、P4 板块、P5 扩展
+
+### 策略引擎
+
+- 35 种策略：23 技术面 + 12 基本面（`app/strategy/technical/` + `app/strategy/fundamental/`）
+- 扁平继承自 `BaseStrategy`，通过工厂模式注册（`app/strategy/factory.py`）
+- 策略注册制：盘后链路从 `strategies` 数据库表读取启用的策略
+- Pipeline 执行：SQL 粗筛 → 技术面 → 基本面 → 加权排序（`app/strategy/pipeline.py`）
+- 加权排序基于 5d 命中率（`strategy_hit_stats` 表），权重 [0.3, 3.0]
+- 全市场选股回放优化：`app/optimization/market_optimizer.py`，历史回放评估参数组合
+- 每周自动 cron（`app/scheduler/market_opt_job.py`），最佳参数自动写入 strategies 表
+
+### API 路由
+
+所有 API 挂载在 `/api/v1/` 前缀下，路由注册在 `app/main.py`。
+主要模块：strategy、backtest、data、optimization、news、realtime、alert、websocket。
+
+### 关键模式
+
+- **令牌桶限流**：`app/data/tushare.py` 中的 TushareClient，400 QPS + 特殊接口独立限流桶
+- **COPY 批量写入**：`app/data/copy_writer.py`，临时表 → COPY → UPSERT 三步法
+- **Redis 降级**：Redis 不可用时自动降级到数据库直查
+- **优雅关闭**：lifespan shutdown 阶段等待任务完成（30 秒超时）
 
 ## 技术栈
 
-- **后端：** Python 3.13 + FastAPI + SQLAlchemy + Pydantic
-- **数据源：** Tushare Pro API（令牌桶限流 400 QPS，特殊接口独立限流桶）
-- **回测：** Backtrader
-- **数据库：** PostgreSQL（普通表 + TimescaleDB 超表可选）
-- **缓存：** Redis（缓存技术指标 + 选股结果，redis[hiredis]）
-- **性能优化：** 按日期批量获取全市场数据 + 全链路性能日志（连接池、API、清洗、入库、指标计算、缓存刷新、调度任务分步计时）
-- **自动更新：** 数据嗅探 + 智能重试 + 任务状态管理（Redis）+ 通知报警（V1 日志，V2 企业微信/钉钉）+ 交易日历自动更新（每日获取未来 90 天数据）
-- **AI：** OpenClaw 接管（原 Gemini Flash 已禁用）
-- **前端：** React 19 + TypeScript + Ant Design 6 + ECharts 6
-- **前端构建：** Vite 7 + pnpm
-- **前端数据层：** TanStack React Query 5 + Axios + Zustand 5
-- **包管理：** uv（后端）、pnpm（前端）
-- **部署：** 直接运行（uvicorn），不用 Docker/Nginx
+| 后端 | 前端 |
+|------|------|
+| Python 3.13 + FastAPI | React 19 + TypeScript |
+| SQLAlchemy (async) + asyncpg | Ant Design 6 + ECharts 6 |
+| PostgreSQL + TimescaleDB（可选） | Vite 7 + pnpm |
+| Redis + hiredis | React Query 5 + Zustand 5 |
+| Backtrader（回测） | React Router 7 |
+| APScheduler（定时任务） | Axios |
+| uv（包管理） | — |
 
 ## 编码规范
 
 - Python 3.12+ 语法，所有函数必须有类型注解
 - async/await 用于 IO 操作（数据库、API 调用）
-- 使用 Pydantic v2 做数据校验
+- Pydantic v2 做数据校验，pydantic-settings 加载 `.env` 配置
 - SQL 全部使用参数化查询，禁止字符串拼接
 - 日志使用 Python logging，不用 print
-- 配置项写 `.env` 文件，通过 pydantic-settings 加载
 - 所有代码需要详细的中文注释
-- **每次完成一个模块或功能变更，必须同步更新以下文件（不可遗漏）：**
+- **每次完成功能变更，必须同步更新：**
   - `README.md` — 功能特性、技术栈、环境要求、配置说明、项目结构、测试数量
   - `CLAUDE.md` — 技术栈、V1 范围、目录结构
-  - 如果新增了依赖，还需更新 `.env.example`
+  - `.env.example` — 如果新增了配置项
+
+## 设计文档
+
+编码前必读 `docs/design/99-实施范围-V1与V2划分.md`。
+
+| 模块 | 设计文档 |
+|------|---------|
+| 数据采集 | `docs/design/01-详细设计-数据采集.md` |
+| 策略引擎 | `docs/design/02-详细设计-策略引擎.md` |
+| AI 与回测 | `docs/design/03-详细设计-AI与回测.md` |
+| 前端交互 | `docs/design/04-详细设计-前端与交互.md` |
+| 定时任务 | `docs/design/10-系统设计-定时任务调度.md` |
+| 缓存策略 | `docs/design/11-系统设计-缓存策略.md` |
+| V1/V2 范围 | `docs/design/99-实施范围-V1与V2划分.md` |
+
+V2 详细实施计划见 `PROJECT_TASKS.md`。
 
 ## 提交前强制检查清单
 
-**⚠️ 重要：每次 Git 提交前必须完成以下检查，如有不一致则拒绝提交！**
+**每次 Git 提交前必须完成，不一致则拒绝提交：**
 
-### 1. 设计文档一致性检查
+### 设计文档一致性
 
-在提交代码前，必须检查实现是否与设计文档一致：
+1. 确认变更涉及哪些模块，查阅对应设计文档
+2. 对比实现与设计：功能说明、技术方案、表结构、API 接口、配置项
+3. 处理不一致：
+   - 实现符合设计 → 可以提交
+   - 实现优化了设计 → **先更新设计文档**，再提交代码
+   - 实现偏离了设计 → **拒绝提交**，重新实现或修改设计文档
+   - 新增功能（设计文档未提及）→ **先补充设计文档**
+   - V2 功能提前实施 → 更新 `99-实施范围-V1与V2划分.md` 和 `PROJECT_TASKS.md`
 
-#### 检查步骤：
+### 文档同步
 
-1. **确认变更范围**
-   - 本次变更涉及哪些模块？（数据采集/策略引擎/回测/AI/定时任务/前端）
-   - 是 V1 功能还是 V2 功能？
+- [ ] `README.md` 已更新
+- [ ] `CLAUDE.md` 已更新
+- [ ] `.env.example` 已更新（如有新配置项）
+- [ ] `docs/design/` 相关文档已更新
+- [ ] `PROJECT_TASKS.md` 已更新（如涉及 V2 计划调整）
 
-2. **查阅相关设计文档**
-   - 数据采集 → `docs/design/01-详细设计-数据采集.md`
-   - 策略引擎 → `docs/design/02-详细设计-策略引擎.md`
-   - AI 与回测 → `docs/design/03-详细设计-AI与回测.md`
-   - 前端交互 → `docs/design/04-详细设计-前端与交互.md`
-   - 定时任务 → `docs/design/10-系统设计-定时任务调度.md`
-   - 缓存策略 → `docs/design/11-系统设计-缓存策略.md`
-   - V1/V2 范围 → `docs/design/99-实施范围-V1与V2划分.md`
+### 拒绝提交的情况
 
-3. **对比实现与设计**
-   - ✅ 实现的功能是否在设计文档中有明确说明？
-   - ✅ 实现的技术方案是否与设计文档一致？
-   - ✅ 数据库表结构是否与设计文档一致？
-   - ✅ API 接口是否与设计文档一致？
-   - ✅ 配置项是否与设计文档一致？
+- 实现与设计文档不一致，且未更新设计文档
+- 新增了数据库表/字段/API 接口，但设计文档未说明
+- README.md 或 CLAUDE.md 未同步更新
 
-4. **处理不一致情况**
-   - **情况 A：实现符合设计** → 可以提交
-   - **情况 B：实现优化了设计** → 先更新设计文档，再提交代码
-   - **情况 C：实现偏离了设计** → 拒绝提交，重新实现或修改设计文档
+### 提交信息
 
-#### 特殊情况处理：
-
-- **V1 简化实施**：如果实现是 V1 简化方案，需在 `99-实施范围-V1与V2划分.md` 中标注为"✅ V1 已实施"
-- **V2 功能提前实施**：如果提前实施了 V2 功能，需更新 `99-实施范围-V1与V2划分.md` 和 `PROJECT_TASKS.md`
-- **新增功能**：如果是设计文档中未提及的新功能，需先补充设计文档
-
-### 2. 文档同步检查
-
-确认以下文档已同步更新：
-
-- [ ] `README.md` - 功能特性、技术栈、测试数量是否更新？
-- [ ] `CLAUDE.md` - V1 范围、技术栈、目录结构是否更新？
-- [ ] `.env.example` - 新增配置项是否添加？
-- [ ] `docs/design/` - 相关设计文档是否更新？
-- [ ] `PROJECT_TASKS.md` - V2 计划是否需要调整？
-
-### 3. 提交信息检查
-
-- [ ] Commit message 是否清晰描述了变更内容？
-- [ ] 是否包含 `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`？
-- [ ] 是否说明了与设计文档的关系（符合设计/优化设计/新增功能）？
-
-### 4. 拒绝提交的情况
-
-以下情况必须拒绝提交，直到问题解决：
-
-- ❌ 实现与设计文档明显不一致，且未更新设计文档
-- ❌ V1 实施了 V2 功能，但未更新 `99-实施范围-V1与V2划分.md`
-- ❌ 新增了数据库表/字段，但设计文档中未说明
-- ❌ 新增了 API 接口，但设计文档中未说明
-- ❌ 修改了核心架构，但设计文档未同步更新
-- ❌ README.md 或 CLAUDE.md 未同步更新
-
-### 5. 检查示例
-
-**示例 1：实现智能数据自动更新系统**
-
-1. 查阅 `docs/design/10-系统设计-定时任务调度.md` §3.4.1
-2. 确认实现包含：数据嗅探、智能重试、Redis 状态管理、超时告警
-3. 更新 `docs/design/99-实施范围-V1与V2划分.md`，标注为"✅ V1 已实施"
-4. 更新 `README.md` 和 `CLAUDE.md`，说明新功能
-5. ✅ 可以提交
-
-**示例 2：提前实施 AI 分析功能**
-
-1. 查阅 `docs/design/03-详细设计-AI与回测.md` §1
-2. 发现设计文档标注为"V2 再加"
-3. 更新 `docs/design/99-实施范围-V1与V2划分.md`，改为"✅ V1 已实施"
-4. 更新 `PROJECT_TASKS.md`，从 V2 计划中移除
-5. 更新 `README.md` 和 `CLAUDE.md`
-6. ✅ 可以提交
-
-**示例 3：实现了设计文档中没有的功能**
-
-1. 发现实现的功能在设计文档中完全没有提及
-2. ❌ 拒绝提交
-3. 先补充设计文档（在相应的详细设计文档中添加章节）
-4. 更新 `99-实施范围-V1与V2划分.md`
-5. 然后再提交代码
-
----
+- Commit message 需清晰描述变更内容
+- 包含 `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 
 ## OpenSpec 工作流
 
-本项目使用 OpenSpec 管理开发流程：
+本项目使用 OpenSpec 管理开发流程（`openspec/` 目录）：
 
-```
-openspec/
-├── changes/         # 当前进行中的变更
-│   └── archive/     # 已完成的变更归档
-└── specs/           # 系统规范文件
-```
-
-**开发新功能的流程：**
 1. `/opsx:new <feature-name>` — 创建变更
 2. `/opsx:ff` — 生成 proposal → specs → design → tasks
 3. `/opsx:apply` — 按 tasks 逐步实现
 4. `/opsx:archive` — 归档完成的变更
 
-## 部署和运维
-
-### 打包部署
+## 部署
 
 ```bash
-# 1. 打包项目
+# 打包
 uv run python -m scripts.package
-# 输出：dist/stock-selector-<version>.tar.gz
 
-# 2. 传输到服务器
-scp dist/stock-selector-<version>.tar.gz user@server:/path/
-
-# 3. 在服务器上解压并部署
-tar -xzf stock-selector-<version>.tar.gz
-cd stock-selector
-uv sync
-cp .env.example .env && vim .env
-uv run alembic upgrade head
-uv run python -m scripts.init_data
+# 服务器部署
+uv sync && uv run alembic upgrade head && uv run python -m scripts.init_data
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 服务管理
+## 不做
 
-```bash
-# 启动服务
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# 跳过启动时数据完整性检查
-SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app
-
-# 优雅关闭（等待任务完成，30秒超时）
-kill -TERM <pid>  # 或按 Ctrl+C
-```
-
-### 数据管理
-
-```bash
-# 数据初始化向导（首次部署）
-uv run python -m scripts.init_data
-
-# 手动补齐缺失数据（断点续传）
-uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
-
-# 每日数据同步（自动或手动）
-uv run python -m app.data.cli sync-daily
-
-# 更新技术指标
-uv run python -m app.data.cli update-indicators
-
-# 清理退市股数据（刷新股票列表 + 删除退市股在所有业务表和 raw 表的数据）
-uv run python -m app.data.cli cleanup-delisted
-```
-
-### 配置项
-
-关键环境变量（.env）：
-- `DATABASE_URL` — PostgreSQL 连接字符串
-- `TUSHARE_TOKEN` — Tushare Pro API Token（必填）
-- `REDIS_HOST` / `REDIS_PORT` — Redis 连接（可选，不配置则缓存降级）
-- `GEMINI_API_KEY` — Gemini API Key（已禁用，AI 分析由 OpenClaw 接管）
-- `DATA_INTEGRITY_CHECK_ENABLED` — 启动时是否检查数据完整性（默认 true）
-- `DATA_INTEGRITY_CHECK_DAYS` — 检查最近 N 天（默认 30）
-- `SKIP_INTEGRITY_CHECK` — 环境变量，跳过启动时检查
-- `AUTO_UPDATE_ENABLED` — 是否启用自动数据更新（默认 true）
-- `AUTO_UPDATE_PROBE_INTERVAL` — 嗅探间隔（默认 15 分钟）
-- `AUTO_UPDATE_PROBE_TIMEOUT` — 嗅探超时时间（默认 18:00）
-
-## 目录结构（规划）
-
-```
-stock-selector/
-├── CLAUDE.md
-├── pyproject.toml
-├── .env.example
-├── openspec/
-├── app/
-│   ├── main.py              # FastAPI 入口
-│   ├── config.py             # 配置加载
-│   ├── logger.py             # 日志配置
-│   ├── data/                 # 数据采集模块
-│   │   ├── tushare.py        # TushareClient（令牌桶限流 + 异步包装）
-│   │   ├── batch.py          # 批量日线同步（按日期批量模式）
-│   │   ├── probe.py          # 数据嗅探（检测数据是否就绪）
-│   │   ├── etl.py            # ETL 清洗（transform_tushare_*）
-│   │   ├── copy_writer.py    # COPY 协议批量写入（临时表+COPY+UPSERT）
-│   │   ├── index_mgmt.py     # 索引生命周期管理（全量导入时删除/重建）
-│   │   ├── cli.py            # 数据管理 CLI（含 backfill-daily 断点续传命令）
-│   │   ├── manager.py        # DataManager（sync_raw_daily + etl_daily）
-│   │   └── sources/          # 新闻数据源采集
-│   │       ├── eastmoney.py  # 东方财富公告采集
-│   │       ├── sina.py       # 新浪 7x24 快讯采集（全市场快讯流 + 本地文本匹配）
-│   │       ├── ths.py        # 同花顺个股新闻采集
-│   │       └── fetcher.py    # 统一采集入口（并行调用 3 个爬虫）
-│   ├── strategy/             # 策略引擎
-│   │   ├── base.py           # BaseStrategy
-│   │   ├── technical/        # 技术面策略
-│   │   ├── fundamental/      # 基本面策略
-│   │   ├── pipeline.py       # 执行管道
-│   │   ├── factory.py        # 策略注册
-│   │   └── trade_plan.py     # 交易计划引擎（T+1 触发条件/止损/止盈生成）
-│   ├── backtest/             # 回测引擎
-│   │   ├── engine.py         # Cerebro 配置
-│   │   ├── strategy.py       # AStockStrategy 基类
-│   │   ├── price_limit.py    # 涨跌停检查
-│   │   └── writer.py         # 结果写入
-│   ├── optimization/          # 参数优化模块
-│   │   ├── base.py            # BaseOptimizer 抽象基类
-│   │   ├── param_space.py     # 参数空间工具函数
-│   │   ├── grid_search.py     # 网格搜索优化器
-│   │   └── genetic.py         # 遗传算法优化器
-│   ├── ai/                   # AI 分析（已停用，分析由 OpenClaw 接管）
-│   │   ├── clients/          # Gemini 客户端（已停用）
-│   │   ├── prompts/          # Prompt 模板（YAML）
-│   │   ├── news_analyzer.py  # 新闻情感分析器（已停用）
-│   │   └── manager.py        # AIManager（已停用）
-│   ├── cache/                # Redis 缓存
-│   │   ├── redis_client.py   # 连接管理（init/get/close）
-│   │   ├── tech_cache.py     # 技术指标缓存（Cache-Aside）
-│   │   └── pipeline_cache.py # 选股结果缓存
-│   ├── scheduler/            # 定时任务
-│   │   ├── core.py           # APScheduler 配置（含启动时数据完整性检查）
-│   │   ├── state.py          # 任务状态管理（基于 Redis）
-│   │   ├── task_logger.py    # 任务执行日志记录器（持久化到数据库）
-│   │   ├── auto_update.py    # 自动数据更新任务
-│   │   └── jobs.py           # APScheduler 任务
-│   ├── notification/         # 通知报警模块
-│   │   └── __init__.py       # NotificationManager（企业微信/Telegram/日志）
-│   ├── realtime/             # 实时监控模块
-│   │   ├── collector.py      # 行情采集器（Tushare 轮询）
-│   │   ├── publisher.py      # Redis Pub/Sub 发布器
-│   │   ├── manager.py        # 生命周期管理
-│   │   ├── indicator.py      # 盘中指标计算与信号检测
-│   │   └── alert_engine.py   # 告警规则引擎
-│   └── api/                  # HTTP API
-│       ├── strategy.py       # 策略 API（执行 + 配置管理 CRUD + 行业/市场筛选 + 交易计划，未指定日期时自动使用最近有数据的交易日）
-│       ├── backtest.py       # 回测 API
-│       ├── optimization.py   # 参数优化 API
-│       ├── news.py           # 新闻舆情 API
-│       ├── alert.py          # 告警规则 CRUD API
-│       ├── realtime.py       # 实时监控状态/自选股 API
-│       ├── health.py         # 深度健康检查端点
-│       ├── middleware.py     # API 请求性能中间件
-│       ├── task_log.py       # 任务执行日志查询 API
-│       ├── websocket.py      # WebSocket 实时行情推送
-│       └── data.py           # 数据查询 API
-├── web/                      # 前端（React + TypeScript）
-│   ├── src/
-│   │   ├── api/              # API 请求函数（Axios）
-│   │   ├── components/
-│   │   │   ├── common/       # 公共组件（ErrorBoundary、PageLoading、QueryErrorAlert）
-│   │   │   └── charts/       # 图表组件（KlineChart）
-│   │   ├── hooks/            # 自定义 Hooks（useWebSocket）
-│   │   ├── layouts/          # 布局组件（AppLayout + Sider）
-│   │   ├── pages/
-│   │   │   ├── workbench/    # 选股工作台页面（含 K 线图）
-│   │   │   ├── backtest/     # 回测中心页面
-│   │   │   ├── optimization/ # 参数优化页面
-│   │   │   ├── news/         # 新闻舆情页面
-│   │   │   ├── monitor/      # 实时监控看板（WatchlistTable + AlertRulePanel + AlertHistoryPanel）
-│   │   │   └── strategy-config/ # 策略配置页面（启用/禁用 + 参数管理）
-│   │   ├── utils/            # 工具函数（chartTheme）
-│   │   └── types/            # TypeScript 类型定义
-│   └── vite.config.ts        # Vite 配置（含 /api 代理 + 代码分割）
-├── tests/
-│   ├── fixtures/             # 测试数据
-│   ├── unit/                 # 单元测试
-│   ├── integration/          # 集成测试
-│   └── api/                  # API 测试
-└── scripts/                  # 工具脚本
-    ├── record_fixtures.py    # 录制测试数据
-    ├── test_data_integrity.py # 数据完整性检查测试
-    ├── test_graceful_shutdown.py # 优雅关闭功能测试
-    └── init_data.py          # 数据初始化向导
-```
+用户权限、高手跟投。

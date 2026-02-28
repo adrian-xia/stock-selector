@@ -47,6 +47,7 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """
     from app.scheduler.auto_update import auto_update_job
     from app.scheduler.jobs import retry_failed_stocks_job, sync_stock_list_job
+    from app.scheduler.market_opt_job import weekly_market_opt_job
 
     # 自动数据更新任务：默认周一至周五 15:30（替换原有盘后链路任务）
     if settings.auto_update_enabled:
@@ -107,6 +108,28 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
     logger.info("注册任务：股票列表同步 [%s]", stock_sync_cron)
+
+    # 每周全市场参数优化：默认周六 10:00
+    if settings.market_opt_enabled:
+        mopt_cron = settings.market_opt_cron
+        parts = mopt_cron.split()
+        scheduler.add_job(
+            func=weekly_market_opt_job,
+            trigger=CronTrigger(
+                minute=parts[0],
+                hour=parts[1],
+                day=parts[2],
+                month=parts[3],
+                day_of_week=parts[4],
+                timezone="Asia/Shanghai",
+            ),
+            id="weekly_market_optimization",
+            name="每周全市场参数优化",
+            replace_existing=True,
+        )
+        logger.info("注册任务：每周全市场参数优化 [%s]", mopt_cron)
+    else:
+        logger.info("每周全市场参数优化已禁用（MARKET_OPT_ENABLED=false）")
 
 
 async def sync_stock_list_on_startup() -> None:

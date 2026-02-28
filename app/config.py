@@ -124,5 +124,12 @@ class Settings(BaseSettings):
     # --- CORS ---
     cors_origins: list[str] = ["http://localhost:5173"]  # 允许跨域的前端地址
 
+    # --- Market Optimization (全市场参数优化) ---
+    market_opt_enabled: bool = True                        # 是否启用每周全市场参数优化
+    market_opt_cron: str = "0 10 * * 6"                    # cron 表达式（默认周六 10:00）
+    market_opt_lookback_days: int = 120                    # 回看交易日数
+    market_opt_auto_apply: bool = True                     # 完成后是否自动应用最佳参数
+    market_opt_max_concurrency: int = 4                    # 最大并发参数组合数
+
 
 settings = Settings()

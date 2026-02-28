@@ -1,6 +1,6 @@
 """参数优化 HTTP API。
 
-提供优化任务提交、进度查询、结果查询和参数空间查询端点。
+提供优化任务提交、进度查询、结果查询、参数空间查询和全市场优化端点。
 """
 
 import asyncio
@@ -421,3 +421,288 @@ async def get_param_space(strategy_name: str) -> ParamSpaceResponse:
         default_params=meta.default_params,
         param_space=meta.param_space,
     )
+
+
+# ---------------------------------------------------------------------------
+# 全市场选股回放优化端点
+# ---------------------------------------------------------------------------
+
+class MarketOptRunRequest(BaseModel):
+    """全市场优化任务请求。"""
+    strategy_name: str = Field(..., description="策略名称")
+    param_space: dict | None = Field(None, description="参数空间（覆盖策略默认）")
+    lookback_days: int = Field(120, ge=30, le=365, description="回看交易日数")
+    auto_apply: bool = Field(True, description="完成后是否自动应用最佳参数")
+
+
+class MarketOptResultItem(BaseModel):
+    """全市场优化单条结果。"""
+    rank: int
+    params: dict
+    hit_rate_5d: float
+    avg_return_5d: float
+    max_drawdown: float
+    total_picks: int
+    score: float
+
+
+class MarketOptResultResponse(BaseModel):
+    """全市场优化结果响应。"""
+    task_id: int
+    status: str
+    strategy_name: str
+    progress: int = 0
+    best_params: dict | None = None
+    best_score: float | None = None
+    results: list[MarketOptResultItem] = []
+    error_message: str | None = None
+
+
+class MarketOptTaskItem(BaseModel):
+    """全市场优化任务列表项。"""
+    id: int
+    strategy_name: str
+    status: str
+    progress: int = 0
+    total_combinations: int | None = None
+    completed_combinations: int = 0
+    best_params: dict | None = None
+    best_score: float | None = None
+    auto_apply: bool = True
+    error_message: str | None = None
+    created_at: str
+    finished_at: str | None = None
+
+
+@router.post("/market-opt/run")
+async def run_market_optimization(req: MarketOptRunRequest) -> dict:
+    """提交全市场选股回放优化任务。"""
+    # 校验策略
+    if req.strategy_name not in STRATEGY_REGISTRY:
+        raise HTTPException(status_code=400, detail=f"未知策略: {req.strategy_name}")
+
+    # 确定参数空间
+    meta = StrategyFactory.get_meta(req.strategy_name)
+    param_space = req.param_space if req.param_space else meta.param_space
+    if not param_space:
+        raise HTTPException(status_code=400, detail="该策略未定义参数空间，请手动指定 param_space")
+
+    total_combos = count_combinations(param_space)
+    if total_combos > 500:
+        raise HTTPException(
+            status_code=400,
+            detail=f"参数组合数 {total_combos} 超过上限 500，请缩小参数空间",
+        )
+
+    # 创建任务记录
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                INSERT INTO market_optimization_tasks (
+                    strategy_name, status, param_space, lookback_days,
+                    total_combinations, auto_apply
+                ) VALUES (
+                    :strategy_name, 'running', CAST(:param_space AS jsonb),
+                    :lookback_days, :total_combinations, :auto_apply
+                )
+                RETURNING id
+            """),
+            {
+                "strategy_name": req.strategy_name,
+                "param_space": json.dumps(param_space),
+                "lookback_days": req.lookback_days,
+                "total_combinations": total_combos,
+                "auto_apply": req.auto_apply,
+            },
+        )
+        task_id = result.scalar_one()
+        await session.commit()
+
+    # 后台执行
+    asyncio.create_task(_run_market_opt_task(
+        task_id=task_id,
+        strategy_name=req.strategy_name,
+        param_space=param_space,
+        lookback_days=req.lookback_days,
+        auto_apply=req.auto_apply,
+    ))
+
+    return {"task_id": task_id, "status": "running"}
+
+
+async def _run_market_opt_task(
+    task_id: int,
+    strategy_name: str,
+    param_space: dict,
+    lookback_days: int,
+    auto_apply: bool,
+) -> None:
+    """后台执行全市场选股回放优化。"""
+    from app.optimization.market_optimizer import MarketOptimizer
+
+    try:
+        optimizer = MarketOptimizer(async_session_factory, max_concurrency=4)
+
+        # 进度回调
+        async def _update_progress(completed: int, total: int) -> None:
+            progress = int(completed / total * 100) if total > 0 else 0
+            async with async_session_factory() as session:
+                await session.execute(
+                    text("""
+                        UPDATE market_optimization_tasks
+                        SET progress = :progress, completed_combinations = :completed
+                        WHERE id = :task_id
+                    """),
+                    {"progress": progress, "completed": completed, "task_id": task_id},
+                )
+                await session.commit()
+
+        def progress_callback(completed: int, total: int) -> None:
+            asyncio.create_task(_update_progress(completed, total))
+
+        results = await optimizer.optimize(
+            strategy_name=strategy_name,
+            param_space=param_space,
+            lookback_days=lookback_days,
+            top_n=10,
+            progress_callback=progress_callback,
+        )
+
+        # 保存结果
+        best_params = results[0].params if results else None
+        best_score = results[0].score if results else None
+        result_detail = [
+            {
+                "rank": i + 1,
+                "params": r.params,
+                "hit_rate_5d": r.hit_rate_5d,
+                "avg_return_5d": r.avg_return_5d,
+                "max_drawdown": r.max_drawdown,
+                "total_picks": r.total_picks,
+                "score": r.score,
+            }
+            for i, r in enumerate(results)
+        ]
+
+        async with async_session_factory() as session:
+            await session.execute(
+                text("""
+                    UPDATE market_optimization_tasks
+                    SET status = 'completed', progress = 100,
+                        best_params = CAST(:best_params AS jsonb),
+                        best_score = :best_score,
+                        result_detail = CAST(:result_detail AS jsonb),
+                        finished_at = NOW()
+                    WHERE id = :task_id
+                """),
+                {
+                    "task_id": task_id,
+                    "best_params": json.dumps(best_params) if best_params else None,
+                    "best_score": best_score,
+                    "result_detail": json.dumps(result_detail),
+                },
+            )
+
+            # 自动应用最佳参数
+            if auto_apply and best_params:
+                await session.execute(
+                    text("""
+                        UPDATE strategies SET params = CAST(:params AS jsonb), updated_at = NOW()
+                        WHERE name = :name
+                    """),
+                    {"name": strategy_name, "params": json.dumps(best_params)},
+                )
+                logger.info("自动应用最佳参数: %s → %s", strategy_name, best_params)
+
+            await session.commit()
+
+        logger.info("全市场优化任务 %d 完成，最佳评分 %.4f", task_id, best_score or 0)
+
+    except Exception as e:
+        logger.exception("全市场优化任务 %d 执行失败", task_id)
+        async with async_session_factory() as session:
+            await session.execute(
+                text("""
+                    UPDATE market_optimization_tasks
+                    SET status = 'failed', error_message = :error, finished_at = NOW()
+                    WHERE id = :task_id
+                """),
+                {"task_id": task_id, "error": str(e)},
+            )
+            await session.commit()
+
+
+@router.get("/market-opt/result/{task_id}", response_model=MarketOptResultResponse)
+async def get_market_opt_result(task_id: int) -> MarketOptResultResponse:
+    """查询全市场优化结果。"""
+    async with async_session_factory() as session:
+        row = await session.execute(
+            text("SELECT * FROM market_optimization_tasks WHERE id = :tid"),
+            {"tid": task_id},
+        )
+        task = row.mappings().first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail=f"全市场优化任务 {task_id} 不存在")
+
+    # 解析结果详情
+    results: list[MarketOptResultItem] = []
+    if task["result_detail"]:
+        detail = task["result_detail"]
+        if isinstance(detail, str):
+            detail = json.loads(detail)
+        results = [MarketOptResultItem(**item) for item in detail]
+
+    best_params = task["best_params"]
+    if isinstance(best_params, str):
+        best_params = json.loads(best_params)
+
+    return MarketOptResultResponse(
+        task_id=task_id,
+        status=task["status"],
+        strategy_name=task["strategy_name"],
+        progress=task["progress"],
+        best_params=best_params,
+        best_score=float(task["best_score"]) if task["best_score"] is not None else None,
+        results=results,
+        error_message=task.get("error_message"),
+    )
+
+
+@router.get("/market-opt/list", response_model=list[MarketOptTaskItem])
+async def list_market_opt_tasks() -> list[MarketOptTaskItem]:
+    """查询全市场优化任务列表。"""
+    async with async_session_factory() as session:
+        rows = await session.execute(
+            text("""
+                SELECT id, strategy_name, status, progress, total_combinations,
+                       completed_combinations, best_params, best_score, auto_apply,
+                       error_message, created_at, finished_at
+                FROM market_optimization_tasks
+                ORDER BY created_at DESC
+                LIMIT 50
+            """)
+        )
+        tasks = rows.mappings().all()
+
+    items: list[MarketOptTaskItem] = []
+    for t in tasks:
+        best_params = t["best_params"]
+        if isinstance(best_params, str):
+            best_params = json.loads(best_params)
+        items.append(MarketOptTaskItem(
+            id=t["id"],
+            strategy_name=t["strategy_name"],
+            status=t["status"],
+            progress=t["progress"],
+            total_combinations=t["total_combinations"],
+            completed_combinations=t["completed_combinations"],
+            best_params=best_params,
+            best_score=float(t["best_score"]) if t["best_score"] is not None else None,
+            auto_apply=t["auto_apply"],
+            error_message=t.get("error_message"),
+            created_at=str(t["created_at"]),
+            finished_at=str(t["finished_at"]) if t["finished_at"] else None,
+        ))
+
+    return items

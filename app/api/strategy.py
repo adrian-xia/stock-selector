@@ -648,6 +648,242 @@ async def get_latest_plan(limit: int = Query(20, ge=1, le=200)) -> list[TradePla
     ]
 
 
+# ---------------------------------------------------------------------------
+# 盘后链路结果查询端点
+# ---------------------------------------------------------------------------
+
+class DailySummaryItem(BaseModel):
+    """每日选股汇总。"""
+    pick_date: date
+    total_picks: int
+    strategy_count: int
+    avg_return_1d: float | None
+    avg_return_5d: float | None
+    hit_rate_5d: float | None
+
+
+class DailyPickDetailItem(BaseModel):
+    """单日选股明细。"""
+    ts_code: str
+    name: str | None
+    strategy_name: str
+    pick_score: float | None
+    pick_close: float | None
+    return_1d: float | None
+    return_3d: float | None
+    return_5d: float | None
+    return_10d: float | None
+    return_20d: float | None
+    max_return: float | None
+    max_drawdown: float | None
+
+
+class PostMarketOverviewResponse(BaseModel):
+    """盘后概览响应。"""
+    recent_tasks: list[dict]
+    hit_stats_summary: list[dict]
+    latest_plans: list[dict]
+
+
+@router.get("/picks/daily-summary", response_model=list[DailySummaryItem])
+async def get_daily_summary(
+    days: int = Query(30, ge=1, le=365, description="查询最近 N 天"),
+) -> list[DailySummaryItem]:
+    """获取每日选股汇总统计。
+
+    按日期聚合选股数、策略数、平均收益、命中率。
+    """
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                SELECT
+                    sp.pick_date,
+                    COUNT(*) AS total_picks,
+                    COUNT(DISTINCT sp.strategy_name) AS strategy_count,
+                    AVG(sp.return_1d) AS avg_return_1d,
+                    AVG(sp.return_5d) AS avg_return_5d,
+                    CASE
+                        WHEN COUNT(CASE WHEN sp.return_5d IS NOT NULL THEN 1 END) > 0
+                        THEN COUNT(CASE WHEN sp.return_5d > 0 THEN 1 END)::float
+                             / COUNT(CASE WHEN sp.return_5d IS NOT NULL THEN 1 END)
+                        ELSE NULL
+                    END AS hit_rate_5d
+                FROM strategy_picks sp
+                WHERE sp.pick_date >= (
+                    SELECT cal_date FROM trade_calendar
+                    WHERE is_open = true AND cal_date <= CURRENT_DATE
+                    ORDER BY cal_date DESC
+                    OFFSET :offset LIMIT 1
+                )
+                GROUP BY sp.pick_date
+                ORDER BY sp.pick_date DESC
+            """),
+            {"offset": days - 1},
+        )
+        rows = result.fetchall()
+
+    def _f(v: object) -> float | None:
+        return round(float(v), 6) if v is not None else None
+
+    return [
+        DailySummaryItem(
+            pick_date=r[0],
+            total_picks=r[1],
+            strategy_count=r[2],
+            avg_return_1d=_f(r[3]),
+            avg_return_5d=_f(r[4]),
+            hit_rate_5d=_f(r[5]),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/picks/by-date", response_model=list[DailyPickDetailItem])
+async def get_picks_by_date(
+    pick_date: date = Query(..., description="选股日期"),
+) -> list[DailyPickDetailItem]:
+    """获取指定日期的全部选股明细。
+
+    与 picks/history（按策略查）互补，此端点按日期查。
+    """
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                SELECT
+                    sp.ts_code,
+                    s.name,
+                    sp.strategy_name,
+                    sp.pick_score,
+                    sp.pick_close,
+                    sp.return_1d,
+                    sp.return_3d,
+                    sp.return_5d,
+                    sp.return_10d,
+                    sp.return_20d,
+                    sp.max_return,
+                    sp.max_drawdown
+                FROM strategy_picks sp
+                LEFT JOIN stocks s ON sp.ts_code = s.ts_code
+                WHERE sp.pick_date = :pick_date
+                ORDER BY sp.strategy_name, sp.ts_code
+            """),
+            {"pick_date": pick_date},
+        )
+        rows = result.fetchall()
+
+    def _f(v: object) -> float | None:
+        return float(v) if v is not None else None
+
+    return [
+        DailyPickDetailItem(
+            ts_code=r[0],
+            name=r[1],
+            strategy_name=r[2],
+            pick_score=_f(r[3]),
+            pick_close=_f(r[4]),
+            return_1d=_f(r[5]),
+            return_3d=_f(r[6]),
+            return_5d=_f(r[7]),
+            return_10d=_f(r[8]),
+            return_20d=_f(r[9]),
+            max_return=_f(r[10]),
+            max_drawdown=_f(r[11]),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/post-market/overview", response_model=PostMarketOverviewResponse)
+async def get_post_market_overview(
+    days: int = Query(7, ge=1, le=90, description="查询最近 N 天"),
+) -> PostMarketOverviewResponse:
+    """获取盘后链路概览。
+
+    整合最近任务执行日志、命中率统计和最新交易计划。
+    """
+    async with async_session_factory() as session:
+        # 最近任务执行日志
+        tasks_result = await session.execute(
+            text("""
+                SELECT task_type, task_date, status, duration_ms, error_message, created_at
+                FROM task_execution_log
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """),
+            {"limit": days * 5},
+        )
+        recent_tasks = [
+            {
+                "task_type": r[0],
+                "task_date": str(r[1]) if r[1] else None,
+                "status": r[2],
+                "duration_ms": r[3],
+                "error_message": r[4],
+                "created_at": str(r[5]) if r[5] else None,
+            }
+            for r in tasks_result.fetchall()
+        ]
+
+        # 命中率统计（每个策略最新一次的 5d 数据）
+        hit_result = await session.execute(
+            text("""
+                SELECT s.strategy_name, s.stat_date, s.total_picks, s.win_count,
+                       s.hit_rate, s.avg_return
+                FROM strategy_hit_stats s
+                INNER JOIN (
+                    SELECT strategy_name, MAX(stat_date) AS max_date
+                    FROM strategy_hit_stats
+                    WHERE period = '5d'
+                    GROUP BY strategy_name
+                ) latest ON s.strategy_name = latest.strategy_name
+                       AND s.stat_date = latest.max_date
+                WHERE s.period = '5d'
+                ORDER BY s.hit_rate DESC NULLS LAST
+            """)
+        )
+        hit_stats_summary = [
+            {
+                "strategy_name": r[0],
+                "stat_date": str(r[1]),
+                "total_picks": r[2],
+                "win_count": r[3],
+                "hit_rate": float(r[4]) if r[4] is not None else None,
+                "avg_return": float(r[5]) if r[5] is not None else None,
+            }
+            for r in hit_result.fetchall()
+        ]
+
+        # 最新交易计划
+        plans_result = await session.execute(
+            text("""
+                SELECT ts_code, trigger_type, trigger_price, stop_loss, take_profit,
+                       source_strategy, confidence
+                FROM trade_plans
+                WHERE plan_date = (SELECT MAX(plan_date) FROM trade_plans)
+                ORDER BY confidence DESC NULLS LAST
+                LIMIT 20
+            """)
+        )
+        latest_plans = [
+            {
+                "ts_code": r[0],
+                "trigger_type": r[1],
+                "trigger_price": float(r[2]) if r[2] is not None else None,
+                "stop_loss": float(r[3]) if r[3] is not None else None,
+                "take_profit": float(r[4]) if r[4] is not None else None,
+                "source_strategy": r[5],
+                "confidence": float(r[6]) if r[6] is not None else None,
+            }
+            for r in plans_result.fetchall()
+        ]
+
+    return PostMarketOverviewResponse(
+        recent_tasks=recent_tasks,
+        hit_stats_summary=hit_stats_summary,
+        latest_plans=latest_plans,
+    )
+
+
 @router.get("/plan/history", response_model=list[TradePlanResponse])
 async def get_plan_history(
     ts_code: str | None = Query(None, description="股票代码，不传则返回所有"),
