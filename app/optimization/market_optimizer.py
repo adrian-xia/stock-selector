@@ -95,10 +95,11 @@ class MarketOptimizer:
             strategy_name, total, len(sample_dates),
         )
 
-        # 3. 预热缓存：对每个采样日先跑一次完整 Pipeline 填充 Layer 1-2 缓存
+        # 3. 预热缓存：对每个采样日先跑一次完整 Pipeline 填充 Layer 1-2 缓存 + 市场快照
+        snapshot_cache: dict = {}
         logger.info("预热 Pipeline 缓存：%d 个采样日...", len(sample_dates))
-        await self._warmup_cache(strategy_name, sample_dates)
-        logger.info("缓存预热完成")
+        await self._warmup_cache(strategy_name, sample_dates, snapshot_cache)
+        logger.info("缓存预热完成（快照缓存 %d 天）", len(snapshot_cache))
 
         # 4. 并发评估每组参数（复用缓存）
         completed = 0
@@ -108,7 +109,7 @@ class MarketOptimizer:
             nonlocal completed
             async with self._semaphore:
                 result = await self._evaluate_params(
-                    strategy_name, params, sample_dates,
+                    strategy_name, params, sample_dates, snapshot_cache,
                 )
                 completed += 1
                 if progress_callback:
@@ -129,13 +130,13 @@ class MarketOptimizer:
         self,
         strategy_name: str,
         sample_dates: list[date],
+        snapshot_cache: dict | None = None,
     ) -> None:
-        """对每个采样日执行一次完整 Pipeline，填充 Layer 1-2 缓存。
+        """对每个采样日执行一次完整 Pipeline，填充 Layer 1-2 缓存 + 市场快照缓存。
 
         使用默认参数（空参数）跑一次，目的是写入缓存，后续参数组合直接复用。
         已有缓存的日期会被 ON CONFLICT DO NOTHING 跳过，不重复计算。
         """
-        # 并发预热，但限制并发数避免数据库压力
         warmup_sem = asyncio.Semaphore(4)
 
         async def _warmup_one(target_date: date) -> None:
@@ -145,9 +146,10 @@ class MarketOptimizer:
                         session_factory=self._session_factory,
                         strategy_names=[strategy_name],
                         target_date=target_date,
-                        top_n=1,  # 只需触发缓存写入，不关心结果
+                        top_n=1,
                         strategy_params=None,
                         use_cache=True,
+                        snapshot_cache=snapshot_cache,
                     )
                 except Exception as e:
                     logger.warning("缓存预热失败 date=%s: %s", target_date, e)
@@ -181,14 +183,14 @@ class MarketOptimizer:
         strategy_name: str,
         params: dict,
         sample_dates: list[date],
+        snapshot_cache: dict | None = None,
     ) -> MarketOptResult:
-        """评估单组参数在采样交易日上的选股效果（复用 Layer 1-2 缓存）。"""
+        """评估单组参数在采样交易日上的选股效果（复用 Layer 1-2 缓存 + 快照缓存）。"""
         all_returns: list[float] = []
         total_picks = 0
 
         for target_date in sample_dates:
             try:
-                # 使用缓存模式：Layer 1-2 直接从 pipeline_cache 读取
                 pipeline_result = await execute_pipeline(
                     session_factory=self._session_factory,
                     strategy_names=[strategy_name],
@@ -196,6 +198,7 @@ class MarketOptimizer:
                     top_n=50,
                     strategy_params={strategy_name: params} if params else None,
                     use_cache=True,
+                    snapshot_cache=snapshot_cache,
                 )
 
                 if not pipeline_result.picks:

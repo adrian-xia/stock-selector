@@ -674,6 +674,7 @@ async def execute_pipeline(
     industries: list[str] | None = None,
     markets: list[str] | None = None,
     use_cache: bool = False,
+    snapshot_cache: dict | None = None,
 ) -> PipelineResult:
     """执行完整的 5 层选股管道。
 
@@ -687,6 +688,7 @@ async def execute_pipeline(
         industries: 行业过滤列表（如 ["电子", "计算机"]）
         markets: 市场过滤列表（如 ["主板", "创业板"]）
         use_cache: 是否使用 pipeline_cache 缓存 Layer 1-2 结果（优化器专用，默认 False）
+        snapshot_cache: 可选的市场快照内存缓存（优化器专用，key=target_date, value=snapshot_df）
 
     Returns:
         PipelineResult 包含选股结果和各层统计
@@ -760,24 +762,38 @@ async def execute_pipeline(
                 # Layer 2 缓存命中：恢复通过行业/市场过滤的股票列表
                 passed_l2 = [r for r in cached_l2 if r["passed"]]
                 passed_codes = {r["ts_code"] for r in passed_l2}
-                # 构建快照供策略计算使用
-                snapshot_df = await _build_market_snapshot(session, list(passed_codes), target_date)
-                if not snapshot_df.empty:
-                    name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
-                    snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
-                logger.info("Layer 2 缓存命中：%d 只股票（%s）", len(passed_codes), target_date)
+                # 优先从 snapshot_cache 读取，避免重复查 DB
+                if snapshot_cache is not None and target_date in snapshot_cache:
+                    snapshot_df = snapshot_cache[target_date].copy()
+                    logger.info("Layer 2 缓存命中 + 快照内存命中：%d 只股票（%s）", len(passed_codes), target_date)
+                else:
+                    snapshot_df = await _build_market_snapshot(session, list(passed_codes), target_date)
+                    if not snapshot_df.empty:
+                        name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
+                        snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
+                    # 写入 snapshot_cache
+                    if snapshot_cache is not None:
+                        snapshot_cache[target_date] = snapshot_df.copy()
+                    logger.info("Layer 2 缓存命中：%d 只股票（%s）", len(passed_codes), target_date)
             else:
                 # 构建快照 + 行业/市场过滤，然后写入缓存
-                snapshot_df = await _build_market_snapshot(
-                    session, layer1_df["ts_code"].tolist(), target_date
-                )
-                if not snapshot_df.empty:
-                    name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
-                    snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
+                if snapshot_cache is not None and target_date in snapshot_cache:
+                    snapshot_df = snapshot_cache[target_date].copy()
+                else:
+                    snapshot_df = await _build_market_snapshot(
+                        session, layer1_df["ts_code"].tolist(), target_date
+                    )
+                    if not snapshot_df.empty:
+                        name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
+                        snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
 
                 if industries or markets:
                     filter_codes = await _get_filtered_codes(session, industries, markets)
                     snapshot_df = snapshot_df[snapshot_df["ts_code"].isin(filter_codes)].reset_index(drop=True)
+
+                # 写入 snapshot_cache（过滤后的版本）
+                if snapshot_cache is not None and target_date not in snapshot_cache:
+                    snapshot_cache[target_date] = snapshot_df.copy()
 
                 # 写入 Layer 2 缓存（只记录通过行业/市场过滤的股票，不含策略计算）
                 all_codes = set(layer1_df["ts_code"].tolist())
