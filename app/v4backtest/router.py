@@ -144,7 +144,7 @@ async def run_v4_optimization(req: V4OptRequest):
                             CAST(:params AS json), :bs, :be,
                             :ts, :spm, :wr1, :wr3, :wr5, :wr10,
                             :ar5, :plr, :md, :sr, :cs
-                        ) ON CONFLICT (run_id) DO NOTHING
+                        )
                     """), {
                         "run_id": str(uuid4()), "gsid": grid_search_id,
                         "rank": rank, "params": json.dumps(merged),
