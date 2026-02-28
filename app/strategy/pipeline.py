@@ -760,7 +760,7 @@ async def execute_pipeline(
         if use_cache:
             cached_l2 = await _cache_read_layer(session, target_date, 2)
             if cached_l2 is not None:
-                # Layer 2 缓存命中：直接恢复通过的股票列表，跳过技术面计算
+                # Layer 2 缓存命中：直接恢复通过的股票列表，跳过全量快照构建
                 passed_l2 = [r for r in cached_l2 if r["passed"]]
                 passed_codes = {r["ts_code"] for r in passed_l2}
                 # 仍需构建快照供 Layer 3 使用（只对通过 Layer 2 的股票）
@@ -768,8 +768,12 @@ async def execute_pipeline(
                 if not snapshot_df.empty:
                     name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
                     snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
-                layer2_df = snapshot_df.copy()
-                hit_records: dict[str, list[str]] = {}
+                # 仍需跑策略计算以填充 hit_records
+                hit_records = {}
+                layer2_df = await _run_strategies_on_df(
+                    snapshot_df, strategy_names, "technical", target_date, hit_records,
+                    strategy_params=strategy_params,
+                )
                 layer_stats["layer2"] = len(layer2_df)
                 logger.info("Layer 2 缓存命中：%d 只股票（%s）", len(layer2_df), target_date)
             else:
