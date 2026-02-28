@@ -2,6 +2,9 @@
 
 通过历史交易日回放的方式评估策略参数组合的实际选股效果。
 核心逻辑：对每组参数采样若干交易日执行选股管道，统计 5 日正收益占比和平均收益。
+
+缓存优化：Layer 1-2 结果按日期缓存到 pipeline_cache 表，同一天多个参数组合共享缓存，
+预期提速 10-20 倍。
 """
 
 import asyncio
@@ -37,16 +40,22 @@ class MarketOptimizer:
     对每组参数在历史交易日上执行选股管道，收集选股结果后查询 T+5 收盘价
     计算实际收益率，最终按综合评分排序返回 Top N。
 
+    缓存策略：
+    - 每个采样日首次运行时，Pipeline Layer 1-2 结果写入 pipeline_cache
+    - 后续参数组合直接从缓存读取 Layer 1-2，只重新计算 Layer 3-4
+    - 大幅减少重复的 SQL 粗筛和技术指标计算
+
     Args:
         session_factory: 异步数据库会话工厂
         max_concurrency: 最大并发参数组合数
+        sample_interval: 采样间隔天数
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker,
         max_concurrency: int = 8,
-        sample_interval: int = 8,
+        sample_interval: int = 4,
     ) -> None:
         self._session_factory = session_factory
         self._semaphore = asyncio.Semaphore(max_concurrency)
@@ -82,11 +91,16 @@ class MarketOptimizer:
         combinations = generate_combinations(param_space)
         total = len(combinations)
         logger.info(
-            "开始全市场优化：策略=%s, 组合数=%d, 采样天数=%d",
+            "开始全市场优化：策略=%s, 组合数=%d, 采样天数=%d（缓存模式）",
             strategy_name, total, len(sample_dates),
         )
 
-        # 3. 并发评估每组参数
+        # 3. 预热缓存：对每个采样日先跑一次完整 Pipeline 填充 Layer 1-2 缓存
+        logger.info("预热 Pipeline 缓存：%d 个采样日...", len(sample_dates))
+        await self._warmup_cache(strategy_name, sample_dates)
+        logger.info("缓存预热完成")
+
+        # 4. 并发评估每组参数（复用缓存）
         completed = 0
         results: list[MarketOptResult] = []
 
@@ -107,12 +121,41 @@ class MarketOptimizer:
         tasks = [_evaluate_one(combo) for combo in combinations]
         results = await asyncio.gather(*tasks)
 
-        # 4. 按 score 降序排列
+        # 5. 按 score 降序排列
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:top_n]
 
+    async def _warmup_cache(
+        self,
+        strategy_name: str,
+        sample_dates: list[date],
+    ) -> None:
+        """对每个采样日执行一次完整 Pipeline，填充 Layer 1-2 缓存。
+
+        使用默认参数（空参数）跑一次，目的是写入缓存，后续参数组合直接复用。
+        已有缓存的日期会被 ON CONFLICT DO NOTHING 跳过，不重复计算。
+        """
+        # 并发预热，但限制并发数避免数据库压力
+        warmup_sem = asyncio.Semaphore(4)
+
+        async def _warmup_one(target_date: date) -> None:
+            async with warmup_sem:
+                try:
+                    await execute_pipeline(
+                        session_factory=self._session_factory,
+                        strategy_names=[strategy_name],
+                        target_date=target_date,
+                        top_n=1,  # 只需触发缓存写入，不关心结果
+                        strategy_params=None,
+                        use_cache=True,
+                    )
+                except Exception as e:
+                    logger.debug("缓存预热失败 date=%s: %s", target_date, e)
+
+        await asyncio.gather(*[_warmup_one(d) for d in sample_dates])
+
     async def _get_sample_dates(self, lookback_days: int) -> list[date]:
-        """从交易日历获取采样日期，间隔 4 天。"""
+        """从交易日历获取采样日期。"""
         async with self._session_factory() as session:
             result = await session.execute(
                 text("""
@@ -139,39 +182,35 @@ class MarketOptimizer:
         params: dict,
         sample_dates: list[date],
     ) -> MarketOptResult:
-        """评估单组参数在采样交易日上的选股效果。"""
+        """评估单组参数在采样交易日上的选股效果（复用 Layer 1-2 缓存）。"""
         all_returns: list[float] = []
         total_picks = 0
 
         for target_date in sample_dates:
             try:
-                # 调用选股管道
+                # 使用缓存模式：Layer 1-2 直接从 pipeline_cache 读取
                 pipeline_result = await execute_pipeline(
                     session_factory=self._session_factory,
                     strategy_names=[strategy_name],
                     target_date=target_date,
                     top_n=50,
                     strategy_params={strategy_name: params} if params else None,
+                    use_cache=True,
                 )
 
                 if not pipeline_result.picks:
                     continue
 
-                # 收集选中的 ts_code
                 ts_codes = [p.ts_code for p in pipeline_result.picks]
                 total_picks += len(ts_codes)
 
-                # 查询 T+5 收益率
-                returns_5d = await self._calc_returns(
-                    ts_codes, target_date, days=5,
-                )
+                returns_5d = await self._calc_returns(ts_codes, target_date, days=5)
                 all_returns.extend(returns_5d)
 
             except Exception as e:
                 logger.debug("评估失败 date=%s params=%s: %s", target_date, params, e)
                 continue
 
-        # 计算统计指标
         if not all_returns:
             return MarketOptResult(params=params)
 
@@ -179,11 +218,9 @@ class MarketOptimizer:
         hit_rate_5d = hit_count / len(all_returns) if all_returns else 0.0
         avg_return_5d = sum(all_returns) / len(all_returns) if all_returns else 0.0
 
-        # 最大连续亏损（简化：所有负收益中最小值的绝对值）
         negative_returns = [r for r in all_returns if r < 0]
         max_drawdown = abs(min(negative_returns)) if negative_returns else 0.0
 
-        # 评分公式：偏命中率
         score = hit_rate_5d * 0.5 + avg_return_5d * 0.3 - max_drawdown * 0.2
 
         return MarketOptResult(
@@ -201,15 +238,11 @@ class MarketOptimizer:
         base_date: date,
         days: int = 5,
     ) -> list[float]:
-        """计算股票在 base_date 买入后 N 个交易日的收益率。
-
-        通过查询 stock_daily 获取买入日和 T+N 日的收盘价。
-        """
+        """计算股票在 base_date 买入后 N 个交易日的收益率。"""
         if not ts_codes:
             return []
 
         async with self._session_factory() as session:
-            # 获取 T+N 交易日
             future_result = await session.execute(
                 text("""
                     SELECT cal_date FROM trade_calendar
@@ -226,7 +259,6 @@ class MarketOptimizer:
 
             target_date_n = future_dates[-1]
 
-            # 查询买入日和 T+N 日的收盘价
             result = await session.execute(
                 text("""
                     SELECT
@@ -256,3 +288,4 @@ class MarketOptimizer:
             returns.append(ret)
 
         return returns
+

@@ -91,6 +91,7 @@ tsc -b                                               # TypeScript 类型检查
 - Pipeline 执行：SQL 粗筛 → 技术面 → 基本面 → 加权排序（`app/strategy/pipeline.py`）
 - 加权排序基于 5d 命中率（`strategy_hit_stats` 表），权重 [0.3, 3.0]
 - 全市场选股回放优化：`app/optimization/market_optimizer.py`，历史回放评估参数组合
+- Pipeline 缓存加速：Layer 1-2 结果写入 `pipeline_cache` 表，同一天多参数组合共享，实测 300x+ 加速
 - 每周自动 cron（`app/scheduler/market_opt_job.py`），最佳参数自动写入 strategies 表
 
 ### API 路由

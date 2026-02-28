@@ -7,6 +7,7 @@ Layer 4: 综合排序 — 按策略命中数排序，取 Top N
 Layer 5: AI 终审 — 调用 Gemini 进行综合分析和评分
 """
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -17,8 +18,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.strategy.factory import StrategyFactory
-
-logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +47,65 @@ class PipelineResult:
     layer_stats: dict[str, int] = field(default_factory=dict)
     elapsed_ms: int = 0
     ai_enabled: bool = False
+
+
+# --- PIPELINE CACHE HELPERS ---
+
+
+async def _cache_read_layer(
+    session: AsyncSession,
+    trade_date: date,
+    layer: int,
+) -> list[dict] | None:
+    """从 pipeline_cache 读取指定日期和层的缓存结果。
+
+    Returns:
+        缓存行列表（含 ts_code, passed, raw_data），无缓存返回 None
+    """
+    result = await session.execute(
+        text("""
+            SELECT ts_code, passed, raw_data
+            FROM pipeline_cache
+            WHERE trade_date = :trade_date AND layer = :layer
+        """),
+        {"trade_date": trade_date, "layer": layer},
+    )
+    rows = result.fetchall()
+    if not rows:
+        return None
+    return [{"ts_code": row[0], "passed": row[1], "raw_data": row[2]} for row in rows]
+
+
+async def _cache_write_layer(
+    session: AsyncSession,
+    trade_date: date,
+    layer: int,
+    records: list[dict],
+) -> None:
+    """将 Layer 结果批量写入 pipeline_cache（ON CONFLICT DO NOTHING）。
+
+    Args:
+        records: 每条含 ts_code, passed, raw_data（可为 None）
+    """
+    if not records:
+        return
+    for rec in records:
+        raw_data = rec.get("raw_data")
+        await session.execute(
+            text("""
+                INSERT INTO pipeline_cache (trade_date, layer, ts_code, passed, raw_data)
+                VALUES (:trade_date, :layer, :ts_code, :passed, CAST(:raw_data AS jsonb))
+                ON CONFLICT (trade_date, layer, ts_code) DO NOTHING
+            """),
+            {
+                "trade_date": trade_date,
+                "layer": layer,
+                "ts_code": rec["ts_code"],
+                "passed": rec.get("passed", True),
+                "raw_data": json.dumps(raw_data) if raw_data is not None else None,
+            },
+        )
+    await session.commit()
 
 
 # --- PLACEHOLDER FOR LAYER FUNCTIONS ---
@@ -608,6 +666,7 @@ async def execute_pipeline(
     strategy_params: dict[str, dict] | None = None,
     industries: list[str] | None = None,
     markets: list[str] | None = None,
+    use_cache: bool = False,
 ) -> PipelineResult:
     """执行完整的 5 层选股管道。
 
@@ -620,6 +679,7 @@ async def execute_pipeline(
         strategy_params: 策略名称 -> 自定义参数字典（覆盖默认值）
         industries: 行业过滤列表（如 ["电子", "计算机"]）
         markets: 市场过滤列表（如 ["主板", "创业板"]）
+        use_cache: 是否使用 pipeline_cache 缓存 Layer 1-2 结果（优化器专用，默认 False）
 
     Returns:
         PipelineResult 包含选股结果和各层统计
@@ -639,8 +699,38 @@ async def execute_pipeline(
         )
 
     async with session_factory() as session:
-        # Layer 1: SQL 粗筛
-        layer1_df = await _layer1_base_filter(session, target_date, base_filter)
+        # ── Layer 1: SQL 粗筛（支持缓存）──────────────────────────────
+        layer1_df: pd.DataFrame
+        name_map: dict[str, str]
+
+        if use_cache:
+            cached_l1 = await _cache_read_layer(session, target_date, 1)
+            if cached_l1 is not None:
+                # 从缓存恢复：只保留 passed=True 的行
+                passed = [r for r in cached_l1 if r["passed"]]
+                if passed:
+                    layer1_df = pd.DataFrame(
+                        [{"ts_code": r["ts_code"], "name": r["raw_data"].get("name", "") if r["raw_data"] else ""} for r in passed]
+                    )
+                    name_map = dict(zip(layer1_df["ts_code"], layer1_df["name"]))
+                    logger.info("Layer 1 缓存命中：%d 只股票（%s）", len(layer1_df), target_date)
+                else:
+                    layer1_df = pd.DataFrame()
+                    name_map = {}
+            else:
+                # 计算并写入缓存
+                layer1_df = await _layer1_base_filter(session, target_date, base_filter)
+                name_map = dict(zip(layer1_df["ts_code"], layer1_df["name"]))
+                records = [
+                    {"ts_code": row["ts_code"], "passed": True, "raw_data": {"name": row["name"]}}
+                    for _, row in layer1_df.iterrows()
+                ]
+                await _cache_write_layer(session, target_date, 1, records)
+                logger.info("Layer 1 缓存写入：%d 只股票（%s）", len(layer1_df), target_date)
+        else:
+            layer1_df = await _layer1_base_filter(session, target_date, base_filter)
+            name_map = dict(zip(layer1_df["ts_code"], layer1_df["name"]))
+
         layer_stats["layer1"] = len(layer1_df)
 
         if layer1_df.empty:
@@ -653,40 +743,78 @@ async def execute_pipeline(
                 ai_enabled=False,
             )
 
-        # 保存 ts_code -> name 映射
-        name_map = dict(zip(layer1_df["ts_code"], layer1_df["name"]))
+        # ── 构建市场快照（技术指标 + 前日数据）──────────────────────────
+        # 当 use_cache=True 且 Layer 2 有缓存时，只需对通过的股票构建快照
+        snapshot_df: pd.DataFrame
 
-        # 构建市场快照（技术指标 + 前日数据）
-        snapshot_df = await _build_market_snapshot(
-            session, layer1_df["ts_code"].tolist(), target_date
-        )
+        if use_cache:
+            cached_l2 = await _cache_read_layer(session, target_date, 2)
+            if cached_l2 is not None:
+                # Layer 2 缓存命中：直接恢复通过的股票列表，跳过技术面计算
+                passed_l2 = [r for r in cached_l2 if r["passed"]]
+                passed_codes = {r["ts_code"] for r in passed_l2}
+                # 仍需构建快照供 Layer 3 使用（只对通过 Layer 2 的股票）
+                snapshot_df = await _build_market_snapshot(session, list(passed_codes), target_date)
+                if not snapshot_df.empty:
+                    name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
+                    snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
+                layer2_df = snapshot_df.copy()
+                hit_records: dict[str, list[str]] = {}
+                layer_stats["layer2"] = len(layer2_df)
+                logger.info("Layer 2 缓存命中：%d 只股票（%s）", len(layer2_df), target_date)
+            else:
+                # 计算 Layer 2 并写入缓存
+                snapshot_df = await _build_market_snapshot(
+                    session, layer1_df["ts_code"].tolist(), target_date
+                )
+                if not snapshot_df.empty:
+                    name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
+                    snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
 
-        # 补充 name 列（从 layer1_df 获取）
-        if not snapshot_df.empty:
-            name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
-            snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
+                if industries or markets:
+                    filter_codes = await _get_filtered_codes(session, industries, markets)
+                    snapshot_df = snapshot_df[snapshot_df["ts_code"].isin(filter_codes)].reset_index(drop=True)
 
-        # 行业/市场过滤（Layer 1.5）
-        if industries or markets:
-            filter_codes = await _get_filtered_codes(session, industries, markets)
-            snapshot_df = snapshot_df[snapshot_df["ts_code"].isin(filter_codes)].reset_index(drop=True)
-            logger.info("行业/市场过滤后：%d 只股票（industries=%s, markets=%s）", len(snapshot_df), industries, markets)
-
-        # Layer 2: 技术面策略筛选
-        hit_records: dict[str, list[str]] = {}
-        layer2_df = await _run_strategies_on_df(
-            snapshot_df, strategy_names, "technical", target_date, hit_records,
-            strategy_params=strategy_params,
-        )
-        layer_stats["layer2"] = len(layer2_df)
-
-        # 补充财务数据
-        if not layer2_df.empty:
-            layer2_df = await _enrich_finance_data(
-                session, layer2_df, target_date
+                hit_records = {}
+                layer2_df = await _run_strategies_on_df(
+                    snapshot_df, strategy_names, "technical", target_date, hit_records,
+                    strategy_params=strategy_params,
+                )
+                # 写入 Layer 2 缓存（记录所有 snapshot 股票的通过状态）
+                all_codes = set(snapshot_df["ts_code"].tolist()) if not snapshot_df.empty else set()
+                passed_codes_l2 = set(layer2_df["ts_code"].tolist()) if not layer2_df.empty else set()
+                l2_records = [
+                    {"ts_code": code, "passed": code in passed_codes_l2, "raw_data": None}
+                    for code in all_codes
+                ]
+                await _cache_write_layer(session, target_date, 2, l2_records)
+                layer_stats["layer2"] = len(layer2_df)
+                logger.info("Layer 2 缓存写入：%d/%d 只股票通过（%s）", len(layer2_df), len(all_codes), target_date)
+        else:
+            # 非缓存模式：原始流程
+            snapshot_df = await _build_market_snapshot(
+                session, layer1_df["ts_code"].tolist(), target_date
             )
+            if not snapshot_df.empty:
+                name_series = layer1_df[["ts_code", "name"]].drop_duplicates("ts_code")
+                snapshot_df = snapshot_df.merge(name_series, on="ts_code", how="left")
 
-        # Layer 3: 基本面策略筛选
+            if industries or markets:
+                filter_codes = await _get_filtered_codes(session, industries, markets)
+                snapshot_df = snapshot_df[snapshot_df["ts_code"].isin(filter_codes)].reset_index(drop=True)
+                logger.info("行业/市场过滤后：%d 只股票（industries=%s, markets=%s）", len(snapshot_df), industries, markets)
+
+            hit_records = {}
+            layer2_df = await _run_strategies_on_df(
+                snapshot_df, strategy_names, "technical", target_date, hit_records,
+                strategy_params=strategy_params,
+            )
+            layer_stats["layer2"] = len(layer2_df)
+
+        # ── Layer 3: 基本面策略筛选 ───────────────────────────────────
+        if not layer2_df.empty:
+            layer2_df = await _enrich_finance_data(session, layer2_df, target_date)
+
         layer3_df = await _run_strategies_on_df(
             layer2_df, strategy_names, "fundamental", target_date, hit_records,
             strategy_params=strategy_params,
@@ -700,23 +828,25 @@ async def execute_pipeline(
     picks = _layer4_rank_and_topn(layer3_df, name_map, hit_records, top_n, strategy_weights)
     layer_stats["layer4"] = len(picks)
 
-    # Layer 5: AI 分析
+    # Layer 5: AI 分析（use_cache 模式下跳过，优化器不需要 AI）
     from app.ai.manager import get_ai_manager
 
     ai_enabled = get_ai_manager().is_enabled
-    picks = await _layer5_ai_analysis(picks, snapshot_df, target_date)
+    if not use_cache:
+        picks = await _layer5_ai_analysis(picks, snapshot_df, target_date)
 
     elapsed = int((time.monotonic() - start_time) * 1000)
     logger.info(
-        "Pipeline 执行完成：%d ms，各层统计 %s",
-        elapsed, layer_stats,
+        "Pipeline 执行完成：%d ms，各层统计 %s%s",
+        elapsed, layer_stats, "（缓存模式）" if use_cache else "",
     )
 
-    # 保存选股记录到 strategy_picks（异步，失败不阻断主流程）
-    try:
-        await _save_strategy_picks(session_factory, strategy_names, target_date, picks)
-    except Exception:
-        logger.exception("[strategy_picks] 保存选股记录失败，不影响主流程")
+    # 保存选股记录到 strategy_picks（仅非缓存模式，避免优化器污染数据）
+    if not use_cache:
+        try:
+            await _save_strategy_picks(session_factory, strategy_names, target_date, picks)
+        except Exception:
+            logger.exception("[strategy_picks] 保存选股记录失败，不影响主流程")
 
     return PipelineResult(
         target_date=target_date,

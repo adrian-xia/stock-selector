@@ -405,7 +405,7 @@ stock-selector/
 │   ├── cache/                  # Redis 缓存
 │   │   ├── redis_client.py     #   连接管理（init/get/close）
 │   │   ├── tech_cache.py       #   技术指标缓存（Cache-Aside）
-│   │   └── pipeline_cache.py   #   选股结果缓存
+│   │   └── pipeline_cache.py   #   选股结果缓存（Redis）
 │   ├── notification/           # 通知报警（企业微信/Telegram）
 │   ├── realtime/               # 实时监控
 │   │   ├── collector.py        #   行情采集器（Tushare 轮询）
