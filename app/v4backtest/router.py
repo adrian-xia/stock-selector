@@ -1,6 +1,7 @@
 """V4 回测 API 路由。"""
 
 import asyncio
+import json
 import logging
 from datetime import date
 from uuid import uuid4
@@ -53,13 +54,13 @@ async def run_backtest_api(req: BacktestRequest):
                 VALUES (:rid, :p, :s, :e, :ts, :spm, :wr5,
                         :plr, :md, :sr, :cs, :sigs)
             """), {
-                "rid": run_id, "p": req.params or {},
+                "rid": run_id, "p": json.dumps(req.params or {}),
                 "s": req.start_date, "e": req.end_date,
                 "ts": metrics.total_signals, "spm": metrics.signals_per_month,
                 "wr5": metrics.win_rate_5d, "plr": metrics.profit_loss_ratio,
                 "md": metrics.max_drawdown, "sr": metrics.sharpe_ratio,
                 "cs": round(metrics.win_rate_5d * 0.4 + min(metrics.profit_loss_ratio, 5) / 5 * 0.3 + min(metrics.sharpe_ratio, 3) / 3 * 0.3, 4),
-                "sigs": [{"ts_code": s.ts_code, "date": str(s.signal_date), "ret_5d": s.ret_5d} for s in sigs],
+                "sigs": json.dumps([{"ts_code": s.ts_code, "date": str(s.signal_date), "ret_5d": s.ret_5d} for s in sigs]),
             })
             await session.commit()
 
