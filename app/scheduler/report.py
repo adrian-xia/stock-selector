@@ -39,6 +39,7 @@ def generate_post_market_report(
     summary: dict[str, Any],
     picks: list[Any],
     plans: list[dict[str, Any]],
+    watchpool: list[tuple] | None = None,
 ) -> tuple[str, str]:
     """生成盘后链路报告。"""
     name_map = _get_strategy_display_names()
@@ -46,6 +47,7 @@ def generate_post_market_report(
     elapsed_sec = int(elapsed % 60)
     pick_count = len(picks) if picks else 0
     plan_count = len(plans) if plans else 0
+    _pool = watchpool or []
 
     # 检测 V4 策略命中
     v4_picks = [p for p in picks if V4_STRATEGY_NAME in p.matched_strategies] if picks else []
@@ -76,17 +78,31 @@ def generate_post_market_report(
     md.append(f"| 交易计划 | {plan_count} 条 |")
     md.append("")
 
-    # ★ V4 量价配合策略专区（重点标注）
+    # ★ V4 量价配合策略专区（始终显示）
+    md.append("## 🐉 V4 量价配合策略（龙回头）\n")
+    md.append("> 策略逻辑：放量突破(T0) → 缩量回踩 → 企稳买入(Tk)")
+    md.append("> 回测验证：5 日胜率 59%，盈亏比 1.87，夏普 2.21\n")
+
     if v4_picks:
-        md.append("## 🐉 V4 量价配合策略（龙回头）— 重点关注\n")
-        md.append("> 该策略追踪「放量突破(T0) → 缩量回踩 → 企稳买入(Tk)」模式，")
-        md.append("> 经回测验证 5 日胜率 59%，盈亏比 1.87。\n")
+        md.append(f"**🔥 今日命中 {len(v4_picks)} 只 — 重点关注！**\n")
         md.append("| 排名 | 代码 | 名称 | 收盘 | 涨跌幅 | 加权得分 |")
         md.append("|------|------|------|------|--------|----------|")
         for i, p in enumerate(v4_picks, 1):
             name = getattr(p, "name", "") or p.ts_code
             chg = f"{p.pct_chg:+.2f}%" if p.pct_chg else "0.00%"
             md.append(f"| {i} | {p.ts_code} | {name} | {p.close} | {chg} | {p.weighted_score:.2f} |")
+        md.append("")
+    else:
+        md.append("今日无 V4 信号。该策略需要特定量价模式（放量突破→缩量回踩→企稳），")
+        md.append("并非每日都有信号，属于正常情况。\n")
+
+    # V4 watchpool 状态
+    if _pool:
+        md.append("### Watchpool 监控池\n")
+        md.append("| 代码 | T0 日期 | 当前状态 | 洗盘天数 |")
+        md.append("|------|---------|----------|----------|")
+        for row in _pool:
+            md.append(f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |")
         md.append("")
 
     if v4_plans:

@@ -407,9 +407,28 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         from app.notification import NotificationManager
         from app.scheduler.report import generate_post_market_report
 
+        # 查询 V4 watchpool 状态
+        watchpool_rows: list[tuple] = []
+        try:
+            from sqlalchemy import text as sa_text_wp
+            async with async_session_factory() as _ws:
+                _wr = await _ws.execute(sa_text_wp(
+                    "SELECT ts_code, t0_date, current_state, washout_days "
+                    "FROM strategy_watchpool "
+                    "WHERE strategy_name = 'volume-price-pattern' "
+                    "ORDER BY updated_at DESC LIMIT 10"
+                ))
+                watchpool_rows = [
+                    (r[0], str(r[1]) if r[1] else "", r[2] or "", r[3] or 0)
+                    for r in _wr.fetchall()
+                ]
+        except Exception:
+            pass
+
         notifier = NotificationManager()
         summary_text, md_content = generate_post_market_report(
             target, elapsed, summary, picks if picks else [], plans if plans else [],
+            watchpool=watchpool_rows,
         )
         await notifier.send_report(
             title=f"✅ 盘后链路完成 — {target}",
