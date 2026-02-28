@@ -84,7 +84,7 @@ async def _cache_write_layer(
 ) -> None:
     """将 Layer 结果批量写入 pipeline_cache（ON CONFLICT DO NOTHING）。
 
-    使用 unnest 批量插入，避免逐条 INSERT 的性能问题。
+    使用 VALUES 列表批量插入，避免逐条 INSERT 的性能问题。
 
     Args:
         records: 每条含 ts_code, passed, raw_data（可为 None）
@@ -92,29 +92,26 @@ async def _cache_write_layer(
     if not records:
         return
 
-    ts_codes = [rec["ts_code"] for rec in records]
-    passed_list = [rec.get("passed", True) for rec in records]
-    raw_data_list = [
-        json.dumps(rec["raw_data"]) if rec.get("raw_data") is not None else None
-        for rec in records
-    ]
-
-    await session.execute(
-        text("""
+    # 分批插入，每批 1000 条
+    batch_size = 1000
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        values_parts = []
+        params: dict = {"trade_date": trade_date, "layer": layer}
+        for j, rec in enumerate(batch):
+            raw_data = rec.get("raw_data")
+            params[f"ts_{j}"] = rec["ts_code"]
+            params[f"p_{j}"] = rec.get("passed", True)
+            params[f"rd_{j}"] = json.dumps(raw_data) if raw_data is not None else None
+            values_parts.append(
+                f"(:trade_date, :layer, :ts_{j}, :p_{j}, CAST(:rd_{j} AS jsonb))"
+            )
+        sql = f"""
             INSERT INTO pipeline_cache (trade_date, layer, ts_code, passed, raw_data)
-            SELECT :trade_date, :layer, unnest(:ts_codes::varchar[]),
-                   unnest(:passed_list::boolean[]),
-                   unnest(:raw_data_list::jsonb[])
+            VALUES {', '.join(values_parts)}
             ON CONFLICT (trade_date, layer, ts_code) DO NOTHING
-        """),
-        {
-            "trade_date": trade_date,
-            "layer": layer,
-            "ts_codes": ts_codes,
-            "passed_list": passed_list,
-            "raw_data_list": raw_data_list,
-        },
-    )
+        """
+        await session.execute(text(sql), params)
     await session.commit()
 
 

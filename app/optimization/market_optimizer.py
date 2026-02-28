@@ -150,7 +150,7 @@ class MarketOptimizer:
                         use_cache=True,
                     )
                 except Exception as e:
-                    logger.debug("缓存预热失败 date=%s: %s", target_date, e)
+                    logger.warning("缓存预热失败 date=%s: %s", target_date, e)
 
         await asyncio.gather(*[_warmup_one(d) for d in sample_dates])
 
