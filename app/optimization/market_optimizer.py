@@ -45,10 +45,12 @@ class MarketOptimizer:
     def __init__(
         self,
         session_factory: async_sessionmaker,
-        max_concurrency: int = 4,
+        max_concurrency: int = 8,
+        sample_interval: int = 8,
     ) -> None:
         self._session_factory = session_factory
         self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._sample_interval = sample_interval
 
     async def optimize(
         self,
@@ -70,7 +72,7 @@ class MarketOptimizer:
         Returns:
             按 score 降序排列的 Top N 结果
         """
-        # 1. 获取采样交易日（间隔 4 天采样，约 lookback_days/4 天）
+        # 1. 获取采样交易日
         sample_dates = await self._get_sample_dates(lookback_days)
         if not sample_dates:
             logger.warning("无可用交易日，跳过优化")
@@ -126,8 +128,8 @@ class MarketOptimizer:
         if not all_dates:
             return []
 
-        # 间隔 4 天采样
-        sample = all_dates[::4]
+        # 间隔采样
+        sample = all_dates[::self._sample_interval]
         sample.reverse()  # 按时间升序
         return sample
 

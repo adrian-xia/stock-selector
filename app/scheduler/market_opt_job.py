@@ -57,8 +57,8 @@ async def weekly_market_opt_job() -> None:
         if not meta.param_space:
             continue
         combos = count_combinations(meta.param_space)
-        if combos > 500:
-            logger.info("策略 %s 组合数 %d 超过 500，跳过", name, combos)
+        if combos > settings.market_opt_max_combinations:
+            logger.info("策略 %s 组合数 %d 超过 %d，跳过", name, combos, settings.market_opt_max_combinations)
             continue
         candidates.append((name, meta.param_space))
 
@@ -71,6 +71,7 @@ async def weekly_market_opt_job() -> None:
     optimizer = MarketOptimizer(
         async_session_factory,
         max_concurrency=settings.market_opt_max_concurrency,
+        sample_interval=settings.market_opt_sample_interval,
     )
     lookback = settings.market_opt_lookback_days
     auto_apply = settings.market_opt_auto_apply
