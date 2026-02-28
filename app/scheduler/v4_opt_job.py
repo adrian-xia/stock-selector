@@ -182,7 +182,7 @@ async def _send_success_notification(
             elapsed=elapsed,
             start_date=start_date,
             end_date=end_date,
-            applied=applied,
+            auto_applied=applied,
         )
         await notifier.send_report(
             title="🐉 V4 量价配合策略参数优化完成",
