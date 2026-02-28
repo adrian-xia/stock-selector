@@ -133,5 +133,13 @@ class Settings(BaseSettings):
     market_opt_sample_interval: int = 4                    # 采样间隔天数（越大越快，精度越低）
     market_opt_max_combinations: int = 500                 # 单策略最大参数组合数
 
+    # --- V4 量价配合策略独立优化 ---
+    v4_opt_enabled: bool = True                            # 是否启用 V4 独立优化任务
+    v4_opt_cron: str = "0 12 * * 6"                        # cron 表达式（默认周六 12:00）
+    v4_opt_lookback_start: str = "2024-07-01"              # 回测起始日期
+    v4_opt_lookback_end: str = ""                          # 回测结束日期（空=最近交易日）
+    v4_opt_max_concurrency: int = 4                        # 最大并发度
+    v4_opt_auto_apply: bool = True                         # 完成后是否自动应用最佳参数
+
 
 settings = Settings()

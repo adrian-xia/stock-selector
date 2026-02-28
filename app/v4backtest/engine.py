@@ -74,7 +74,6 @@ async def _verify_accumulation_batch(
 ) -> set[str]:
     if not codes:
         return set()
-    # 获取 accumulation_days 前的日期
     r = await session.execute(text(
         "SELECT cal_date FROM trade_calendar WHERE is_open=true AND cal_date<=:d "
         "ORDER BY cal_date DESC LIMIT 1 OFFSET :off"
@@ -103,40 +102,125 @@ async def _verify_accumulation_batch(
     return {row[0] for row in r3}
 
 
+def _verify_accumulation_from_memory(
+    market_data: dict[date, dict[str, dict]],
+    trade_dates: list[date],
+    codes: list[str],
+    target_date: date,
+    params: dict,
+) -> set[str]:
+    """从内存数据验证吸筹条件，替代原来的 SQL 查询。"""
+    acc_days = params.get("accumulation_days", 60)
+    max_range = params.get("max_accumulation_range", 0.20)
+
+    try:
+        idx = trade_dates.index(target_date)
+    except ValueError:
+        return set()
+
+    start_idx = max(0, idx - acc_days)
+    lookback_dates = trade_dates[start_idx:idx]  # 不含当天
+
+    valid = set()
+    for code in codes:
+        highs, lows = [], []
+        for d in lookback_dates:
+            s = market_data.get(d, {}).get(code)
+            if s:
+                highs.append(s["high"])
+                lows.append(s["low"])
+        if not lows:
+            continue
+        min_low = min(lows)
+        if min_low <= 0:
+            continue
+        amplitude = (max(highs) - min_low) / min_low
+        if amplitude <= max_range:
+            valid.add(code)
+    return valid
+
+
 async def run_backtest(
     session: AsyncSession,
     params: dict | None = None,
     start_date: date = date(2024, 7, 1),
     end_date: date = date(2025, 12, 31),
+    *,
+    market_data: dict[date, dict[str, dict]] | None = None,
+    t0_cache: dict[tuple, dict[date, list[str]]] | None = None,
+    market_states: dict[date, str] | None = None,
+    trade_dates: list[date] | None = None,
 ) -> list[BacktestSignal]:
-    """逐日模拟量价配合策略，返回所有买入信号。"""
+    """逐日模拟量价配合策略，返回所有买入信号。
+
+    Args:
+        session: 数据库会话（有内存数据时仅用于 trade_dates 查询）
+        params: 策略参数，None 时使用 DEFAULT_PARAMS
+        start_date: 回测起始日期
+        end_date: 回测结束日期
+        market_data: 预加载的全市场行情 dict[date, dict[str, dict]]，有值时零 SQL
+        t0_cache: 预计算的 T0 事件缓存 dict[tuple_key, dict[date, list[str]]]
+        market_states: 预计算的大盘状态 dict[date, str]
+        trade_dates: 预加载的交易日列表，有值时跳过 SQL 查询
+    """
     p = {**DEFAULT_PARAMS, **(params or {})}
-    trade_dates = await _get_trade_dates(session, start_date, end_date)
+
+    # 交易日列表：优先用传入的，否则查 SQL
+    if trade_dates is not None:
+        tds = trade_dates
+    else:
+        tds = await _get_trade_dates(session, start_date, end_date)
+
+    # T0 缓存 key（用于命中 t0_cache）
+    t0_key = (p["min_t0_pct_chg"], p["min_t0_vol_ratio"], p["accumulation_days"])
+
     watchpool: dict[str, _WatchEntry] = {}
     signals: list[BacktestSignal] = []
 
-    for td in trade_dates:
+    for td in tds:
         # 1. 大盘环境
-        mkt = "neutral"
-        if p.get("market_filter_enabled"):
+        if market_states is not None:
+            mkt = market_states.get(td, "neutral")
+        elif p.get("market_filter_enabled"):
             mkt = (await evaluate_market(session, td, p.get("market_index", "000300.SH"))).value
-            if mkt == "bearish":
-                continue
+        else:
+            mkt = "neutral"
 
-        # 2. 拉取当日行情
-        daily = await _fetch_daily_batch(session, td)
+        if mkt == "bearish":
+            continue
 
-        # 3. 扫描新 T0
-        t0_codes = [
-            code for code, d in daily.items()
-            if d["pct_chg"] >= p["min_t0_pct_chg"]
-            and d["vol_ratio"] >= p["min_t0_vol_ratio"]
-            and code not in watchpool
-        ]
+        # 2. 当日行情：优先内存，否则 SQL
+        if market_data is not None:
+            daily = market_data.get(td, {})
+        else:
+            daily = await _fetch_daily_batch(session, td)
+
+        # 3. 扫描新 T0：优先 t0_cache，否则实时扫描
+        if t0_cache is not None:
+            t0_codes_raw = t0_cache.get(t0_key, {}).get(td, [])
+            # 过滤掉已在观察池中的
+            t0_codes = [c for c in t0_codes_raw if c not in watchpool]
+        else:
+            t0_codes = [
+                code for code, d in daily.items()
+                if d["pct_chg"] >= p["min_t0_pct_chg"]
+                and d["vol_ratio"] >= p["min_t0_vol_ratio"]
+                and code not in watchpool
+            ]
+
         if t0_codes:
-            valid = await _verify_accumulation_batch(session, t0_codes, td, p)
+            # 吸筹验证：优先内存，否则 SQL
+            if market_data is not None:
+                valid = _verify_accumulation_from_memory(
+                    market_data, tds, t0_codes, td, p
+                )
+            else:
+                valid = await _verify_accumulation_batch(session, t0_codes, td, p)
+
             for code in valid:
-                d = daily[code]
+                d = daily.get(code)
+                if not d:
+                    continue
                 watchpool[code] = _WatchEntry(
                     ts_code=code, t0_date=td,
                     t0_close=d["close"], t0_open=d["open"],
@@ -181,9 +265,9 @@ async def run_backtest(
                         break
 
                 if (d["close"] > e.t0_open
-                    and amp <= p["max_tk_amplitude"]
-                    and vol_ratio <= p["max_vol_shrink_ratio"]
-                    and ma_ok):
+                        and amp <= p["max_tk_amplitude"]
+                        and vol_ratio <= p["max_vol_shrink_ratio"]
+                        and ma_ok):
                     e.status = "triggered"
                     signals.append(BacktestSignal(
                         ts_code=code, signal_date=td, t0_date=e.t0_date,

@@ -277,6 +277,110 @@ def generate_market_opt_report(
     return summary_text, "\n".join(md)
 
 
+def generate_v4_opt_report(
+    results: list,
+    elapsed: float,
+    start_date: date,
+    end_date: date,
+    auto_applied: bool = False,
+) -> tuple[str, str]:
+    """生成 V4 量价配合策略参数优化报告。
+
+    Args:
+        results: list[GridSearchResult]，已按 score 降序排列
+        elapsed: 耗时秒数
+        start_date: 回测起始日期
+        end_date: 回测结束日期
+        auto_applied: 是否已自动应用最佳参数
+
+    Returns:
+        (summary_text, markdown_content)
+    """
+    elapsed_min = int(elapsed / 60)
+    elapsed_sec = int(elapsed % 60)
+    total = len(results)
+
+    # ── 摘要文本 ──
+    if results:
+        best = results[0]
+        m = best.metrics
+        p = best.params
+        apply_mark = "✅ 已自动应用" if auto_applied else "⏸ 未自动应用"
+        summary_lines = [
+            f"⏱ 耗时 {elapsed_min}分{elapsed_sec}秒 | 参数组合 {total} 组",
+            f"🏆 最佳综合得分: {best.score:.4f}",
+            f"  min_t0_pct_chg={p.get('min_t0_pct_chg')}, "
+            f"washout={p.get('min_washout_days')}, "
+            f"shrink={p.get('max_vol_shrink_ratio')}, "
+            f"ma_tol={p.get('ma_support_tolerance')}",
+            f"  5d胜率={m.win_rate_5d:.1%}, 盈亏比={m.profit_loss_ratio:.2f}, 夏普={m.sharpe_ratio:.2f}",
+            f"📊 最佳参数 {apply_mark}",
+        ]
+        summary_text = "\n".join(summary_lines)
+    else:
+        summary_text = f"⚠️ V4 优化完成，但无有效结果（{total} 组均失败）"
+
+    # ── Markdown 完整报告 ──
+    md = [f"# 🐉 V4 量价配合策略 — 每周参数优化报告\n"]
+    md.append(f"**回测区间：** {start_date} ~ {end_date}")
+    md.append(f"**参数组合：** {total} 组 | **耗时：** {elapsed_min} 分 {elapsed_sec} 秒\n")
+
+    if not results:
+        md.append("⚠️ 无有效结果，请检查日志。\n")
+        md.append("---\n*选股系统自动生成*\n")
+        return summary_text, "\n".join(md)
+
+    # Top 10
+    top_n = results[:10]
+    md.append("## 🏆 Top 参数组合\n")
+    md.append("| 排名 | min_t0_pct_chg | min_washout | max_vol_shrink | ma_tol | 5d胜率 | 盈亏比 | 夏普 | 综合得分 |")
+    md.append("|------|---------------|-------------|---------------|--------|--------|--------|------|---------|")
+    for i, r in enumerate(top_n, 1):
+        p = r.params
+        m = r.metrics
+        md.append(
+            f"| {i} "
+            f"| {p.get('min_t0_pct_chg')} "
+            f"| {p.get('min_washout_days')} "
+            f"| {p.get('max_vol_shrink_ratio')} "
+            f"| {p.get('ma_support_tolerance')} "
+            f"| {m.win_rate_5d:.1%} "
+            f"| {m.profit_loss_ratio:.2f} "
+            f"| {m.sharpe_ratio:.2f} "
+            f"| {r.score:.4f} |"
+        )
+    md.append("")
+
+    # 最佳参数详情
+    best = results[0]
+    apply_mark = "✅ 已自动应用" if auto_applied else "⏸ 未自动应用"
+    md.append(f"## 📊 最佳参数（{apply_mark}）\n")
+    md.append("```json")
+    import json
+    md.append(json.dumps(best.params, ensure_ascii=False, indent=2))
+    md.append("```\n")
+
+    # 信号统计
+    bm = best.metrics
+    md.append("## 📈 最佳参数信号统计\n")
+    md.append("| 指标 | 值 |")
+    md.append("|------|-----|")
+    md.append(f"| 总信号数 | {bm.total_signals} |")
+    md.append(f"| 月均信号 | {bm.signals_per_month:.1f} |")
+    md.append(f"| 1日胜率 | {bm.win_rate_1d:.1%} |")
+    md.append(f"| 3日胜率 | {bm.win_rate_3d:.1%} |")
+    md.append(f"| 5日胜率 | {bm.win_rate_5d:.1%} |")
+    md.append(f"| 10日胜率 | {bm.win_rate_10d:.1%} |")
+    md.append(f"| 平均5日收益 | {bm.avg_ret_5d:.2%} |")
+    md.append(f"| 盈亏比 | {bm.profit_loss_ratio:.2f} |")
+    md.append(f"| 最大回撤 | {bm.max_drawdown:.2%} |")
+    md.append(f"| 夏普比率 | {bm.sharpe_ratio:.2f} |")
+    md.append("")
+
+    md.append("---\n*选股系统自动生成*\n")
+    return summary_text, "\n".join(md)
+
+
 def generate_retry_report(
     target_date: date,
     retried: int,
