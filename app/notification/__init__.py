@@ -49,19 +49,39 @@ class TelegramChannel:
     """Telegram Bot API 通知渠道。"""
 
     def __init__(self, bot_token: str, chat_id: str):
-        self._url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        self._base_url = f"https://api.telegram.org/bot{bot_token}"
         self._chat_id = chat_id
 
     async def send(self, title: str, message: str) -> bool:
-        """发送 Telegram 消息。"""
+        """发送 Telegram 文本消息。"""
         text = f"*{title}*\n{message}"
         payload = {"chat_id": self._chat_id, "text": text, "parse_mode": "Markdown"}
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(self._url, json=payload)
+                resp = await client.post(f"{self._base_url}/sendMessage", json=payload)
                 return resp.status_code == 200
         except Exception:
             logger.warning("[TelegramChannel] 发送失败", exc_info=True)
+            return False
+
+    async def send_document(self, filename: str, content: bytes, caption: str = "") -> bool:
+        """发送 Telegram 文件附件（multipart 上传）。
+
+        Args:
+            filename: 文件名（如 post_market_2026-02-28.md）
+            content: 文件内容字节
+            caption: 文件说明文字
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{self._base_url}/sendDocument",
+                    data={"chat_id": self._chat_id, "caption": caption},
+                    files={"document": (filename, content, "text/markdown")},
+                )
+                return resp.status_code == 200
+        except Exception:
+            logger.warning("[TelegramChannel] 文件发送失败: %s", filename, exc_info=True)
             return False
 
 
@@ -105,4 +125,31 @@ class NotificationManager:
                 await channel.send(title, message)
             except Exception:
                 logger.warning("[NotificationManager] 渠道发送失败: %s", type(channel).__name__, exc_info=True)
+
+    async def send_report(
+        self,
+        title: str,
+        summary_text: str,
+        markdown_content: str,
+        filename: str,
+    ) -> None:
+        """发送报告：先发摘要文本，再发 Markdown 文件附件。
+
+        Args:
+            title: 通知标题
+            summary_text: 简短摘要（文本消息）
+            markdown_content: 完整报告内容（作为 .md 文件发送）
+            filename: 附件文件名
+        """
+        # 1. 发摘要文本
+        await self.send(NotificationLevel.INFO, title, summary_text)
+
+        # 2. 发文件附件（仅 Telegram 支持）
+        content_bytes = markdown_content.encode("utf-8")
+        for channel in self._channels:
+            if isinstance(channel, TelegramChannel):
+                try:
+                    await channel.send_document(filename, content_bytes, caption=title)
+                except Exception:
+                    logger.warning("[NotificationManager] 文件发送失败: %s", filename, exc_info=True)
 

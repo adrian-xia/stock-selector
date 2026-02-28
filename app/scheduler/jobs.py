@@ -402,97 +402,22 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         target, elapsed_minutes, elapsed_seconds, elapsed,
     )
 
-    # 步骤 7：发送 Telegram 通知（全面盘后分析报告）
+    # 步骤 7：发送 Telegram 通知（摘要 + Markdown 文件报告）
     try:
-        from app.notification import NotificationManager, NotificationLevel
+        from app.notification import NotificationManager
+        from app.scheduler.report import generate_post_market_report
+
         notifier = NotificationManager()
-        pick_count = len(picks) if picks else 0
-        plan_count = len(plans) if plans else 0
-
-        msg_lines = [
-            f"📅 盘后分析报告 — {target}",
-            f"{'─' * 28}",
-            "",
-            "📊 执行概况",
-            f"  ⏱ 总耗时: {elapsed_minutes}分{elapsed_seconds}秒",
-            f"  📈 数据同步: {summary.get('data_done', 'N/A')} 只股票",
-            f"  🎯 选股命中: {pick_count} 条",
-            f"  📋 交易计划: {plan_count} 条",
-        ]
-
-        # 策略分布统计
-        if picks:
-            from collections import Counter
-            strategy_counter = Counter()
-            for p in picks:
-                for s in p.matched_strategies:
-                    strategy_counter[s] += 1
-            msg_lines.append("")
-            msg_lines.append(f"📌 策略分布（共 {len(strategy_counter)} 个策略命中）")
-            for sname, cnt in strategy_counter.most_common(10):
-                msg_lines.append(f"  • {sname}: {cnt} 只")
-            if len(strategy_counter) > 10:
-                msg_lines.append(f"  … 及其他 {len(strategy_counter) - 10} 个策略")
-
-        # 涨跌幅分布
-        if picks:
-            up_count = sum(1 for p in picks if p.pct_chg > 0)
-            down_count = sum(1 for p in picks if p.pct_chg < 0)
-            flat_count = sum(1 for p in picks if p.pct_chg == 0)
-            avg_chg = sum(p.pct_chg for p in picks) / len(picks)
-            msg_lines.append("")
-            msg_lines.append("📉 选股池涨跌分布")
-            msg_lines.append(f"  🔴 上涨: {up_count}  🟢 下跌: {down_count}  ⚪ 平盘: {flat_count}")
-            msg_lines.append(f"  📊 平均涨跌幅: {avg_chg:+.2f}%")
-
-        # Top 10 候选
-        if picks:
-            msg_lines.append("")
-            msg_lines.append("🏆 Top 10 候选")
-            for i, p in enumerate(picks[:10], 1):
-                name = getattr(p, 'name', '') or p.ts_code
-                chg_str = f"{p.pct_chg:+.2f}%" if p.pct_chg else ""
-                strats = ",".join(p.matched_strategies[:3])
-                if len(p.matched_strategies) > 3:
-                    strats += f"+{len(p.matched_strategies)-3}"
-                msg_lines.append(
-                    f"  {i}. {p.ts_code} {name}"
-                    f"\n     收盘:{p.close} 涨跌:{chg_str} 得分:{p.weighted_score:.2f}"
-                    f"\n     策略:{strats}"
-                )
-
-        # 交易计划摘要
-        if plans:
-            msg_lines.append("")
-            msg_lines.append(f"📋 交易计划 Top 10（共 {plan_count} 条）")
-            # plans 是 dict 列表
-            for i, pl in enumerate(plans[:10], 1):
-                code = pl.get('ts_code', '')
-                trigger = pl.get('trigger_type', '')
-                tp = pl.get('trigger_price')
-                sl = pl.get('stop_loss')
-                tkp = pl.get('take_profit')
-                strategy = pl.get('source_strategy', '')
-                tp_str = f"触发:{tp}" if tp else ""
-                sl_str = f"止损:{sl}" if sl else ""
-                tkp_str = f"止盈:{tkp}" if tkp else ""
-                prices = " | ".join(filter(None, [tp_str, sl_str, tkp_str]))
-                msg_lines.append(
-                    f"  {i}. {code} [{trigger}]"
-                    f"\n     {prices}"
-                    f"\n     来源:{strategy}"
-                )
-
-        msg_lines.append("")
-        msg_lines.append(f"{'─' * 28}")
-        msg_lines.append("🤖 选股系统自动生成")
-
-        await notifier.send(
-            NotificationLevel.INFO,
-            f"✅ 盘后链路完成 — {target}",
-            "\n".join(msg_lines),
+        summary_text, md_content = generate_post_market_report(
+            target, elapsed, summary, picks if picks else [], plans if plans else [],
         )
-        logger.info("[Telegram通知] 已发送")
+        await notifier.send_report(
+            title=f"✅ 盘后链路完成 — {target}",
+            summary_text=summary_text,
+            markdown_content=md_content,
+            filename=f"post_market_{target}.md",
+        )
+        logger.info("[Telegram通知] 已发送（摘要 + 报告文件）")
     except Exception:
         logger.warning("[Telegram通知] 发送失败\n%s", traceback.format_exc())
 
@@ -681,6 +606,7 @@ async def retry_failed_stocks_job() -> None:
 
         success_count = 0
         fail_count = 0
+        still_failed: list[dict[str, str]] = []
         for stock in failed_stocks:
             ts_code = stock["ts_code"]
             try:
@@ -698,6 +624,7 @@ async def retry_failed_stocks_job() -> None:
                 success_count += 1
             except Exception as e:
                 fail_count += 1
+                still_failed.append({"ts_code": ts_code, "error": str(e)})
                 logger.error("[失败重试] %s 重试失败：%s", ts_code, e)
 
         elapsed = time.monotonic() - start
@@ -725,6 +652,25 @@ async def retry_failed_stocks_job() -> None:
                 "[失败重试] 完成率 %.1f%% < 阈值 %.1f%%，跳过策略",
                 completion_rate * 100, threshold * 100,
             )
+
+        # 发送 Telegram 通知（摘要 + Markdown 文件报告）
+        try:
+            from app.notification import NotificationManager
+            from app.scheduler.report import generate_retry_report
+
+            notifier = NotificationManager()
+            retried = len(failed_stocks)
+            summary_text, md_content = generate_retry_report(
+                target, retried, success_count, still_failed,
+            )
+            await notifier.send_report(
+                title=f"🔄 失败重试完成 — {target}",
+                summary_text=summary_text,
+                markdown_content=md_content,
+                filename=f"retry_{target}.md",
+            )
+        except Exception:
+            logger.warning("[Telegram通知] 失败重试通知发送失败\n%s", traceback.format_exc())
 
     finally:
         await manager.release_sync_lock()

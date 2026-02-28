@@ -1,5 +1,30 @@
 # 更新日志
 
+## 2026-02-28：Telegram 通知完整化 — 摘要 + Markdown 文件报告
+
+### 设计思路
+
+系统 4 个定时任务中，仅盘后链路有 Telegram 纯文本通知（受 4096 字符限制经常截断），全市场优化通知引用了不存在的 `app.scheduler.notify` 模块（Bug），失败重试无通知。服务器无公网，Telegram 是唯一获取运行状态的渠道。
+
+改造为：每个任务先发短摘要文本，再发完整 Markdown 文件附件，彻底解决字符数限制问题。
+
+### 代码修改清单
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `app/notification/__init__.py` | TelegramChannel 新增 `send_document()` 文件上传，NotificationManager 新增 `send_report()` 方法 |
+| 新建 | `app/scheduler/report.py` | 3 个 Markdown 报告生成函数（盘后链路/全市场优化/失败重试） |
+| 修改 | `app/scheduler/jobs.py` | 盘后通知：删除 40 行纯文本构建逻辑，改用 report 模块 + send_report；失败重试：收集失败明细 + 末尾发送通知 |
+| 修改 | `app/scheduler/market_opt_job.py` | 修复引用不存在的 `app.scheduler.notify` 模块，改用 NotificationManager + report 模块 |
+
+### 覆盖的通知场景
+
+| 任务 | 摘要文本 | Markdown 文件 |
+|------|----------|---------------|
+| 盘后链路 | 耗时/选股数/计划数/完成率 | 执行概况 + 策略分布 + 选股明细(全量) + 交易计划 + 涨跌分布 |
+| 全市场优化 | 优化策略数/成功数/评分范围 | 每个策略 Top 10 参数组合表格 |
+| 失败重试 | 重试/成功/仍失败数 | 失败明细列表（代码+错误原因） |
+
 ## 2026-02-28：盘后链路结果页面 + 全市场参数优化
 
 ### 设计思路

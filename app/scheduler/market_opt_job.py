@@ -6,6 +6,7 @@
 
 import json
 import logging
+from datetime import date
 
 from sqlalchemy import text
 
@@ -75,6 +76,7 @@ async def weekly_market_opt_job() -> None:
     auto_apply = settings.market_opt_auto_apply
 
     summary_lines: list[str] = []
+    results_summary: list[dict] = []
 
     for strategy_name, param_space in candidates:
         total_combos = count_combinations(param_space)
@@ -162,6 +164,12 @@ async def weekly_market_opt_job() -> None:
                 f"  {strategy_name}: score={best_score:.4f}, params={best_params}"
                 if best_score else f"  {strategy_name}: 无有效结果"
             )
+            results_summary.append({
+                "strategy_name": strategy_name,
+                "best_score": best_score,
+                "best_params": best_params,
+                "result_detail": result_detail,
+            })
             logger.info("策略 %s 优化完成，最佳评分 %.4f", strategy_name, best_score or 0)
 
         except Exception as e:
@@ -177,14 +185,25 @@ async def weekly_market_opt_job() -> None:
                 )
                 await session.commit()
             summary_lines.append(f"  {strategy_name}: 失败 - {e}")
+            results_summary.append({
+                "strategy_name": strategy_name,
+                "error": str(e),
+            })
 
     logger.info("=== 每周全市场参数优化完成 ===")
 
-    # 发送 Telegram 通知
-    if settings.telegram_bot_token and settings.telegram_chat_id:
-        try:
-            from app.scheduler.notify import send_telegram_message
-            msg = "📊 每周全市场参数优化完成\n\n" + "\n".join(summary_lines)
-            await send_telegram_message(msg)
-        except Exception as e:
-            logger.warning("Telegram 通知发送失败: %s", e)
+    # 发送 Telegram 通知（摘要 + Markdown 文件报告）
+    try:
+        from app.notification import NotificationManager
+        from app.scheduler.report import generate_market_opt_report
+
+        notifier = NotificationManager()
+        summary_text, md_content = generate_market_opt_report(results_summary)
+        await notifier.send_report(
+            title="📊 每周全市场参数优化完成",
+            summary_text=summary_text,
+            markdown_content=md_content,
+            filename=f"market_opt_{date.today()}.md",
+        )
+    except Exception as e:
+        logger.warning("Telegram 通知发送失败: %s", e)
