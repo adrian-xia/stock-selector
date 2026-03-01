@@ -92,6 +92,7 @@ tsc -b                                               # TypeScript 类型检查
 - 加权排序基于 5d 命中率（`strategy_hit_stats` 表），权重 [0.3, 3.0]
 - 全市场选股回放优化：`app/optimization/market_optimizer.py`，历史回放评估参数组合
 - Pipeline 缓存加速：Layer 1-2 结果写入 `pipeline_cache` 表，同一天多参数组合共享，实测 300x+ 加速
+- 基本面优化器补充：缓存模式下按交易日复用财务字段，且无基本面策略时跳过财务补充，避免 Layer 3 反复查询拖慢任务
 - 每周自动 cron（`app/scheduler/market_opt_job.py`），最佳参数自动写入 strategies 表
 
 ### API 路由

@@ -98,9 +98,10 @@ class MarketOptimizer:
         # 3. 预热缓存：对每个采样日先跑一次完整 Pipeline 填充 Layer 1-2 缓存 + 市场快照
         snapshot_cache: dict = {}
         layer_cache: dict = {}
+        finance_cache: dict = {}
         returns_cache: dict = {}  # (base_date, ts_code) -> return_5d
         logger.info("预热 Pipeline 缓存：%d 个采样日...", len(sample_dates))
-        await self._warmup_cache(strategy_name, sample_dates, snapshot_cache, layer_cache)
+        await self._warmup_cache(strategy_name, sample_dates, snapshot_cache, layer_cache, finance_cache)
         logger.info("缓存预热完成（快照缓存 %d 天）", len(snapshot_cache))
 
         # 4. 预热收益率缓存：一次性查所有采样日的 5 日收益率
@@ -117,7 +118,7 @@ class MarketOptimizer:
             async with self._semaphore:
                 try:
                     result = await self._evaluate_params(
-                        strategy_name, params, sample_dates, snapshot_cache, layer_cache, returns_cache,
+                        strategy_name, params, sample_dates, snapshot_cache, layer_cache, finance_cache, returns_cache,
                     )
                 except Exception as e:
                     logger.error("参数评估异常 params=%s: %s", params, e)
@@ -143,6 +144,7 @@ class MarketOptimizer:
         sample_dates: list[date],
         snapshot_cache: dict | None = None,
         layer_cache: dict | None = None,
+        finance_cache: dict | None = None,
     ) -> None:
         """对每个采样日执行一次完整 Pipeline，填充 Layer 1-2 缓存 + 市场快照缓存。
 
@@ -163,6 +165,7 @@ class MarketOptimizer:
                         use_cache=True,
                         snapshot_cache=snapshot_cache,
                         layer_cache=layer_cache,
+                        finance_cache=finance_cache,
                     )
                 except Exception as e:
                     logger.warning("缓存预热失败 date=%s: %s", target_date, e)
@@ -198,6 +201,7 @@ class MarketOptimizer:
         sample_dates: list[date],
         snapshot_cache: dict | None = None,
         layer_cache: dict | None = None,
+        finance_cache: dict | None = None,
         returns_cache: dict | None = None,
     ) -> MarketOptResult:
         """评估单组参数在采样交易日上的选股效果（复用 Layer 1-2 缓存 + 快照缓存）。"""
@@ -215,6 +219,7 @@ class MarketOptimizer:
                     use_cache=True,
                     snapshot_cache=snapshot_cache,
                     layer_cache=layer_cache,
+                    finance_cache=finance_cache,
                 )
 
                 if not pipeline_result.picks:

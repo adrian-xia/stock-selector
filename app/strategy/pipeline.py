@@ -676,6 +676,7 @@ async def execute_pipeline(
     use_cache: bool = False,
     snapshot_cache: dict | None = None,
     layer_cache: dict | None = None,
+    finance_cache: dict | None = None,
 ) -> PipelineResult:
     """执行完整的 5 层选股管道。
 
@@ -691,6 +692,7 @@ async def execute_pipeline(
         use_cache: 是否使用 pipeline_cache 缓存 Layer 1-2 结果（优化器专用，默认 False）
         snapshot_cache: 可选的市场快照内存缓存（优化器专用，key=target_date, value=snapshot_df）
         layer_cache: 可选的 Layer 缓存内存缓存（优化器专用，key=(target_date, layer), value=list[dict]）
+        finance_cache: 可选的财务数据内存缓存（优化器专用，key=target_date, value=finance_df）
 
     Returns:
         PipelineResult 包含选股结果和各层统计
@@ -708,6 +710,11 @@ async def execute_pipeline(
             elapsed_ms=elapsed,
             ai_enabled=False,
         )
+
+    has_fundamental_strategy = any(
+        StrategyFactory.get_meta(name).category == "fundamental"
+        for name in strategy_names
+    )
 
     async with session_factory() as session:
         # ── Layer 1: SQL 粗筛（支持缓存）──────────────────────────────
@@ -848,8 +855,17 @@ async def execute_pipeline(
             layer_stats["layer2"] = len(layer2_df)
 
         # ── Layer 3: 基本面策略筛选 ───────────────────────────────────
-        if not layer2_df.empty:
-            layer2_df = await _enrich_finance_data(session, layer2_df, target_date)
+        if has_fundamental_strategy and not layer2_df.empty:
+            if use_cache and finance_cache is not None and target_date in finance_cache:
+                fin_df = finance_cache[target_date]
+                layer2_df = layer2_df.merge(fin_df, on="ts_code", how="left")
+            else:
+                before_cols = set(layer2_df.columns)
+                layer2_df = await _enrich_finance_data(session, layer2_df, target_date)
+                if use_cache and finance_cache is not None:
+                    fin_cols = [c for c in layer2_df.columns if c not in before_cols and c != "ts_code"]
+                    if fin_cols:
+                        finance_cache[target_date] = layer2_df[["ts_code", *fin_cols]].copy()
 
         layer3_df = await _run_strategies_on_df(
             layer2_df, strategy_names, "fundamental", target_date, hit_records,
