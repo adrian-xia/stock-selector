@@ -85,7 +85,7 @@ tsc -b                                               # TypeScript 类型检查
 
 ### 策略引擎
 
-- 35 种策略：23 技术面 + 12 基本面（`app/strategy/technical/` + `app/strategy/fundamental/`）
+- 36 种策略：24 技术面 + 12 基本面（`app/strategy/technical/` + `app/strategy/fundamental/`）
 - 扁平继承自 `BaseStrategy`，通过工厂模式注册（`app/strategy/factory.py`）
 - 策略注册制：盘后链路从 `strategies` 数据库表读取启用的策略
 - Pipeline 执行：SQL 粗筛 → 技术面 → 基本面 → 加权排序（`app/strategy/pipeline.py`）

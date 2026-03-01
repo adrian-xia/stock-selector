@@ -125,6 +125,7 @@ from app.strategy.technical.first_negative_reversal import FirstNegativeReversal
 from app.strategy.technical.extreme_shrink_bottom import ExtremeShrinkBottomStrategy  # noqa: E402
 from app.strategy.technical.volume_surge_continuation import VolumeSurgeContinuationStrategy  # noqa: E402
 from app.strategy.technical.pullback_half_rule import PullbackHalfRuleStrategy  # noqa: E402
+from app.strategy.technical.peak_pullback_stabilization import PeakPullbackStabilizationStrategy  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 策略注册：基本面（12 种）
@@ -512,6 +513,27 @@ _register(StrategyMeta(
     strategy_cls=PullbackHalfRuleStrategy,
     default_params={"max_pullback_pct": 3.0, "max_vol_ratio": 0.8},
     param_space={"max_pullback_pct": (1.0, 5.0, 0.5), "max_vol_ratio": (0.5, 1.0, 0.1)},
+))
+_register(StrategyMeta(
+    name="peak-pullback-stabilization",
+    display_name="高位回落企稳",
+    category="technical",
+    description="前期主升浪后高位回落，缩量企稳后放量小阳二次启动",
+    strategy_cls=PeakPullbackStabilizationStrategy,
+    default_params={
+        "min_peak_rise_pct": 20.0, "ma_tolerance": 0.03,
+        "min_pullback_pct": 10.0, "max_pullback_pct": 35.0,
+        "max_vol_ratio": 0.8, "ma5_band": 0.025,
+        "min_pct_chg": 0.5, "max_pct_chg": 7.0, "min_signal_vol_ratio": 1.2,
+    },
+    param_space={
+        "min_pullback_pct": (8.0, 15.0, 2.0),
+        "max_pullback_pct": (25.0, 40.0, 5.0),
+        "max_vol_ratio": (0.6, 0.9, 0.1),
+        "ma5_band": (0.015, 0.035, 0.01),
+        "min_pct_chg": (0.3, 1.0, 0.35),
+        "min_signal_vol_ratio": (1.0, 1.5, 0.25),
+    },
 ))
 
 # ---------------------------------------------------------------------------
