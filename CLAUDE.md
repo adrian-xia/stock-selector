@@ -70,7 +70,7 @@ tsc -b                                               # TypeScript 类型检查
 1. 数据嗅探 — 检测 Tushare 数据是否就绪（`app/data/probe.py`）
 2. Raw 层同步 — 从 Tushare 拉取原始数据到 raw 表（`app/data/manager.py` → `sync_raw_daily`）
 3. ETL 清洗 — raw 表 → 业务表（`app/data/etl.py` → `etl_daily`）
-4. 技术指标计算 — 增量计算 MA/MACD/KDJ 等（`app/data/batch.py` → `compute_incremental`）
+4. 技术指标计算 — 增量计算 MA/MACD/KDJ/滚动最高价等 31 项指标（`app/data/batch.py` → `compute_incremental`）
 5. 策略执行 — Pipeline 执行已启用策略（`app/strategy/pipeline.py`）
 6. 命中率回填 — 回填历史选股结果的 N 日收益率（`app/strategy/pipeline.py`）
 7. 缓存刷新 — 刷新 Redis 缓存

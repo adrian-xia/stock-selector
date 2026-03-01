@@ -54,13 +54,8 @@ class PeakPullbackStabilizationStrategy(BaseStrategy):
         vol_ma5   = df.get("vol_ma5",  pd.Series(dtype=float)).astype(float).fillna(0)
         vol_ma10  = df.get("vol_ma10", pd.Series(dtype=float)).astype(float).fillna(0)
 
-        # high_60：60 日最高价，暂用 high_20 * 1.1 降级（P1 补充预计算后移除）
-        if "high_60" in df.columns:
-            high_60 = df["high_60"].astype(float).fillna(0)
-        elif "high_20" in df.columns:
-            high_60 = df["high_20"].astype(float).fillna(0) * 1.1
-        else:
-            high_60 = close * 1.25
+        # high_60：60 日最高价（从 technical_daily 预计算字段读取）
+        high_60 = df.get("high_60", pd.Series(dtype=float)).astype(float).fillna(0)
 
         # 回落幅度 = (60日高点 - 今收) / 60日高点
         pullback_pct = (high_60 - close) / high_60.replace(0, float("nan")) * 100

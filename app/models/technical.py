@@ -59,6 +59,8 @@ class TechnicalDaily(Base):
     obv: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)  # OBV 能量潮
     donchian_upper: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # 唐奇安上轨 (20)
     donchian_lower: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # 唐奇安下轨 (20)
+    high_20: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # 20 日最高价
+    high_60: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # 60 日最高价
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

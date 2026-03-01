@@ -212,7 +212,8 @@ async def _build_market_snapshot(
             td.boll_upper, td.boll_mid, td.boll_lower,
             td.vol_ma5, td.vol_ma10, td.vol_ratio,
             td.atr14,
-            td.obv, td.donchian_upper, td.donchian_lower
+            td.obv, td.donchian_upper, td.donchian_lower,
+            td.high_20, td.high_60
         FROM stock_daily sd
         LEFT JOIN technical_daily td
             ON sd.ts_code = td.ts_code AND sd.trade_date = td.trade_date
@@ -238,6 +239,7 @@ async def _build_market_snapshot(
         "vol_ma5", "vol_ma10", "vol_ratio",
         "atr14",
         "obv", "donchian_upper", "donchian_lower",
+        "high_20", "high_60",
     ]
     df = pd.DataFrame(rows, columns=columns)
 

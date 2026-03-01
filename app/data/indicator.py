@@ -7,7 +7,7 @@
 
 支持单标的计算、全市场批量计算和增量更新。
 
-指标列表（共 29 个）：
+指标列表（共 31 个）：
 - 均线：MA5, MA10, MA20, MA60, MA120, MA250
 - MACD：DIF, DEA, HIST
 - KDJ：K, D, J
@@ -16,6 +16,7 @@
 - 成交量：VOL_MA5, VOL_MA10, VOL_RATIO
 - 波动率：ATR14
 - 扩展指标：WR, CCI, BIAS, OBV, DONCHIAN_UPPER, DONCHIAN_LOWER
+- 滚动最高价：HIGH_20, HIGH_60
 """
 
 import logging
@@ -343,6 +344,19 @@ def _compute_obv(close: pd.Series, vol: pd.Series) -> pd.Series:
     return obv
 
 
+def _compute_rolling_high(high: pd.Series, period: int) -> pd.Series:
+    """计算过去 N 日最高价（含当日）。
+
+    Args:
+        high: 最高价序列
+        period: 回看周期
+
+    Returns:
+        N 日滚动最高价序列，数据不足的位置为 NaN
+    """
+    return high.rolling(window=period, min_periods=period).max()
+
+
 def _compute_donchian(
     high: pd.Series, low: pd.Series, period: int = 20
 ) -> tuple[pd.Series, pd.Series]:
@@ -423,6 +437,7 @@ def compute_indicators_generic(df: pd.DataFrame) -> pd.DataFrame:
             "atr14",
             "wr", "cci", "bias", "obv",
             "donchian_upper", "donchian_lower",
+            "high_20", "high_60",
         ]
         for col in indicator_cols:
             df[col] = pd.Series(dtype="float64")
@@ -499,15 +514,22 @@ def compute_indicators_generic(df: pd.DataFrame) -> pd.DataFrame:
     result["donchian_upper"], result["donchian_lower"] = _compute_donchian(high, low, period=20)
     indicator_times["DONCHIAN"] = time.time() - donchian_start
 
+    # --- 滚动最高价 ---
+    rh_start = time.time()
+    result["high_20"] = _compute_rolling_high(high, 20)
+    result["high_60"] = _compute_rolling_high(high, 60)
+    indicator_times["ROLLING_HIGH"] = time.time() - rh_start
+
     # 记录总耗时和慢速指标（DEBUG 级别）
     total_time = sum(indicator_times.values())
     logger.debug(
         "[compute_indicators] 总耗时=%.3fs, MA=%.3fs, MACD=%.3fs, KDJ=%.3fs, RSI=%.3fs, "
-        "BOLL=%.3fs, VOL=%.3fs, ATR=%.3fs, WR=%.3fs, CCI=%.3fs, BIAS=%.3fs, OBV=%.3fs, DONCHIAN=%.3fs",
+        "BOLL=%.3fs, VOL=%.3fs, ATR=%.3fs, WR=%.3fs, CCI=%.3fs, BIAS=%.3fs, OBV=%.3fs, "
+        "DONCHIAN=%.3fs, ROLLING_HIGH=%.3fs",
         total_time, indicator_times["MA"], indicator_times["MACD"], indicator_times["KDJ"],
         indicator_times["RSI"], indicator_times["BOLL"], indicator_times["VOL"], indicator_times["ATR"],
         indicator_times["WR"], indicator_times["CCI"], indicator_times["BIAS"],
-        indicator_times["OBV"], indicator_times["DONCHIAN"],
+        indicator_times["OBV"], indicator_times["DONCHIAN"], indicator_times["ROLLING_HIGH"],
     )
 
     # 检测慢速指标（>0.1 秒）
@@ -559,6 +581,7 @@ INDICATOR_COLUMNS = [
     "atr14",
     "wr", "cci", "bias", "obv",
     "donchian_upper", "donchian_lower",
+    "high_20", "high_60",
 ]
 
 
