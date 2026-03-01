@@ -136,7 +136,7 @@ def generate_post_market_report(
         md.append("")
 
     # 涨跌分布
-    if picks:
+    if picks and len(picks) > 0:
         up = sum(1 for p in picks if p.pct_chg > 0)
         down = sum(1 for p in picks if p.pct_chg < 0)
         flat = sum(1 for p in picks if p.pct_chg == 0)

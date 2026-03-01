@@ -106,6 +106,7 @@ tsc -b                                               # TypeScript 类型检查
 - **COPY 批量写入**：`app/data/copy_writer.py`，临时表 → COPY → UPSERT 三步法
 - **Redis 降级**：Redis 不可用时自动降级到数据库直查
 - **优雅关闭**：lifespan shutdown 阶段等待任务完成（30 秒超时）
+- **任务状态回收**：`run_post_market_chain` 所有退出路径（非交易日/锁占用/异常）均调用 `TaskLogger.finish()`，防止僵尸 running 记录
 
 ## 技术栈
 

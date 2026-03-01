@@ -32,6 +32,7 @@ class TestRunPostMarketChain:
         mock_mgr.acquire_sync_lock.assert_not_called()
 
     @_mock_task_logger
+    @patch("app.scheduler.jobs.settings")
     @patch("app.scheduler.jobs.pipeline_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs.cache_refresh_step", new_callable=AsyncMock)
     @patch("app.scheduler.jobs._build_manager")
@@ -40,9 +41,15 @@ class TestRunPostMarketChain:
         mock_build: MagicMock,
         mock_cache: AsyncMock,
         mock_pipeline: AsyncMock,
+        mock_settings: MagicMock,
         mock_tl: AsyncMock,
     ) -> None:
         """交易日应按顺序执行全部步骤（含完整性门控通过）。"""
+        # 配置 settings mock
+        mock_settings.news_crawl_enabled = False
+        mock_settings.data_completeness_threshold = 0.95
+        mock_settings.pipeline_completeness_deadline = "23:59"
+
         mock_mgr = AsyncMock()
         mock_mgr.is_trade_day.return_value = True
         mock_mgr.acquire_sync_lock.return_value = True
@@ -51,11 +58,13 @@ class TestRunPostMarketChain:
         mock_mgr.init_sync_progress.return_value = {"inserted": 0}
         mock_mgr.sync_delisted_status.return_value = {"updated": 0}
         mock_mgr.get_stocks_needing_sync.return_value = ["600519.SH"]
+        mock_mgr.sync_raw_tables.return_value = {}
         mock_mgr.get_sync_summary.return_value = {
             "total": 100, "data_done": 98, "indicator_done": 98,
             "failed": 0, "completion_rate": 0.98,
         }
         mock_build.return_value = mock_mgr
+        mock_pipeline.return_value = []
 
         target = date(2024, 1, 8)
         await run_post_market_chain(target)
@@ -64,7 +73,7 @@ class TestRunPostMarketChain:
         mock_mgr.reset_stale_status.assert_called_once()
         mock_mgr.init_sync_progress.assert_called_once()
         mock_mgr.sync_delisted_status.assert_called_once()
-        mock_mgr.process_stocks_batch.assert_called_once()
+        mock_mgr.sync_daily_by_date.assert_called_once_with([target])
         mock_pipeline.assert_called_once_with(target)
         mock_mgr.release_sync_lock.assert_called_once()
 

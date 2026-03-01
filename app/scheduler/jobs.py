@@ -60,11 +60,19 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
     is_trading = await manager.is_trade_day(target)
     if not is_trading:
         logger.info("[盘后链路] 非交易日，跳过：%s", target)
+        await _task_logger.finish(
+            log_id, status="skipped",
+            result_summary={"reason": "非交易日"},
+        )
         return
 
     # 获取同步锁
     if not await manager.acquire_sync_lock():
         logger.warning("[盘后链路] 同步锁被占用，跳过：%s", target)
+        await _task_logger.finish(
+            log_id, status="skipped",
+            result_summary={"reason": "同步锁被占用"},
+        )
         return
 
     try:
@@ -391,6 +399,17 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         # 步骤 6：完整性告警（超过截止时间且有失败记录）
         _check_completeness_deadline(summary, target)
 
+    except Exception:
+        elapsed = time.monotonic() - chain_start
+        logger.error(
+            "[盘后链路] 未预期异常，耗时 %.1fs\n%s",
+            elapsed, traceback.format_exc(),
+        )
+        await _task_logger.finish(
+            log_id, status="failed",
+            error_message=traceback.format_exc(),
+        )
+        raise
     finally:
         await manager.release_sync_lock()
 
