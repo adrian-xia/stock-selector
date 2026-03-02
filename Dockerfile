@@ -1,7 +1,7 @@
 # ============================================
 # Stage 1: 前端构建
 # ============================================
-FROM node:22-alpine AS frontend-build
+FROM docker.m.daocloud.io/library/node:22-alpine AS frontend-build
 
 WORKDIR /build/web
 
@@ -16,7 +16,7 @@ RUN pnpm build
 # ============================================
 # Stage 2: 运行时（Python + nginx + supervisor）
 # ============================================
-FROM python:3.13-slim
+FROM docker.m.daocloud.io/library/python:3.13-slim
 
 # 设置时区为 Asia/Shanghai
 ENV TZ=Asia/Shanghai
