@@ -251,7 +251,10 @@ docker-compose up -d
 # 3. 查看日志
 docker-compose logs -f
 
-# 4. 停止服务
+# 4. 重新构建并启动（修改 Dockerfile 后）
+docker-compose up -d --build
+
+# 5. 停止服务
 docker-compose down
 ```
 
@@ -259,6 +262,7 @@ docker-compose down
 - 前端：http://localhost:5173 (nginx)
 - 后端 API：http://localhost:8000 (uvicorn)
 - 使用 supervisord 管理多进程
+- 容器时区：Asia/Shanghai（确保定时任务正确执行）
 
 注意：Docker 部署需要外部 PostgreSQL 和 Redis，通过 `host.docker.internal` 访问宿主机服务。
 

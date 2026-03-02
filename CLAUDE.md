@@ -203,9 +203,14 @@ uv sync && uv run alembic upgrade head && uv run python -m scripts.init_data
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # Docker 部署
-docker-compose up -d  # 启动容器（前后端 + supervisord）
+docker-compose up -d --build  # 构建并启动容器（前后端 + supervisord）
 docker-compose logs -f  # 查看日志
 docker-compose down  # 停止服务
+
+# Docker 注意事项
+# - 容器时区已设置为 Asia/Shanghai，确保定时任务正确执行
+# - 需要外部 PostgreSQL 和 Redis，通过 host.docker.internal 访问宿主机
+# - 修改 Dockerfile 后需要 --build 重新构建镜像
 ```
 
 ## 不做

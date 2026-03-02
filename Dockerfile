@@ -18,9 +18,13 @@ RUN pnpm build
 # ============================================
 FROM python:3.13-slim
 
+# 设置时区为 Asia/Shanghai
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # 系统依赖
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends nginx supervisor && \
+    apt-get install -y --no-install-recommends nginx supervisor tzdata && \
     rm -rf /var/lib/apt/lists/*
 
 # 安装 uv
