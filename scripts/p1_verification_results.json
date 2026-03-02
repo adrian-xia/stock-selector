@@ -1,0 +1,43 @@
+{
+  "field_check": {
+    "total": 5471,
+    "has_high_20": 5471,
+    "has_high_60": 5471,
+    "high_20_coverage": "100.0%",
+    "high_60_coverage": "100.0%",
+    "avg_high_20": 33.55,
+    "avg_high_60": 35.28
+  },
+  "single_day": {
+    "target_date": "2026-02-27",
+    "picks_count": 1,
+    "layer_stats": {
+      "layer1": 5299,
+      "layer2": 1,
+      "layer3": 1,
+      "layer4": 1
+    },
+    "elapsed_ms": 1065,
+    "picks": [
+      {
+        "ts_code": "300871.SZ",
+        "name": "回盛生物",
+        "close": 27.48,
+        "pct_chg": 1.4022,
+        "score": 1.0
+      }
+    ]
+  },
+  "backtest": {
+    "period": "2024-01-01 ~ 2026-02-28",
+    "total_trade_days": 519,
+    "active_days": 248,
+    "total_picks": 843,
+    "avg_picks_per_active_day": 3.4,
+    "max_picks_per_day": 50,
+    "elapsed_seconds": 304.8,
+    "hit_stats": {
+      "note": "无已回填的收益率数据（需等待命中率回填任务运行）"
+    }
+  }
+}

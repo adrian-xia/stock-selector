@@ -73,14 +73,14 @@ class TestStrategyMetaParamSpace:
         meta = StrategyFactory.get_meta("macd-golden")
         assert meta.param_space == {} or not meta.param_space
 
-    def test_28_strategies_registered(self) -> None:
-        """确认 28 种策略已注册。"""
-        assert len(STRATEGY_REGISTRY) == 28
+    def test_36_strategies_registered(self) -> None:
+        """确认 36 种策略已注册。"""
+        assert len(STRATEGY_REGISTRY) == 36
 
     def test_technical_strategies_count(self) -> None:
-        """16 种技术面策略。"""
+        """24 种技术面策略。"""
         technical = StrategyFactory.get_by_category("technical")
-        assert len(technical) == 16
+        assert len(technical) == 24
 
     def test_fundamental_strategies_count(self) -> None:
         """12 种基本面策略。"""

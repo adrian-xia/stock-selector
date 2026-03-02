@@ -201,6 +201,11 @@ uv run python -m scripts.package
 # 服务器部署
 uv sync && uv run alembic upgrade head && uv run python -m scripts.init_data
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Docker 部署
+docker-compose up -d  # 启动容器（前后端 + supervisord）
+docker-compose logs -f  # 查看日志
+docker-compose down  # 停止服务
 ```
 
 ## 不做

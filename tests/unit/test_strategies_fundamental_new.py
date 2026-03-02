@@ -333,16 +333,16 @@ class TestQualityScoreStrategy:
 class TestStrategyFactoryFundamentalExpanded:
     """策略工厂基本面扩展验证。"""
 
-    def test_registry_has_28_strategies(self) -> None:
-        assert len(STRATEGY_REGISTRY) == 28
+    def test_registry_has_36_strategies(self) -> None:
+        assert len(STRATEGY_REGISTRY) == 36
 
     def test_12_fundamental_strategies(self) -> None:
         fundamental = [m for m in STRATEGY_REGISTRY.values() if m.category == "fundamental"]
         assert len(fundamental) == 12
 
-    def test_16_technical_strategies(self) -> None:
+    def test_24_technical_strategies(self) -> None:
         technical = [m for m in STRATEGY_REGISTRY.values() if m.category == "technical"]
-        assert len(technical) == 16
+        assert len(technical) == 24
 
     def test_new_strategies_registered(self) -> None:
         new_names = [

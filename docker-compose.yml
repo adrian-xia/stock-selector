@@ -1,0 +1,19 @@
+services:
+  stock-selector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stock-selector
+    env_file:
+      - docker/.env.docker
+    ports:
+      - "5173:5173"   # 前端（nginx）
+      - "8000:8000"   # 后端 API（uvicorn）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"

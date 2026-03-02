@@ -1,0 +1,47 @@
+# Python
+.venv/
+.uv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Node
+web/node_modules/
+web/dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (宿主机配置，容器用 docker/.env.docker)
+.env
+.env.prod
+.env.dev.bak
+
+# Claude
+.claude/
+
+# Logs
+logs/
+
+# Docker 自身
+docker-compose.yml
+Dockerfile
+
+# 测试 & 文档
+tests/
+docs/
+openspec/
+scripts/p1_verification_results.json

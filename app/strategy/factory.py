@@ -467,7 +467,10 @@ _register(StrategyMeta(
     description="上升趋势中缩量上涨，筹码锁定良好",
     strategy_cls=ShrinkVolumeRiseStrategy,
     default_params={"max_vol_ratio": 0.8, "min_pct_chg": 0.5},
-    param_space={"max_vol_ratio": (0.4, 1.0, 0.1), "min_pct_chg": (0.0, 2.0, 0.5)},
+    param_space={
+        "max_vol_ratio": {"type": "float", "min": 0.4, "max": 1.0, "step": 0.1},
+        "min_pct_chg": {"type": "float", "min": 0.0, "max": 2.0, "step": 0.5},
+    },
 ))
 _register(StrategyMeta(
     name="volume-price-stable",
@@ -476,7 +479,11 @@ _register(StrategyMeta(
     description="量缩价稳，抛压耗尽的底部企稳信号",
     strategy_cls=VolumePriceStableStrategy,
     default_params={"max_vol_ratio": 0.5, "max_pct_chg": 2.0, "ma_position": 1.02},
-    param_space={"max_vol_ratio": (0.3, 0.8, 0.1), "max_pct_chg": (1.0, 3.0, 0.5), "ma_position": (0.98, 1.05, 0.01)},
+    param_space={
+        "max_vol_ratio": {"type": "float", "min": 0.3, "max": 0.8, "step": 0.1},
+        "max_pct_chg": {"type": "float", "min": 1.0, "max": 3.0, "step": 0.5},
+        "ma_position": {"type": "float", "min": 0.98, "max": 1.05, "step": 0.01},
+    },
 ))
 _register(StrategyMeta(
     name="first-negative-reversal",
@@ -485,7 +492,10 @@ _register(StrategyMeta(
     description="强势股首阴后阳线反包，多头重新占优",
     strategy_cls=FirstNegativeReversalStrategy,
     default_params={"min_pct_chg": 2.0, "min_vol_ratio": 1.0},
-    param_space={"min_pct_chg": (1.0, 4.0, 0.5), "min_vol_ratio": (0.8, 2.0, 0.2)},
+    param_space={
+        "min_pct_chg": {"type": "float", "min": 1.0, "max": 4.0, "step": 0.5},
+        "min_vol_ratio": {"type": "float", "min": 0.8, "max": 2.0, "step": 0.2},
+    },
 ))
 _register(StrategyMeta(
     name="extreme-shrink-bottom",
@@ -494,7 +504,10 @@ _register(StrategyMeta(
     description="极端缩量+低换手率，阶段性底部信号",
     strategy_cls=ExtremeShrinkBottomStrategy,
     default_params={"extreme_ratio": 0.3, "max_turnover": 1.0},
-    param_space={"extreme_ratio": (0.1, 0.5, 0.05), "max_turnover": (0.5, 2.0, 0.25)},
+    param_space={
+        "extreme_ratio": {"type": "float", "min": 0.1, "max": 0.5, "step": 0.05},
+        "max_turnover": {"type": "float", "min": 0.5, "max": 2.0, "step": 0.25},
+    },
 ))
 _register(StrategyMeta(
     name="volume-surge-continuation",
@@ -503,7 +516,11 @@ _register(StrategyMeta(
     description="资金加速流入，量能持续放大的趋势加速信号",
     strategy_cls=VolumeSurgeContinuationStrategy,
     default_params={"surge_ratio": 2.0, "vol_ma_ratio": 1.2, "min_pct_chg": 1.0},
-    param_space={"surge_ratio": (1.5, 3.0, 0.25), "vol_ma_ratio": (1.0, 1.5, 0.1), "min_pct_chg": (0.5, 2.0, 0.25)},
+    param_space={
+        "surge_ratio": {"type": "float", "min": 1.5, "max": 3.0, "step": 0.25},
+        "vol_ma_ratio": {"type": "float", "min": 1.0, "max": 1.5, "step": 0.1},
+        "min_pct_chg": {"type": "float", "min": 0.5, "max": 2.0, "step": 0.25},
+    },
 ))
 _register(StrategyMeta(
     name="pullback-half-rule",
@@ -512,7 +529,10 @@ _register(StrategyMeta(
     description="多头排列中小幅回调不超半分位，多头力量仍强",
     strategy_cls=PullbackHalfRuleStrategy,
     default_params={"max_pullback_pct": 3.0, "max_vol_ratio": 0.8},
-    param_space={"max_pullback_pct": (1.0, 5.0, 0.5), "max_vol_ratio": (0.5, 1.0, 0.1)},
+    param_space={
+        "max_pullback_pct": {"type": "float", "min": 1.0, "max": 5.0, "step": 0.5},
+        "max_vol_ratio": {"type": "float", "min": 0.5, "max": 1.0, "step": 0.1},
+    },
 ))
 _register(StrategyMeta(
     name="peak-pullback-stabilization",
@@ -527,12 +547,12 @@ _register(StrategyMeta(
         "min_pct_chg": 0.5, "max_pct_chg": 7.0, "min_signal_vol_ratio": 1.2,
     },
     param_space={
-        "min_pullback_pct": (8.0, 15.0, 2.0),
-        "max_pullback_pct": (25.0, 40.0, 5.0),
-        "max_vol_ratio": (0.6, 0.9, 0.1),
-        "ma5_band": (0.015, 0.035, 0.01),
-        "min_pct_chg": (0.3, 1.0, 0.35),
-        "min_signal_vol_ratio": (1.0, 1.5, 0.25),
+        "min_pullback_pct": {"type": "float", "min": 8.0, "max": 15.0, "step": 2.0},
+        "max_pullback_pct": {"type": "float", "min": 25.0, "max": 40.0, "step": 5.0},
+        "max_vol_ratio": {"type": "float", "min": 0.6, "max": 0.9, "step": 0.1},
+        "ma5_band": {"type": "float", "min": 0.015, "max": 0.035, "step": 0.01},
+        "min_pct_chg": {"type": "float", "min": 0.3, "max": 1.0, "step": 0.35},
+        "min_signal_vol_ratio": {"type": "float", "min": 1.0, "max": 1.5, "step": 0.25},
     },
 ))
 

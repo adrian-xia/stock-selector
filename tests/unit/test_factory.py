@@ -9,14 +9,14 @@ from app.strategy.base import BaseStrategy
 class TestStrategyRegistry:
     """测试策略注册表。"""
 
-    def test_registry_has_28_strategies(self) -> None:
-        """注册表应包含 28 种策略。"""
-        assert len(STRATEGY_REGISTRY) == 28
+    def test_registry_has_36_strategies(self) -> None:
+        """注册表应包含 36 种策略。"""
+        assert len(STRATEGY_REGISTRY) == 36
 
-    def test_16_technical_strategies(self) -> None:
-        """应有 16 种技术面策略。"""
+    def test_24_technical_strategies(self) -> None:
+        """应有 24 种技术面策略。"""
         technical = [m for m in STRATEGY_REGISTRY.values() if m.category == "technical"]
-        assert len(technical) == 16
+        assert len(technical) == 24
 
     def test_12_fundamental_strategies(self) -> None:
         """应有 12 种基本面策略。"""
@@ -49,7 +49,7 @@ class TestStrategyFactoryGetAll:
 
     def test_returns_all(self) -> None:
         result = StrategyFactory.get_all()
-        assert len(result) == 28
+        assert len(result) == 36
         assert all(isinstance(m, StrategyMeta) for m in result)
 
 
@@ -58,7 +58,7 @@ class TestStrategyFactoryGetByCategory:
 
     def test_filter_technical(self) -> None:
         result = StrategyFactory.get_by_category("technical")
-        assert len(result) == 16
+        assert len(result) == 24
         assert all(m.category == "technical" for m in result)
 
     def test_filter_fundamental(self) -> None:

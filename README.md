@@ -236,6 +236,32 @@ uv run python -m scripts.init_data
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+### Docker 部署
+
+项目提供了 Docker 部署配置，支持单容器运行前后端服务。
+
+```bash
+# 1. 配置环境变量
+cp docker/.env.docker docker/.env.docker.local
+vim docker/.env.docker.local  # 填入数据库连接、Tushare Token 等
+
+# 2. 构建并启动容器
+docker-compose up -d
+
+# 3. 查看日志
+docker-compose logs -f
+
+# 4. 停止服务
+docker-compose down
+```
+
+容器内服务：
+- 前端：http://localhost:5173 (nginx)
+- 后端 API：http://localhost:8000 (uvicorn)
+- 使用 supervisord 管理多进程
+
+注意：Docker 部署需要外部 PostgreSQL 和 Redis，通过 `host.docker.internal` 访问宿主机服务。
+
 ## 运维管理
 
 ### 服务管理
