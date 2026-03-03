@@ -1,7 +1,7 @@
 """Codex API 客户端。
 
-封装 OpenAI 兼容 API，提供异步聊天调用、JSON 解析、超时和重试。
-支持自定义 base_url 和 thinking 参数。
+封装 gmn.chuangzuoli.com 专有协议，提供异步聊天调用、JSON 解析、超时和重试。
+使用 /v1/responses 端点和 input 数组格式。
 """
 
 import asyncio
@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any
 
-from openai import AsyncOpenAI
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +45,12 @@ class CodexResponseParseError(CodexError):
 
 
 class CodexClient:
-    """Codex 异步客户端（OpenAI 兼容 API）。
+    """Codex 异步客户端（gmn.chuangzuoli.com 专有协议）。
 
     Args:
         api_key: API 密钥
-        base_url: API 基础 URL
-        model_id: 模型标识符
+        base_url: API 基础 URL（默认 https://gmn.chuangzuoli.com）
+        model_id: 模型标识符（如 gpt-5.3-codex）
         timeout: 请求超时秒数
         max_retries: 瞬态错误重试次数
         thinking_default: 思考模式（xhigh/high/medium/low）
@@ -59,12 +59,14 @@ class CodexClient:
     def __init__(
         self,
         api_key: str,
-        base_url: str = "https://gmn.chuangzuoli.com/v1",
+        base_url: str = "https://gmn.chuangzuoli.com",
         model_id: str = "gpt-5.3-codex",
         timeout: int = 30,
         max_retries: int = 2,
         thinking_default: str = "xhigh",
     ) -> None:
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
         self._model_id = model_id
         self._timeout = timeout
         self._max_retries = max_retries
@@ -75,10 +77,12 @@ class CodexClient:
             "total_tokens": 0,
         }
 
-        self._client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
         )
 
     async def chat(self, prompt: str, max_tokens: int = 2000, response_format: str = "text") -> str:
@@ -99,33 +103,58 @@ class CodexClient:
         last_error: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                kwargs = {
+                # 构造专有协议请求体
+                payload = {
                     "model": self._model_id,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                    "extra_body": {"thinkingDefault": self._thinking_default},
+                    "input": [
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": prompt,
+                                }
+                            ],
+                        }
+                    ],
                 }
 
-                # 如果需要 JSON 格式，添加 response_format
+                # 如果需要 JSON 格式，添加到 payload
                 if response_format == "json_object":
-                    kwargs["response_format"] = {"type": "json_object"}
+                    payload["text"] = {"format": {"type": "json_object"}}
 
-                response = await asyncio.wait_for(
-                    self._client.chat.completions.create(**kwargs),
-                    timeout=self._timeout,
-                )
+                # 发送请求到 /v1/responses 端点
+                url = f"{self._base_url}/v1/responses"
+                response = await self._client.post(url, json=payload)
+                response.raise_for_status()
+
+                # 解析响应
+                data = response.json()
 
                 # 更新 token 用量
-                if response.usage:
+                if "usage" in data:
+                    usage = data["usage"]
                     self._last_usage = {
-                        "prompt_tokens": response.usage.prompt_tokens or 0,
-                        "completion_tokens": response.usage.completion_tokens or 0,
-                        "total_tokens": response.usage.total_tokens or 0,
+                        "prompt_tokens": usage.get("input_tokens", 0),
+                        "completion_tokens": usage.get("output_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
                     }
 
-                return response.choices[0].message.content or ""
+                # 提取响应文本
+                # 响应格式：{"output": [{"type": "message", "content": [{"type": "output_text", "text": "..."}]}]}
+                if "output" in data and len(data["output"]) > 0:
+                    output = data["output"][0]
+                    if "content" in output and len(output["content"]) > 0:
+                        content = output["content"][0]
+                        if content.get("type") == "output_text":
+                            return content.get("text", "")
 
-            except asyncio.TimeoutError:
+                # 如果格式不符合预期，返回原始 JSON
+                logger.warning("Codex 响应格式未知，返回原始 JSON: %s", data)
+                return json.dumps(data, ensure_ascii=False)
+
+            except httpx.TimeoutException:
                 raise CodexTimeoutError(
                     f"Codex API 请求超时（{self._timeout}s）"
                 )
@@ -171,3 +200,7 @@ class CodexClient:
     def get_last_usage(self) -> dict[str, int]:
         """返回最近一次 API 调用的 token 用量。"""
         return self._last_usage.copy()
+
+    async def close(self) -> None:
+        """关闭 HTTP 客户端连接。"""
+        await self._client.aclose()
