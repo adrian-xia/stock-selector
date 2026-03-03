@@ -117,7 +117,8 @@ tsc -b                                               # TypeScript 类型检查
 | PostgreSQL + TimescaleDB（可选） | Vite 7 + pnpm |
 | Redis + hiredis | React Query 5 + Zustand 5 |
 | Backtrader（回测） | React Router 7 |
-| APScheduler（定时任务） | Axios |
+| Gemini Flash / Codex（AI 分析） | Axios |
+| APScheduler（定时任务） | — |
 | uv（包管理） | — |
 
 ## 编码规范

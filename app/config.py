@@ -86,8 +86,11 @@ class Settings(BaseSettings):
     sync_failure_retry_cron: str = "0 20 * * 1-5"     # 失败重试定时任务（周一至周五 20:00）
     pipeline_completeness_deadline: str = "18:00"      # 完整性告警截止时间
 
+    # --- AI Provider (AI 提供商选择) ---
+    ai_provider: str = "gemini"                 # 可选：gemini/codex（为空则禁用 AI）
+
     # --- AI (Gemini) ---
-    gemini_api_key: str = ""                    # 为空则 AI 分析不启用
+    gemini_api_key: str = ""                    # 为空则 Gemini 不可用
     gemini_use_adc: bool = False                # 使用 Google ADC 认证（与 API Key 二选一）
     gemini_gcp_project: str = ""                # GCP 项目 ID（ADC 模式必填）
     gemini_gcp_location: str = "us-central1"    # GCP 区域（ADC 模式）
@@ -95,8 +98,19 @@ class Settings(BaseSettings):
     gemini_max_tokens: int = 4000               # 单次请求最大输出 token
     gemini_timeout: int = 30                    # 请求超时（秒）
     gemini_max_retries: int = 2                 # 瞬态错误重试次数
+
+    # --- AI (Codex) ---
+    codex_api_key: str = ""                     # 为空则 Codex 不可用
+    codex_base_url: str = "https://gmn.chuangzuoli.com/v1"  # API 基础 URL
+    codex_model_id: str = "gpt-5.3-codex"       # 模型标识符
+    codex_thinking_default: str = "xhigh"       # 思考模式：xhigh/high/medium/low
+    codex_max_tokens: int = 4000                # 单次请求最大输出 token
+    codex_timeout: int = 30                     # 请求超时（秒）
+    codex_max_retries: int = 2                  # 瞬态错误重试次数
+
+    # --- AI Common (通用配置) ---
     ai_daily_budget_usd: float = 1.0            # 每日预算上限（V1 仅日志告警）
-    ai_daily_call_limit: int = 5                 # 每日 AI 调用上限（0 表示不限制）
+    ai_daily_call_limit: int = 5                # 每日 AI 调用上限（0 表示不限制）
 
     # --- News Crawl (新闻舆情采集) ---
     news_crawl_enabled: bool = True              # 是否启用新闻采集

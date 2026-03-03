@@ -38,7 +38,7 @@
 | 数据库 | PostgreSQL + asyncpg + TimescaleDB（可选） |
 | 缓存 | Redis + hiredis |
 | 回测引擎 | Backtrader |
-| AI 分析 | OpenClaw (外部 AI 分析) |
+| AI 分析 | Gemini Flash / Codex（可选，支持多提供商切换） |
 | 定时任务 | APScheduler |
 | 包管理 | uv |
 | 前端框架 | React 19 + TypeScript |
@@ -69,7 +69,8 @@ uv sync
 
 # 复制环境变量配置
 cp .env.example .env
-# 编辑 .env，填入数据库连接（AI 分析由 OpenClaw 接管，无需 Gemini API Key）
+# 编辑 .env，填入数据库连接和 Tushare Token
+# AI 分析可选：支持 Gemini 或 Codex，通过 AI_PROVIDER 配置切换
 ```
 
 ### 配置
@@ -83,11 +84,21 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selecto
 # Tushare API Token（必填）
 TUSHARE_TOKEN=your-tushare-token-here
 
-# AI 分析（已禁用，由 OpenClaw 接管，以下配置可忽略）
-# GEMINI_API_KEY=your-gemini-api-key
+# AI 分析（可选，支持 Gemini 或 Codex）
+AI_PROVIDER=gemini                          # 可选：gemini/codex（为空则禁用 AI）
+
+# Gemini 配置
+GEMINI_API_KEY=your-gemini-api-key
+# 或使用 ADC 认证
 # GEMINI_USE_ADC=true
 # GEMINI_GCP_PROJECT=your-gcp-project-id
 # GEMINI_GCP_LOCATION=us-central1
+
+# Codex 配置
+CODEX_API_KEY=your-codex-api-key
+CODEX_BASE_URL=https://gmn.chuangzuoli.com/v1
+CODEX_MODEL_ID=gpt-5.3-codex
+CODEX_THINKING_DEFAULT=xhigh
 
 # Redis（可选，不配置则缓存功能自动降级）
 REDIS_HOST=localhost

@@ -14,6 +14,10 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.ai.clients.codex import (
+    CodexClient,
+    CodexError,
+)
 from app.ai.clients.gemini import (
     GeminiClient,
     GeminiError,
@@ -34,38 +38,62 @@ logger = logging.getLogger(__name__)
 class AIManager:
     """AI 分析编排器。
 
-    延迟初始化 GeminiClient，未配置 API Key 且未启用 ADC 时自动禁用。
+    支持多个 AI 提供商（Gemini/Codex），根据配置选择。
+    延迟初始化客户端，未配置时自动禁用。
     支持结果持久化写入、每日调用上限控制和 Token 用量记录。
 
     Args:
-        ai_settings: 应用配置（包含 Gemini 相关字段）
+        ai_settings: 应用配置（包含 AI 相关字段）
     """
 
     def __init__(self, ai_settings: Settings) -> None:
         self._settings = ai_settings
-        self._client: GeminiClient | None = None
-        self._enabled = bool(ai_settings.gemini_api_key) or bool(ai_settings.gemini_use_adc)
+        self._client: GeminiClient | CodexClient | None = None
+        self._provider = ai_settings.ai_provider.lower()
 
-        if not self._enabled:
-            logger.warning("AI 分析未启用：GEMINI_API_KEY 未配置且 ADC 未启用")
+        # 检查是否启用 AI
+        if self._provider == "gemini":
+            self._enabled = bool(ai_settings.gemini_api_key) or bool(ai_settings.gemini_use_adc)
+            if not self._enabled:
+                logger.warning("AI 分析未启用：GEMINI_API_KEY 未配置且 ADC 未启用")
+        elif self._provider == "codex":
+            self._enabled = bool(ai_settings.codex_api_key)
+            if not self._enabled:
+                logger.warning("AI 分析未启用：CODEX_API_KEY 未配置")
+        else:
+            self._enabled = False
+            if self._provider:
+                logger.warning("AI 分析未启用：未知的 AI_PROVIDER=%s", self._provider)
 
     @property
     def is_enabled(self) -> bool:
         """AI 分析是否启用。"""
         return self._enabled
 
-    def _get_client(self) -> GeminiClient:
-        """延迟初始化并返回 GeminiClient。"""
+    def _get_client(self) -> GeminiClient | CodexClient:
+        """延迟初始化并返回 AI 客户端。"""
         if self._client is None:
-            self._client = GeminiClient(
-                api_key=self._settings.gemini_api_key or None,
-                model_id=self._settings.gemini_model_id,
-                timeout=self._settings.gemini_timeout,
-                max_retries=self._settings.gemini_max_retries,
-                use_adc=self._settings.gemini_use_adc,
-                gcp_project=self._settings.gemini_gcp_project,
-                gcp_location=self._settings.gemini_gcp_location,
-            )
+            if self._provider == "gemini":
+                self._client = GeminiClient(
+                    api_key=self._settings.gemini_api_key or None,
+                    model_id=self._settings.gemini_model_id,
+                    timeout=self._settings.gemini_timeout,
+                    max_retries=self._settings.gemini_max_retries,
+                    use_adc=self._settings.gemini_use_adc,
+                    gcp_project=self._settings.gemini_gcp_project,
+                    gcp_location=self._settings.gemini_gcp_location,
+                )
+            elif self._provider == "codex":
+                self._client = CodexClient(
+                    api_key=self._settings.codex_api_key,
+                    base_url=self._settings.codex_base_url,
+                    model_id=self._settings.codex_model_id,
+                    timeout=self._settings.codex_timeout,
+                    max_retries=self._settings.codex_max_retries,
+                    thinking_default=self._settings.codex_thinking_default,
+                )
+            else:
+                raise ValueError(f"不支持的 AI 提供商: {self._provider}")
         return self._client
 
     async def _check_daily_limit(self, trade_date: date) -> bool:
@@ -140,11 +168,17 @@ class AIManager:
             # 构建 Prompt
             prompt = build_analysis_prompt(picks, market_data, target_date)
 
-            # 调用 Gemini
+            # 调用 AI 客户端
             client = self._get_client()
-            raw = await client.chat_json(
-                prompt, max_tokens=self._settings.gemini_max_tokens
+
+            # 根据提供商选择最大 token 数
+            max_tokens = (
+                self._settings.gemini_max_tokens
+                if self._provider == "gemini"
+                else self._settings.codex_max_tokens
             )
+
+            raw = await client.chat_json(prompt, max_tokens=max_tokens)
 
             # 校验响应
             response = AIAnalysisResponse.model_validate(raw)
@@ -155,11 +189,11 @@ class AIManager:
             # 合并 AI 评分到 picks
             return self._merge_scores(picks, response)
 
-        except GeminiError as exc:
-            logger.warning("AI 分析失败，跳过 AI 评分：%s", exc)
+        except (GeminiError, CodexError) as exc:
+            logger.warning("AI 分析失败（%s），跳过 AI 评分：%s", self._provider, exc)
             return picks
         except Exception as exc:
-            logger.warning("AI 响应解析失败，跳过 AI 评分：%s", exc)
+            logger.warning("AI 响应解析失败（%s），跳过 AI 评分：%s", self._provider, exc)
             return picks
 
     def _merge_scores(
