@@ -138,11 +138,11 @@ tail -50 ~/Library/Logs/stock-selector-frontend.log
 
 # 或手动加载环境变量启动后端
 export $(cat .env.prod | grep -v '^#' | xargs)
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # 手动启动前端（在另一个终端）
 cd web
-pnpm dev
+pnpm dev --host 0.0.0.0 --port 5173
 ```
 
 ### 检查 launchd 状态

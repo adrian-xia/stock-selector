@@ -101,8 +101,8 @@ class Settings(BaseSettings):
 
     # --- AI (Codex) ---
     codex_api_key: str = ""                     # 为空则 Codex 不可用
-    codex_base_url: str = "https://gmn.chuangzuoli.com/v1"  # API 基础 URL
-    codex_model_id: str = "gpt-5.3-codex"       # 模型标识符
+    codex_base_url: str = "https://api.openai.com/v1"  # API 基础 URL（需兼容 OpenAI API）
+    codex_model_id: str = "gpt-4"               # 模型标识符
     codex_thinking_default: str = "xhigh"       # 思考模式：xhigh/high/medium/low
     codex_max_tokens: int = 4000                # 单次请求最大输出 token
     codex_timeout: int = 30                     # 请求超时（秒）

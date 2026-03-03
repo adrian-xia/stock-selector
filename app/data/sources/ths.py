@@ -107,7 +107,7 @@ class THSCrawler:
                     "ts_code": ts_code,
                     "title": title[:500],
                     "summary": news.get("digest", title)[:200],
-                    "pub_date": date_str,
+                    "pub_date": date.fromisoformat(date_str),
                     "url": news.get("url", ""),
                     "source": "ths",
                 })

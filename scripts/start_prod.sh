@@ -20,7 +20,7 @@ mkdir -p "$LOG_DIR"
 # 启动前端（后台）
 echo "启动前端服务..."
 cd web
-/Users/adrian/.nvm/versions/node/v24.13.0/bin/pnpm dev > "$LOG_DIR/stock-selector-frontend.log" 2>&1 &
+/Users/adrian/.nvm/versions/node/v24.13.0/bin/pnpm dev --host 0.0.0.0 --port 5173 > "$LOG_DIR/stock-selector-frontend.log" 2>&1 &
 FRONTEND_PID=$!
 echo $FRONTEND_PID > /tmp/stock-selector-frontend.pid
 echo "前端已启动 (PID: $FRONTEND_PID, 端口: 5173)"
@@ -30,4 +30,4 @@ cd ..
 
 # 启动后端（前台，使用 exec）
 echo "启动后端服务..."
-exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000

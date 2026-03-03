@@ -115,7 +115,7 @@ class SinaCrawler:
                             "ts_code": ts_code,
                             "title": text.strip()[:500],
                             "summary": text.strip()[:200],
-                            "pub_date": date_str,
+                            "pub_date": date.fromisoformat(date_str),
                             "url": "",
                             "source": "sina",
                         })

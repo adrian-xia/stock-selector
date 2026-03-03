@@ -20,9 +20,10 @@
 AI_PROVIDER=codex                            # 可选：gemini/codex（为空则禁用 AI）
 
 # --- AI (Codex) ---
-CODEX_API_KEY=your-codex-api-key-here
-CODEX_BASE_URL=https://gmn.chuangzuoli.com/v1
-CODEX_MODEL_ID=gpt-5.3-codex
+# 注意：需要使用支持标准 OpenAI API 的服务
+CODEX_API_KEY=your-api-key-here
+CODEX_BASE_URL=https://api.openai.com/v1    # 或其他兼容 OpenAI API 的服务
+CODEX_MODEL_ID=gpt-4
 CODEX_THINKING_DEFAULT=xhigh                 # 思考模式：xhigh/high/medium/low
 CODEX_MAX_TOKENS=4000
 CODEX_TIMEOUT=30
@@ -37,38 +38,38 @@ CODEX_MAX_RETRIES=2
 # 使用 Gemini
 AI_PROVIDER=gemini
 
-# 使用 Codex
+# 使用 Codex（或其他 OpenAI 兼容服务）
 AI_PROVIDER=codex
 
 # 禁用 AI
 AI_PROVIDER=
 ```
 
-### 4. API 测试问题
+## 重要说明
 
-**当前状态**：测试 API Key 时遇到 403 Forbidden 错误。
+### 关于 API 兼容性
 
-**可能原因**：
-1. API Key 无效或权限不足
-2. IP 地址未加入白名单
-3. Cloudflare 防火墙规则阻止请求
-4. 服务端配置问题
+**CodexClient 实现基于标准 OpenAI API 协议**，可以与以下服务配合使用：
 
-**测试结果**：
-- ✅ 代码实现完成
-- ✅ 配置项添加完成
-- ✅ 依赖安装完成
-- ❌ API 连接测试失败（403 Forbidden）
+✅ **兼容的服务**：
+- OpenAI 官方 API（`https://api.openai.com/v1`）
+- Azure OpenAI Service
+- 其他支持标准 OpenAI API 协议的服务
 
-**建议**：
-1. 检查 API Key 是否有效
-2. 联系 API 提供商确认 IP 白名单
-3. 确认 base_url 是否正确
-4. 检查是否需要特殊的认证方式
+❌ **不兼容的服务**：
+- codex-cli 专用的 `https://gmn.chuangzuoli.com`（使用专有协议 `wire_api = "responses"`）
 
-### 5. 代码特性
+### codex-cli vs CodexClient
 
-**CodexClient 特性**：
+- **codex-cli**：命令行工具，使用专有协议与特定服务通信
+- **CodexClient**：Python 客户端，使用标准 OpenAI API 协议
+
+两者虽然名字相似，但使用不同的通信协议，不能互换。
+
+## 代码特性
+
+### CodexClient 特性
+
 - 支持自定义 base_url
 - 支持 thinking 参数（xhigh/high/medium/low）
 - 支持 JSON 模式（response_format="json_object"）
@@ -76,19 +77,13 @@ AI_PROVIDER=
 - Token 用量统计
 - 超时控制
 
-**AIManager 特性**：
+### AIManager 特性
+
 - 多提供商支持（Gemini/Codex）
 - 延迟初始化客户端
 - 每日调用上限控制
 - 结果持久化
 - 失败降级（AI 失败不影响主流程）
-
-## 下一步
-
-1. **验证 API Key**：联系 API 提供商确认 Key 是否有效
-2. **IP 白名单**：如果需要，将服务器 IP 加入白名单
-3. **完整测试**：API Key 问题解决后，运行完整的集成测试
-4. **文档更新**：将 Codex 配置说明添加到 README.md
 
 ## 测试命令
 
@@ -96,11 +91,26 @@ AI_PROVIDER=
 # 安装依赖
 uv sync --extra dev
 
-# 测试 Codex 客户端
-export CODEX_API_KEY="your-key-here"
+# 测试 Codex 客户端（需要有效的 OpenAI API Key）
+export CODEX_API_KEY="your-openai-api-key"
 export PYTHONPATH=/Users/adrian/Developer/Codes/stock-selector
 uv run python tests/test_codex_client.py
 
 # 或使用 pytest
 uv run pytest tests/test_codex_client.py -v
+```
+
+## 生产部署
+
+```bash
+# 更新 .env 或 docker/.env.docker
+AI_PROVIDER=codex
+CODEX_API_KEY=your-production-key
+CODEX_BASE_URL=https://api.openai.com/v1
+CODEX_MODEL_ID=gpt-4
+
+# Docker 部署
+docker compose down
+docker compose up -d --build
+docker compose logs -f
 ```

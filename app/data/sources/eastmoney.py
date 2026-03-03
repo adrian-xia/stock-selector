@@ -107,7 +107,7 @@ class EastMoneyCrawler:
                     "ts_code": ts_code,
                     "title": ann.get("title", "").strip(),
                     "summary": ann.get("title", "").strip(),  # 东方财富公告无摘要，用标题
-                    "pub_date": date_str,
+                    "pub_date": date.fromisoformat(date_str),
                     "url": f"https://data.eastmoney.com/notices/detail/{em_code}/{ann.get('art_code', '')}.html",
                     "source": "eastmoney",
                 })

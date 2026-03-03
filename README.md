@@ -96,8 +96,8 @@ GEMINI_API_KEY=your-gemini-api-key
 
 # Codex 配置
 CODEX_API_KEY=your-codex-api-key
-CODEX_BASE_URL=https://gmn.chuangzuoli.com/v1
-CODEX_MODEL_ID=gpt-5.3-codex
+CODEX_BASE_URL=https://api.openai.com/v1  # 需要兼容 OpenAI API 的服务
+CODEX_MODEL_ID=gpt-4
 CODEX_THINKING_DEFAULT=xhigh
 
 # Redis（可选，不配置则缓存功能自动降级）
