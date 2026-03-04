@@ -158,6 +158,9 @@ uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
 
 # 限制并发数（避免 API 限流）
 uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07 --rate-limit 5
+
+# 修复数据完整性（重建指数/板块技术指标、回填涨跌停数据）
+uv run python -m app.data.cli fix-integrity --start 2018-01-01
 ```
 
 **数据完整性检查：** 服务启动时会自动检测最近 30 天（可配置）的数据完整性，如果发现缺失的交易日会自动补齐。可通过以下配置项控制：

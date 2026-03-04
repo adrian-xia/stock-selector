@@ -34,6 +34,7 @@ uv run python -m app.data.cli sync-daily             # 同步每日数据
 uv run python -m app.data.cli init-tushare           # 交互式数据初始化向导
 uv run python -m app.data.cli backfill-daily --start 2024-01-01 --end 2026-02-07
 uv run python -m app.data.cli cleanup-delisted       # 清理退市股数据
+uv run python -m app.data.cli fix-integrity          # 修复数据完整性（重建指数/板块技术指标）
 ```
 
 ### 测试

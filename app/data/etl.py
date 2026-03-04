@@ -330,9 +330,15 @@ def transform_tushare_index_daily(raw_rows: list[dict]) -> list[dict]:
     """
     cleaned = []
     for raw in raw_rows:
+        trade_date = parse_date(raw["trade_date"])
+        if trade_date is None:
+            continue
+        # 过滤 OHLC 不完整的行（如指数首日仅有基准值，open/high/low 为 NULL）
+        if raw.get("open") is None or raw.get("high") is None or raw.get("low") is None:
+            continue
         cleaned.append({
             "ts_code": raw["ts_code"],
-            "trade_date": parse_date(raw["trade_date"]),
+            "trade_date": trade_date,
             "open": parse_decimal(raw.get("open")),
             "high": parse_decimal(raw.get("high")),
             "low": parse_decimal(raw.get("low")),

@@ -611,6 +611,7 @@ def _build_indicator_row(ts_code: str, trade_date: date, row: pd.Series) -> dict
     """从计算结果的一行构建数据库写入字典。
 
     将 NaN 转换为 None（数据库 NULL）。
+    对超出 Numeric(12, 4) 范围的值设为 None，防止数字字段溢出。
 
     Args:
         ts_code: 股票代码
@@ -620,11 +621,21 @@ def _build_indicator_row(ts_code: str, trade_date: date, row: pd.Series) -> dict
     Returns:
         可直接写入数据库的字典
     """
+    # Numeric(20, 2) 列允许更大的值
+    _WIDE_COLUMNS = {"vol_ma5", "vol_ma10", "obv"}
+    _LIMIT_12_4 = 99999999.9999  # Numeric(12, 4) 上限
+    _LIMIT_20_2 = 999999999999999999.99  # Numeric(20, 2) 上限
+
     record: dict = {"ts_code": ts_code, "trade_date": trade_date}
     for col in INDICATOR_COLUMNS:
         val = row.get(col)
         if val is not None and pd.notna(val):
-            record[col] = round(float(val), 4)
+            fval = round(float(val), 4)
+            limit = _LIMIT_20_2 if col in _WIDE_COLUMNS else _LIMIT_12_4
+            if abs(fval) > limit:
+                record[col] = None
+            else:
+                record[col] = fval
         else:
             record[col] = None
     return record
@@ -655,14 +666,23 @@ async def _upsert_technical_rows_generic(
 
     table = target_table.__table__
 
+    # 动态获取目标表的指标列（排除主键和元数据列）
+    exclude_cols = {"ts_code", "trade_date", "updated_at", "created_at"}
+    target_indicator_cols = [
+        col.key for col in table.columns if col.key not in exclude_cols
+    ]
+
     # asyncpg 参数上限 32767，每行列数 = ts_code + trade_date + 指标列
-    cols_per_row = 2 + len(INDICATOR_COLUMNS)
+    cols_per_row = 2 + len(target_indicator_cols)
     chunk_size = 32767 // cols_per_row
 
+    # 过滤行数据，只保留目标表存在的列
+    valid_keys = set(target_indicator_cols) | {"ts_code", "trade_date"}
+
     for i in range(0, len(rows), chunk_size):
-        chunk = rows[i : i + chunk_size]
+        chunk = [{k: v for k, v in row.items() if k in valid_keys} for row in rows[i : i + chunk_size]]
         stmt = pg_insert(table).values(chunk)
-        update_dict = {col: stmt.excluded[col] for col in INDICATOR_COLUMNS}
+        update_dict = {col: stmt.excluded[col] for col in target_indicator_cols}
         update_dict["updated_at"] = text("NOW()")
         stmt = stmt.on_conflict_do_update(
             index_elements=["ts_code", "trade_date"],

@@ -327,7 +327,7 @@ def init_tushare(
     manager = _build_manager()
     start_date = date.fromisoformat(start) if start else date.fromisoformat(settings.data_start_date)
     end_date = date.fromisoformat(end) if end else date.today()
-    total_steps = 9
+    total_steps = 11
 
     async def _run() -> None:
         overall_start = time.monotonic()
@@ -481,6 +481,43 @@ def init_tushare(
         click.echo(f"✓ 技术指标计算完成：成功 {indicator_result['success']} 只，失败 {indicator_result['failed']} 只")
         click.echo()
 
+        # 步骤 10: 计算指数技术指标
+        click.echo(f"步骤 10/{total_steps}: 计算指数技术指标...")
+        from app.data.indicator import compute_all_generic
+        from app.models.index import IndexDaily, IndexTechnicalDaily
+
+        index_indicator_result = await compute_all_generic(
+            async_session_factory,
+            IndexDaily,
+            IndexTechnicalDaily,
+            code_filter_column=None,
+            code_filter_value=None,
+            progress_callback=lambda p, t: click.echo(f"[{p}/{t}] 正在计算指数技术指标...") if p % 10 == 0 else None,
+        )
+        click.echo(
+            f"✓ 指数技术指标计算完成：成功 {index_indicator_result['success']} 只，"
+            f"失败 {index_indicator_result['failed']} 只"
+        )
+        click.echo()
+
+        # 步骤 11: 计算板块技术指标
+        click.echo(f"步骤 11/{total_steps}: 计算板块技术指标...")
+        from app.models.concept import ConceptDaily, ConceptTechnicalDaily
+
+        concept_indicator_result = await compute_all_generic(
+            async_session_factory,
+            ConceptDaily,
+            ConceptTechnicalDaily,
+            code_filter_column=None,
+            code_filter_value=None,
+            progress_callback=lambda p, t: click.echo(f"[{p}/{t}] 正在计算板块技术指标...") if p % 100 == 0 else None,
+        )
+        click.echo(
+            f"✓ 板块技术指标计算完成：成功 {concept_indicator_result['success']} 只，"
+            f"失败 {concept_indicator_result['failed']} 只"
+        )
+        click.echo()
+
         # 总结
         overall_elapsed = int(time.monotonic() - overall_start)
         overall_minutes = overall_elapsed // 60
@@ -516,6 +553,176 @@ def cleanup_delisted() -> None:
             click.echo("  各表删除明细:")
             for tbl, cnt in sorted(result['tables'].items(), key=lambda x: -x[1]):
                 click.echo(f"    {tbl}: {cnt:,}")
+
+    asyncio.run(_run())
+
+
+@cli.command("fix-integrity")
+@click.option("--start", default="2018-01-01", help="开始日期 (YYYY-MM-DD)，默认 2018-01-01")
+@click.option("--end", default=None, help="结束日期 (YYYY-MM-DD)，默认今天")
+def fix_integrity(start: str, end: str | None) -> None:
+    """修复数据完整性问题：重跑 index_daily ETL、全量计算 index/concept 技术指标、回填 stk_limit。
+
+    会先清空受影响的业务表，然后从 raw 层重新 ETL 或重新计算。
+    涉及的表：index_daily, index_technical_daily, concept_technical_daily, raw_tushare_stk_limit
+    """
+    import time
+
+    start_date = date.fromisoformat(start)
+    end_date = date.fromisoformat(end) if end else date.today()
+
+    manager = _build_manager()
+
+    async def _run() -> None:
+        from sqlalchemy import text
+
+        overall_start = time.monotonic()
+
+        click.echo("=" * 60)
+        click.echo("数据完整性修复")
+        click.echo("=" * 60)
+        click.echo()
+
+        # ----------------------------------------------------------------
+        # 步骤 1: 清空 index_daily 并从 raw 层重新 ETL
+        # ----------------------------------------------------------------
+        click.echo("步骤 1/4: 重跑 index_daily ETL（清空后从 raw 层重建）...")
+        step_start = time.monotonic()
+
+        # 清空 index_daily 表
+        async with async_session_factory() as session:
+            from app.models.index import IndexDaily
+            await session.execute(text(f"TRUNCATE TABLE {IndexDaily.__tablename__} CASCADE"))
+            await session.commit()
+        click.echo("  ✓ index_daily 表已清空")
+
+        # 获取所有交易日
+        trading_dates = await manager.get_trade_calendar(start_date, end_date)
+        click.echo(f"  日期范围：{start_date} ~ {end_date}，共 {len(trading_dates)} 个交易日")
+
+        # 逐日 ETL
+        success_count = 0
+        fail_count = 0
+        for i, td in enumerate(trading_dates, 1):
+            try:
+                result = await manager.etl_index(td)
+                row_count = result.get("index_daily", 0)
+                if row_count > 0:
+                    success_count += 1
+            except Exception as e:
+                fail_count += 1
+                if fail_count <= 5:
+                    logger.warning("etl_index(%s) 失败: %s", td, e)
+            if i % 200 == 0 or i == len(trading_dates):
+                click.echo(f"  [{i}/{len(trading_dates)}] ETL 进度...")
+
+        step_elapsed = int(time.monotonic() - step_start)
+        click.echo(f"✓ index_daily ETL 完成：成功 {success_count} 天，失败 {fail_count} 天，耗时 {step_elapsed}秒")
+        click.echo()
+
+        # ----------------------------------------------------------------
+        # 步骤 2: 清空并全量计算 index_technical_daily
+        # ----------------------------------------------------------------
+        click.echo("步骤 2/4: 全量计算 index_technical_daily（清空后重建）...")
+        step_start = time.monotonic()
+
+        async with async_session_factory() as session:
+            from app.models.index import IndexTechnicalDaily
+            await session.execute(text(f"TRUNCATE TABLE {IndexTechnicalDaily.__tablename__}"))
+            await session.commit()
+        click.echo("  ✓ index_technical_daily 表已清空")
+
+        from app.data.indicator import compute_all_generic
+
+        index_result = await compute_all_generic(
+            async_session_factory,
+            IndexDaily,
+            IndexTechnicalDaily,
+            code_filter_column=None,
+            code_filter_value=None,
+            progress_callback=lambda p, t: click.echo(f"  [{p}/{t}] 计算指数技术指标...") if p % 5 == 0 else None,
+        )
+        step_elapsed = int(time.monotonic() - step_start)
+        click.echo(
+            f"✓ index_technical_daily 计算完成：成功 {index_result['success']}，"
+            f"失败 {index_result['failed']}，耗时 {step_elapsed}秒"
+        )
+        click.echo()
+
+        # ----------------------------------------------------------------
+        # 步骤 3: 清空并全量计算 concept_technical_daily
+        # ----------------------------------------------------------------
+        click.echo("步骤 3/4: 全量计算 concept_technical_daily（清空后重建）...")
+        step_start = time.monotonic()
+
+        async with async_session_factory() as session:
+            from app.models.concept import ConceptDaily, ConceptTechnicalDaily
+            await session.execute(text(f"TRUNCATE TABLE {ConceptTechnicalDaily.__tablename__}"))
+            await session.commit()
+        click.echo("  ✓ concept_technical_daily 表已清空")
+
+        concept_result = await compute_all_generic(
+            async_session_factory,
+            ConceptDaily,
+            ConceptTechnicalDaily,
+            code_filter_column=None,
+            code_filter_value=None,
+            progress_callback=lambda p, t: click.echo(f"  [{p}/{t}] 计算板块技术指标...") if p % 200 == 0 else None,
+        )
+        step_elapsed = int(time.monotonic() - step_start)
+        click.echo(
+            f"✓ concept_technical_daily 计算完成：成功 {concept_result['success']}，"
+            f"失败 {concept_result['failed']}，耗时 {step_elapsed}秒"
+        )
+        click.echo()
+
+        # ----------------------------------------------------------------
+        # 步骤 4: 全量回填 raw_tushare_stk_limit
+        # ----------------------------------------------------------------
+        click.echo("步骤 4/4: 全量回填 raw_tushare_stk_limit...")
+        step_start = time.monotonic()
+
+        # stk_limit 用 sync_raw_daily 已经会写入，但历史数据需要单独回填
+        from app.data.tushare import TushareClient
+        from app.models.raw import RawTushareStkLimit
+
+        client: TushareClient = manager._primary_client  # type: ignore[assignment]
+        stk_success = 0
+        stk_fail = 0
+
+        for i, td in enumerate(trading_dates, 1):
+            try:
+                td_str = td.strftime("%Y%m%d")
+                raw_data = await client.fetch_raw_stk_limit(td_str)
+                if raw_data:
+                    async with async_session_factory() as session:
+                        count = await manager._upsert_raw(
+                            session, RawTushareStkLimit.__table__, raw_data
+                        )
+                        await session.commit()
+                    stk_success += 1
+            except Exception as e:
+                stk_fail += 1
+                if stk_fail <= 5:
+                    logger.warning("fetch_raw_stk_limit(%s) 失败: %s", td, e)
+            if i % 100 == 0 or i == len(trading_dates):
+                click.echo(f"  [{i}/{len(trading_dates)}] stk_limit 回填进度...")
+
+        step_elapsed = int(time.monotonic() - step_start)
+        click.echo(f"✓ stk_limit 回填完成：成功 {stk_success} 天，失败 {stk_fail} 天，耗时 {step_elapsed}秒")
+        click.echo()
+
+        # ----------------------------------------------------------------
+        # 总结
+        # ----------------------------------------------------------------
+        overall_elapsed = int(time.monotonic() - overall_start)
+        overall_minutes = overall_elapsed // 60
+        overall_seconds = overall_elapsed % 60
+
+        click.echo("=" * 60)
+        click.echo("数据完整性修复完成")
+        click.echo("=" * 60)
+        click.echo(f"总耗时：{overall_minutes}分{overall_seconds}秒")
 
     asyncio.run(_run())
 

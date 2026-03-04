@@ -264,18 +264,16 @@ class TestSyncP5CoreIntegration:
         td = date(2026, 2, 18)  # 周三，非月末非季初
         result = await mgr.sync_p5_core(td)
 
-        # 验证日频补充表被调用
+        # 验证日频补充表被调用（已禁用的空表不再调用）
         mgr.sync_raw_hsgt_top10.assert_called_once_with(td)
         mgr.sync_raw_ggt_daily.assert_called_once_with(td)
         mgr.sync_raw_ccass_hold.assert_called_once_with(td)
         mgr.sync_raw_cyq_perf.assert_called_once_with(td)
-        mgr.sync_raw_slb_len.assert_called_once_with(td)
         mgr.sync_raw_limit_step.assert_called_once_with(td)
-        mgr.sync_raw_broker_recommend.assert_called_once_with(td)
 
     @pytest.mark.asyncio
     async def test_monthly_ggt_monthly_called(self):
-        """月末应调用 ggt_monthly。"""
+        """月末不再调用已禁用的 monthly/ggt_monthly。"""
         mgr, client = _make_manager()
         for attr in dir(mgr):
             if attr.startswith("sync_raw_") or attr.startswith("etl_"):
@@ -283,11 +281,12 @@ class TestSyncP5CoreIntegration:
 
         td = date(2026, 2, 28)  # 2 月最后一天
         result = await mgr.sync_p5_core(td)
-        mgr.sync_raw_ggt_monthly.assert_called_once_with(td)
+        # monthly 和 ggt_monthly 已禁用（表始终为空），不再调用
+        mgr.sync_raw_ggt_monthly.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_quarterly_static_methods_called(self):
-        """季度首个交易日应调用静态补充表方法。"""
+        """季度首个交易日应调用静态补充表方法（已禁用的除外）。"""
         mgr, client = _make_manager()
         for attr in dir(mgr):
             if attr.startswith("sync_raw_") or attr.startswith("etl_"):
@@ -298,15 +297,16 @@ class TestSyncP5CoreIntegration:
 
         mgr.sync_raw_namechange.assert_called_once()
         mgr.sync_raw_stk_managers.assert_called_once()
-        mgr.sync_raw_stk_rewards.assert_called_once()
         mgr.sync_raw_new_share.assert_called_once()
-        mgr.sync_raw_stk_list_his.assert_called_once()
         mgr.sync_raw_pledge_stat.assert_called_once()
-        mgr.sync_raw_pledge_detail.assert_called_once()
         mgr.sync_raw_repurchase.assert_called_once()
-        mgr.sync_raw_stk_surv.assert_called_once()
         mgr.sync_raw_share_float.assert_called_once_with(td)
-        mgr.sync_raw_report_rc.assert_called_once_with(td)
+        # 以下已禁用（表始终为空或需要 ts_code 必填），不再调用
+        mgr.sync_raw_stk_rewards.assert_not_called()
+        mgr.sync_raw_stk_list_his.assert_not_called()
+        mgr.sync_raw_pledge_detail.assert_not_called()
+        mgr.sync_raw_stk_surv.assert_not_called()
+        mgr.sync_raw_report_rc.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_error_isolation(self):
@@ -326,7 +326,6 @@ class TestSyncP5CoreIntegration:
         assert result["hsgt_top10"] == {"error": True}
         # 其他方法仍然被调用
         mgr.sync_raw_ggt_daily.assert_called_once_with(td)
-        mgr.sync_raw_slb_len.assert_called_once_with(td)
 
     @pytest.mark.asyncio
     async def test_non_quarterly_skips_static(self):

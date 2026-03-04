@@ -56,6 +56,7 @@ from app.models.raw import (
     RawTushareIndexWeight,
     RawTushareMoneyflow,
     RawTushareStockBasic,
+    RawTushareStkLimit,
     RawTushareTopInst,
     RawTushareTopList,
     RawTushareTradeCal,
@@ -321,28 +322,29 @@ class DataManager:
         return {"inserted": count, "source": "tushare"}
 
     async def sync_raw_daily(self, trade_date: date) -> dict:
-        """按日期获取全市场 daily + adj_factor + daily_basic 写入 raw 表。
+        """按日期获取全市场 daily + adj_factor + daily_basic + stk_limit 写入 raw 表。
 
         Args:
             trade_date: 交易日期
 
         Returns:
-            {"daily": int, "adj_factor": int, "daily_basic": int}
+            {"daily": int, "adj_factor": int, "daily_basic": int, "stk_limit": int}
         """
         from app.data.tushare import TushareClient
 
         client: TushareClient = self._primary_client  # type: ignore[assignment]
         td_str = trade_date.strftime("%Y%m%d")
 
-        # 并发获取三个接口的数据
+        # 并发获取四个接口的数据
         import asyncio
-        raw_daily, raw_adj, raw_basic = await asyncio.gather(
+        raw_daily, raw_adj, raw_basic, raw_stk_limit = await asyncio.gather(
             client.fetch_raw_daily(td_str),
             client.fetch_raw_adj_factor(td_str),
             client.fetch_raw_daily_basic(td_str),
+            client.fetch_raw_stk_limit(td_str),
         )
 
-        counts = {"daily": 0, "adj_factor": 0, "daily_basic": 0}
+        counts = {"daily": 0, "adj_factor": 0, "daily_basic": 0, "stk_limit": 0}
 
         async with self._session_factory() as session:
             if raw_daily:
@@ -357,11 +359,15 @@ class DataManager:
                 counts["daily_basic"] = await self._upsert_raw(
                     session, RawTushareDailyBasic.__table__, raw_basic
                 )
+            if raw_stk_limit:
+                counts["stk_limit"] = await self._upsert_raw(
+                    session, RawTushareStkLimit.__table__, raw_stk_limit
+                )
             await session.commit()
 
         logger.info(
-            "[sync_raw_daily] %s: daily=%d, adj_factor=%d, daily_basic=%d",
-            trade_date, counts["daily"], counts["adj_factor"], counts["daily_basic"],
+            "[sync_raw_daily] %s: daily=%d, adj_factor=%d, daily_basic=%d, stk_limit=%d",
+            trade_date, counts["daily"], counts["adj_factor"], counts["daily_basic"], counts["stk_limit"],
         )
         return counts
 
@@ -3530,21 +3536,24 @@ class DataManager:
         start = time.monotonic()
         results: dict = {}
 
-        # --- 日频 raw 同步（13 张核心表） ---
+        # --- 日频 raw 同步（10 张核心表） ---
         daily_methods = [
             ("suspend_d", self.sync_raw_suspend_d),
             ("limit_list_d", self.sync_raw_limit_list_d),
             ("margin", self.sync_raw_margin),
             ("margin_detail", self.sync_raw_margin_detail),
             ("block_trade", self.sync_raw_block_trade),
-            ("daily_share", self.sync_raw_daily_share),
+            # daily_share: Tushare 无此接口名，已禁用
+            # ("daily_share", self.sync_raw_daily_share),
             ("stk_factor", self.sync_raw_stk_factor),
             ("stk_factor_pro", self.sync_raw_stk_factor_pro),
-            ("hm_board", self.sync_raw_hm_board),
+            # hm_board: Tushare 无此接口名，已禁用
+            # ("hm_board", self.sync_raw_hm_board),
             ("hm_list", self.sync_raw_hm_list),
             ("ths_hot", self.sync_raw_ths_hot),
             ("dc_hot", self.sync_raw_dc_hot),
-            ("ths_limit", self.sync_raw_ths_limit),
+            # ths_limit: Tushare 无此接口名，已禁用
+            # ("ths_limit", self.sync_raw_ths_limit),
         ]
         for name, method in daily_methods:
             try:
@@ -3554,23 +3563,29 @@ class DataManager:
                 logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
                 results[name] = {"error": True}
 
-        # --- 日频补充表同步（15 张） ---
+        # --- 日频补充表同步（6 张） ---
         daily_ext_methods: list[tuple[str, object]] = [
             ("hsgt_top10", self.sync_raw_hsgt_top10),
             ("ggt_daily", self.sync_raw_ggt_daily),
             ("ccass_hold", self.sync_raw_ccass_hold),
-            ("ccass_hold_detail", self.sync_raw_ccass_hold_detail),
+            # ccass_hold_detail: 表始终为空，已禁用
+            # ("ccass_hold_detail", self.sync_raw_ccass_hold_detail),
             ("hk_hold", self.sync_raw_hk_hold),
             ("cyq_perf", self.sync_raw_cyq_perf),
-            ("cyq_chips", self.sync_raw_cyq_chips),
-            ("slb_len", self.sync_raw_slb_len),
+            # cyq_chips: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
+            # ("cyq_chips", self.sync_raw_cyq_chips),
+            # slb_len: 表始终为空，已禁用
+            # ("slb_len", self.sync_raw_slb_len),
             ("limit_step", self.sync_raw_limit_step),
             ("hm_detail", self.sync_raw_hm_detail),
             ("stk_auction", self.sync_raw_stk_auction),
-            ("stk_auction_o", self.sync_raw_stk_auction_o),
+            # stk_auction_o: 权限不足，已禁用
+            # ("stk_auction_o", self.sync_raw_stk_auction_o),
             ("kpl_list", self.sync_raw_kpl_list),
-            ("kpl_concept", self.sync_raw_kpl_concept),
-            ("broker_recommend", self.sync_raw_broker_recommend),
+            # kpl_concept: 表始终为空，已禁用
+            # ("kpl_concept", self.sync_raw_kpl_concept),
+            # broker_recommend: 表始终为空，已禁用
+            # ("broker_recommend", self.sync_raw_broker_recommend),
         ]
         for name, method in daily_ext_methods:
             try:
@@ -3602,19 +3617,24 @@ class DataManager:
         last_day = calendar.monthrange(trade_date.year, trade_date.month)[1]
         if trade_date.day == last_day or (last_day - trade_date.day <= 3 and trade_date.weekday() == 4):
             # 月末当天或月末前最后一个周五（兜底）
-            for name, method in [("monthly", self.sync_raw_monthly), ("ggt_monthly", self.sync_raw_ggt_monthly)]:
-                try:
-                    r = await method(trade_date)
-                    results[name] = r
-                except Exception:
-                    logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
-                    results[name] = {"error": True}
+            # monthly 和 ggt_monthly 表始终为空，已禁用
+            # for name, method in [("monthly", self.sync_raw_monthly), ("ggt_monthly", self.sync_raw_ggt_monthly)]:
+            #     try:
+            #         r = await method(trade_date)
+            #         results[name] = r
+            #     except Exception:
+            #         logger.warning("[sync_p5_core] %s 失败\n%s", name, traceback.format_exc())
+            #         results[name] = {"error": True}
+            pass
 
         # --- 季度数据：每个交易日尝试获取（按公告日期） ---
         quarterly_methods = [
-            ("top10_holders", self.sync_raw_top10_holders),
-            ("top10_floatholders", self.sync_raw_top10_floatholders),
-            ("stk_holdernumber", self.sync_raw_stk_holdernumber),
+            # top10_holders: 表始终为空，已禁用
+            # ("top10_holders", self.sync_raw_top10_holders),
+            # top10_floatholders: 表始终为空，已禁用
+            # ("top10_floatholders", self.sync_raw_top10_floatholders),
+            # stk_holdernumber: 表始终为空，已禁用
+            # ("stk_holdernumber", self.sync_raw_stk_holdernumber),
             ("stk_holdertrade", self.sync_raw_stk_holdertrade),
         ]
         for name, method in quarterly_methods:
@@ -3633,13 +3653,17 @@ class DataManager:
                 ("margin_target", self.sync_raw_margin_target),
                 ("namechange", self.sync_raw_namechange),
                 ("stk_managers", self.sync_raw_stk_managers),
-                ("stk_rewards", self.sync_raw_stk_rewards),
+                # stk_rewards: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
+                # ("stk_rewards", self.sync_raw_stk_rewards),
                 ("new_share", self.sync_raw_new_share),
-                ("stk_list_his", self.sync_raw_stk_list_his),
+                # stk_list_his: Tushare 无此接口名，已禁用
+                # ("stk_list_his", self.sync_raw_stk_list_his),
                 ("pledge_stat", self.sync_raw_pledge_stat),
-                ("pledge_detail", self.sync_raw_pledge_detail),
+                # pledge_detail: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
+                # ("pledge_detail", self.sync_raw_pledge_detail),
                 ("repurchase", self.sync_raw_repurchase),
-                ("stk_surv", self.sync_raw_stk_surv),
+                # stk_surv: 表始终为空，已禁用
+                # ("stk_surv", self.sync_raw_stk_surv),
             ]
             for name, method in static_no_arg:
                 try:
@@ -3651,7 +3675,8 @@ class DataManager:
             # 需要 trade_date 的低频方法
             static_with_date = [
                 ("share_float", self.sync_raw_share_float),
-                ("report_rc", self.sync_raw_report_rc),
+                # report_rc: 表始终为空，已禁用
+                # ("report_rc", self.sync_raw_report_rc),
             ]
             for name, method in static_with_date:
                 try:
@@ -3733,12 +3758,14 @@ class DataManager:
             ("raw_tushare_hsgt_top10", "sync_raw_hsgt_top10", "daily", None),
             ("raw_tushare_ggt_daily", "sync_raw_ggt_daily", "daily", None),
             ("raw_tushare_ccass_hold", "sync_raw_ccass_hold", "daily", None),
-            ("raw_tushare_ccass_hold_detail", "sync_raw_ccass_hold_detail", "daily", None),
+            # ccass_hold_detail: 表始终为空，已禁用
+            # ("raw_tushare_ccass_hold_detail", "sync_raw_ccass_hold_detail", "daily", None),
             ("raw_tushare_hk_hold", "sync_raw_hk_hold", "daily", None),
             ("raw_tushare_cyq_perf", "sync_raw_cyq_perf", "daily", None),
             # cyq_chips: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
             # ("raw_tushare_cyq_chips", "sync_raw_cyq_chips", "daily", None),
-            ("raw_tushare_slb_len", "sync_raw_slb_len", "daily", None),
+            # slb_len: 表始终为空，已禁用
+            # ("raw_tushare_slb_len", "sync_raw_slb_len", "daily", None),
             # limit_step: Tushare 接口权限不足，已禁用
             # ("raw_tushare_limit_step", "sync_raw_limit_step", "daily", None),
             # hm_detail: Tushare 接口频率限制（每小时 2 次），已禁用
@@ -3747,16 +3774,23 @@ class DataManager:
             # stk_auction_o: Tushare 接口权限不足，已禁用
             # ("raw_tushare_stk_auction_o", "sync_raw_stk_auction_o", "daily", None),
             ("raw_tushare_kpl_list", "sync_raw_kpl_list", "daily", None),
-            ("raw_tushare_kpl_concept", "sync_raw_kpl_concept", "daily", None),
-            ("raw_tushare_broker_recommend", "sync_raw_broker_recommend", "daily", None),
+            # kpl_concept: 表始终为空，已禁用
+            # ("raw_tushare_kpl_concept", "sync_raw_kpl_concept", "daily", None),
+            # broker_recommend: 表始终为空，已禁用
+            # ("raw_tushare_broker_recommend", "sync_raw_broker_recommend", "daily", None),
             # 周频/月频
             ("raw_tushare_weekly", "sync_raw_weekly", "daily", None),
-            ("raw_tushare_monthly", "sync_raw_monthly", "daily", None),
-            ("raw_tushare_ggt_monthly", "sync_raw_ggt_monthly", "daily", None),
+            # monthly: 表始终为空，已禁用
+            # ("raw_tushare_monthly", "sync_raw_monthly", "daily", None),
+            # ggt_monthly: 表始终为空，已禁用
+            # ("raw_tushare_ggt_monthly", "sync_raw_ggt_monthly", "daily", None),
             # 季度
-            ("raw_tushare_top10_holders", "sync_raw_top10_holders", "daily", None),
-            ("raw_tushare_top10_floatholders", "sync_raw_top10_floatholders", "daily", None),
-            ("raw_tushare_stk_holdernumber", "sync_raw_stk_holdernumber", "daily", None),
+            # top10_holders: 表始终为空，已禁用
+            # ("raw_tushare_top10_holders", "sync_raw_top10_holders", "daily", None),
+            # top10_floatholders: 表始终为空，已禁用
+            # ("raw_tushare_top10_floatholders", "sync_raw_top10_floatholders", "daily", None),
+            # stk_holdernumber: 表始终为空，已禁用
+            # ("raw_tushare_stk_holdernumber", "sync_raw_stk_holdernumber", "daily", None),
             ("raw_tushare_stk_holdertrade", "sync_raw_stk_holdertrade", "daily", None),
             # 静态
             ("raw_tushare_stock_company", "sync_raw_stock_company", "static", None),
@@ -3772,9 +3806,11 @@ class DataManager:
             # pledge_detail: 需要 ts_code 必填参数，不支持全市场批量查询，已禁用
             # ("raw_tushare_pledge_detail", "sync_raw_pledge_detail", "static", None),
             ("raw_tushare_repurchase", "sync_raw_repurchase", "static", None),
-            ("raw_tushare_stk_surv", "sync_raw_stk_surv", "static", None),
+            # stk_surv: 表始终为空，已禁用
+            # ("raw_tushare_stk_surv", "sync_raw_stk_surv", "static", None),
             ("raw_tushare_share_float", "sync_raw_share_float", "daily", None),
-            ("raw_tushare_report_rc", "sync_raw_report_rc", "daily", None),
+            # report_rc: 表始终为空，已禁用
+            # ("raw_tushare_report_rc", "sync_raw_report_rc", "daily", None),
         ],
         "p4": [
             # P4 板块数据通过 sync_concept_* 方法同步，不在此映射中
