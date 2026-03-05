@@ -232,6 +232,12 @@ docker-compose down  # 停止服务
 # - 修改 Dockerfile 后需要 --build 重新构建镜像
 ```
 
+## 跨会话进度追踪
+
+**⚡ 每次新会话开始时，必须先读取 `PROJECT_TASKS.md`**。该文件包含 V4 StarMap 的详细 checkpoint 进度（Phase 0~4，27 个子任务 checkbox）。完成工作后务必更新对应 checkbox。
+
+当前阶段：V4 StarMap 实施中。设计文档 `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）。
+
 ## 不做
 
-用户权限、高手跟投。
+用户权限、高手跟投、测试机械补全、前端骨架打磨、调度器锦上添花、V2 79 策略补全、设计文档补全。

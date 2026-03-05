@@ -1,7 +1,8 @@
 # 项目任务清单
 
-> 更新日期：2026-03-04
-> 当前状态：V3 完成，进入 V4 规划阶段
+> 更新日期：2026-03-05
+> 当前状态：V3 完成，V4 StarMap 实施中（Phase 0 待开始）
+> ⚡ AI Agent 须在每次会话开始时读取本文件了解进度，完成工作后更新 checkbox
 
 ## 项目版本概览
 
@@ -94,23 +95,63 @@
 
 ---
 
-## V4 规划：StarMap 盘后投研系统
+## V4 实施：StarMap 盘后投研系统
 
-**设计文档：** `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`
+**设计文档：** `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）
 
-**核心目标：**
-- 宏观事件层：新闻 + LLM 结构化（风险偏好、利好/利空行业）
-- 市场状态层：宽基指数 + 情绪指标 + 风险评分
-- 行业共振层：消息面 + 资金面 + 价格面融合评分
-- 个股执行层：策略结果二次编排 + 量纲统一
-- 计划交付层：交易计划（Entry/Stop/TP/Position）+ 报告推送
+**核心目标：** 构建宏观→市场→行业→个股→交易计划的漏斗式决策层，与现有策略引擎增量集成。
 
-**新增表：**
-- `macro_signal_daily`：宏观结构化信号
-- `sector_resonance_daily`：行业共振评分
-- `trade_plan_daily_ext`：交易计划扩展
+**新增目录：** `app/research/`（news / llm / scoring / planner / repository / probe）
+**新增表：** `macro_signal_daily` / `sector_resonance_daily` / `trade_plan_daily_ext`
 
-**实施方式：** OpenSpec 工作流，分阶段实施
+---
+
+### V4 Phase 0：新闻源 PoC（1~2 天）
+
+> PoC 结论决定 Phase 1 scope。未通过则 StarMap 仅启用纯量化 + 公告情感最小模式。
+
+- [ ] 0.1 调研 Tushare `news` / `major_news` 接口覆盖度
+- [ ] 0.2 评估现有 `app/ai/news_analyzer.py` 的公告数据源能力边界
+- [ ] 0.3 评估备选源（cls.cn API / 聚合平台）
+- [ ] 0.4 编写 `app/research/news/sources_poc.py` 跑通端到端
+- [ ] 0.5 输出 PoC 结论文档 `docs/design/18-news-poc-result.md`
+
+### V4 Phase 1 = M1：数据与结构化底座（4~5 天）
+
+- [ ] 1.1 建表：三张表 Alembic 迁移脚本
+- [ ] 1.2 新闻抓取：`research/news/fetcher.py`（抽象 NewsSource 接口）
+- [ ] 1.3 新闻去重：`research/news/dedupe.py`（Jaccard 分词相似度）
+- [ ] 1.4 新闻清洗：`research/news/cleaner.py`（去 HTML、截断过长正文）
+- [ ] 1.5 LLM 结构化：`research/llm/prompts.py` + `schema.py` + `parser.py`
+- [ ] 1.6 行业对齐：`research/llm/aligner.py`（词表 + alias + 硬降级）
+- [ ] 1.7 Repository：`research/repository/starmap_repo.py`（UPSERT 封装）
+- [ ] 1.8 sector_code 映射表导出
+
+### V4 Phase 2 = M2：评分与融合（3~4 天）
+
+- [ ] 2.1 就绪探针：`research/probe/readiness.py`
+- [ ] 2.2 市场评分：`research/scoring/market_regime.py`（4 子项分段映射）
+- [ ] 2.3 行业共振：`research/scoring/sector_resonance.py`
+- [ ] 2.4 归一化：`research/scoring/normalize.py`（全市场 percentile_rank）
+- [ ] 2.5 融合排序：`research/scoring/stock_rank_fusion.py`
+
+### V4 Phase 3 = M3：计划、报告与集成（2~3 天）
+
+- [ ] 3.1 计划生成：`research/planner/plan_generator.py`
+- [ ] 3.2 规则引擎：`research/planner/rule_engine.py`
+- [ ] 3.3 Orchestrator：`research/orchestrator.py`（串联全部步骤）
+- [ ] 3.4 报告增强：`scheduler/report.py` 增强三段式输出
+- [ ] 3.5 API：`api/research.py`（4 个 GET 端点）
+- [ ] 3.6 调度接入：`scheduler/jobs.py` 插入 Orchestrator
+- [ ] 3.7 配置项：`config.py` 新增所有 `starmap_*` 配置
+- [ ] 3.8 前端：投研总览页面（对接 `GET /api/v1/research/overview`）
+
+### V4 Phase 4 = M4：验证与优化（3~5 天）
+
+- [ ] 4.1 历史回放：选 5~10 个交易日新闻/行情回放
+- [ ] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优
+- [ ] 4.3 陪跑观察：连续 10 个交易日灰度运行
+- [ ] 4.4 peak_pullback_stabilization 专项测试（StarMap 重点策略）
 
 ---
 
@@ -209,48 +250,34 @@
 
 ---
 
-## 设计文档归档
+## 已删除 / 不做的任务
 
-**活跃文档（`docs/design/`）：**
-- `00-概要设计-v2.md` - 65% 完成
-- `04-详细设计-前端与交互.md` - 70% 完成
-- `10-系统设计-定时任务调度.md` - 75% 完成
-- `13-系统设计-测试策略.md` - 60% 完成
-- `18-盘后自动投研与交易计划系统设计-详细版.md` - 未开始
-- `99-实施范围-V1与V2划分.md` - 持续更新
-- `99-项目总体计划.md` - 持续更新
-- `00-V3概要设计.md` - 部分完成
-- `01-V3实施计划.md` - 部分完成
+以下任务经代码分析后确认低 ROI，已从计划中移除：
 
-**已归档文档（`docs/design/archived/`）：**
-- `01-详细设计-数据采集.md` - 100% 完成
-- `02-详细设计-策略引擎.md` - 100% 完成
-- `03-详细设计-AI与回测.md` - 100% 完成
-- `05-详细设计-量价综合选股策略.md` - 100% 完成
-- `11-系统设计-缓存策略.md` - 100% 完成
-- `12-系统设计-Pipeline缓存优化.md` - 100% 完成
-- `14-系统设计-V4量价配合策略优化任务.md` - 100% 完成
-- `15-策略设计-高位回落企稳二次启动.md` - 100% 完成
-- `v4_planning/01-V4详细设计-量价配合策略.md` - 100% 完成
+| 原任务 | 删除理由 |
+|--------|----------|
+| 测试策略补全（Doc-13） | 已有 71 unit + 12 integration 测试，覆盖 ~26 策略，足够 |
+| 前端骨架打磨（Doc-04） | 无实际用户，仅保留 StarMap 投研页面 |
+| 调度器补全（Doc-10） | CLI/TaskLogger/retry 已成熟，剩余是锦上添花 |
+| V2 策略补全（Doc-00） | 79 策略是文档愿景，36 策略已足够；事件驱动与 StarMap 重叠 |
+| V3/task-设计文档补全 | 纯文档任务，各模块实现完成后统一更新 |
 
 ---
 
 ## 下一步计划
 
-### 短期（V4 Phase 1）
-- [ ] StarMap 宏观事件层实施
-- [ ] StarMap 市场状态层实施
-- [ ] StarMap 行业共振层实施
+**唯一关键路径：StarMap（V4）**
 
-### 中期（V4 Phase 2）
-- [ ] StarMap 个股执行层实施
-- [ ] StarMap 计划交付层实施
-- [ ] 前端 StarMap 仪表盘
+```text
+Week 1-2:  Phase 0 PoC + Phase 1 建表/LLM
+Week 2-3:  Phase 2 评分/融合 + Phase 3 计划/报告/调度接入
+Week 3-4:  Phase 4 验证陪跑 + 投研总览前端
+```
 
-### 长期优化
-- [ ] 策略回测历史数据积累与分析
-- [ ] 策略组合优化（多策略协同）
-- [ ] 风控模块增强（仓位管理、止损止盈）
+**未来 backlog（StarMap 完成后按需评估）：**
+- 事件驱动策略（与 StarMap 新闻模块 scope 重叠，M4 后评估）
+- 策略回测历史数据积累与分析
+- 策略组合优化（多策略协同）
 
 ---
 
