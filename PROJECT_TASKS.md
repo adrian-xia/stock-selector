@@ -151,7 +151,7 @@
 - [x] 4.1 历史回放：选 5~10 个交易日新闻/行情回放 (通过 `starmap_replay.py` 验证)
 - [x] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优 (模块已打通)
 - [ ] 4.3 陪跑观察：连续 10 个交易日灰度运行
-- [ ] 4.4 `peak_pullback_stabilization` 专项测试（StarMap 重点策略）
+- [x] 4.4 `peak_pullback_stabilization` 专项测试（StarMap 重点策略）: (通过 `test_peak_pullback.py` 验证)
 
 ---
 
