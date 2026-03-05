@@ -15,6 +15,7 @@ const MonitorPage = lazy(() => import('./pages/monitor'))
 const StrategyConfigPage = lazy(() => import('./pages/strategy-config'))
 const DailyPicksPage = lazy(() => import('./pages/daily-picks/DailyPicksPage'))
 const PostMarketPage = lazy(() => import('./pages/post-market/PostMarketPage'))
+const ResearchPage = lazy(() => import('./pages/research/ResearchPage'))
 
 /** 路由切换时重置 ErrorBoundary */
 function ErrorBoundaryResetter({ children }: { children: React.ReactNode }) {
@@ -76,6 +77,11 @@ function App() {
         <Route path="/post-market" element={
           <ErrorBoundaryResetter>
             <Suspense fallback={<PageLoading />}><PostMarketPage /></Suspense>
+          </ErrorBoundaryResetter>
+        } />
+        <Route path="/research" element={
+          <ErrorBoundaryResetter>
+            <Suspense fallback={<PageLoading />}><ResearchPage /></Suspense>
           </ErrorBoundaryResetter>
         } />
       </Route>
