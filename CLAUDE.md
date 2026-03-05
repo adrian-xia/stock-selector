@@ -75,6 +75,7 @@ tsc -b                                               # TypeScript 类型检查
 5. 策略执行 — Pipeline 执行已启用策略（`app/strategy/pipeline.py`）
 6. 命中率回填 — 回填历史选股结果的 N 日收益率（`app/strategy/pipeline.py`）
 7. 缓存刷新 — 刷新 Redis 缓存
+8. ⭐ StarMap 投研（`app/research/orchestrator.py`，开发中）
 
 核心入口：`sync_daily_by_date(dates)` — 按日期批量同步全市场数据（3 次 API 调用拉全市场）。
 
@@ -146,7 +147,7 @@ tsc -b                                               # TypeScript 类型检查
 | 前端交互 | `docs/design/04-详细设计-前端与交互.md` | 70% |
 | 定时任务 | `docs/design/10-系统设计-定时任务调度.md` | 75% |
 | 测试策略 | `docs/design/13-系统设计-测试策略.md` | 60% |
-| 盘后投研（StarMap） | `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md` | 未开始 |
+| 盘后投研（StarMap） | `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md` | Phase 0 PoC 完成 |
 | V1/V2 范围 | `docs/design/99-实施范围-V1与V2划分.md` | 持续更新 |
 | 项目总体计划 | `docs/design/99-项目总体计划.md` | 持续更新 |
 | V3 概要设计 | `docs/design/00-V3概要设计.md` | 部分完成 |

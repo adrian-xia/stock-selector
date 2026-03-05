@@ -110,11 +110,11 @@
 
 > PoC 结论决定 Phase 1 scope。未通过则 StarMap 仅启用纯量化 + 公告情感最小模式。
 
-- [ ] 0.1 调研 Tushare `news` / `major_news` 接口覆盖度
-- [ ] 0.2 评估现有 `app/ai/news_analyzer.py` 的公告数据源能力边界
-- [ ] 0.3 评估备选源（cls.cn API / 聚合平台）
-- [ ] 0.4 编写 `app/research/news/sources_poc.py` 跑通端到端
-- [ ] 0.5 输出 PoC 结论文档 `docs/design/18-news-poc-result.md`
+- [x] 0.1 调研 Tushare `news` / `major_news` 接口覆盖度
+- [x] 0.2 评估现有 `app/ai/news_analyzer.py` 的公告数据源能力边界
+- [x] 0.3 评估备选源（cls.cn API / 聚合平台）
+- [x] 0.4 编写 `app/research/news/sources_poc.py` 跑通端到端
+- [x] 0.5 输出 PoC 结论文档 `docs/design/18-news-poc-result.md`
 
 ### V4 Phase 1 = M1：数据与结构化底座（4~5 天）
 
