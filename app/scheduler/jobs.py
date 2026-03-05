@@ -396,6 +396,22 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 summary["total"], summary["data_done"], summary["failed"],
             )
 
+        # 步骤 5.5：StarMap 盘后投研（不阻断链路）
+        try:
+            from app.scheduler.starmap_job import starmap_job
+
+            starmap_result = await starmap_job(target)
+            if starmap_result:
+                logger.info(
+                    "[StarMap] 完成: status=%s, steps=%d",
+                    starmap_result.get("status"),
+                    len(starmap_result.get("steps_completed", [])),
+                )
+        except Exception:
+            logger.warning(
+                "[StarMap] 执行失败（不阻断链路）\n%s", traceback.format_exc()
+            )
+
         # 步骤 6：完整性告警（超过截止时间且有失败记录）
         _check_completeness_deadline(summary, target)
 

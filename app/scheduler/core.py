@@ -154,6 +154,30 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     else:
         logger.info("V4量价配合策略优化已禁用（V4_OPT_ENABLED=false）")
 
+    # StarMap 盘后投研：默认周一至周五 16:10
+    if settings.starmap_enabled:
+        from app.scheduler.starmap_job import starmap_cron_job
+
+        sm_cron = settings.starmap_cron
+        parts = sm_cron.split()
+        scheduler.add_job(
+            func=starmap_cron_job,
+            trigger=CronTrigger(
+                minute=parts[0],
+                hour=parts[1],
+                day=parts[2],
+                month=parts[3],
+                day_of_week=parts[4],
+                timezone="Asia/Shanghai",
+            ),
+            id="starmap_research",
+            name="StarMap盘后投研",
+            replace_existing=True,
+        )
+        logger.info("注册任务：StarMap盘后投研 [%s]", sm_cron)
+    else:
+        logger.info("StarMap盘后投研已禁用（STARMAP_ENABLED=false）")
+
 
 async def sync_stock_list_on_startup() -> None:
     """启动时更新股票列表（可配置跳过）。"""
