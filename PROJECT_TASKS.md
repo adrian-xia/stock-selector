@@ -129,11 +129,11 @@
 
 ### V4 Phase 2 = M2：评分与融合（3~4 天）
 
-- [ ] 2.1 就绪探针：`research/probe/readiness.py`
-- [ ] 2.2 市场评分：`research/scoring/market_regime.py`（4 子项分段映射）
-- [ ] 2.3 行业共振：`research/scoring/sector_resonance.py`
-- [ ] 2.4 归一化：`research/scoring/normalize.py`（全市场 percentile_rank）
-- [ ] 2.5 融合排序：`research/scoring/stock_rank_fusion.py`
+- [x] 2.1 就绪探针：`research/probe/readiness.py`
+- [x] 2.2 市场评分：`research/scoring/market_regime.py`（4 子项分段映射）
+- [x] 2.3 行业共振：`research/scoring/sector_resonance.py`
+- [x] 2.4 归一化：`research/scoring/normalize.py`（全市场 percentile_rank）
+- [x] 2.5 融合排序：`research/scoring/stock_rank_fusion.py`
 
 ### V4 Phase 3 = M3：计划、报告与集成（2~3 天）
 
