@@ -137,12 +137,12 @@
 
 ### V4 Phase 3 = M3：计划、报告与集成（2~3 天）
 
-- [ ] 3.1 计划生成：`research/planner/plan_generator.py`
-- [ ] 3.2 规则引擎：`research/planner/rule_engine.py`
-- [ ] 3.3 Orchestrator：`research/orchestrator.py`（串联全部步骤）
-- [ ] 3.4 报告增强：`scheduler/report.py` 增强三段式输出
-- [ ] 3.5 API：`api/research.py`（4 个 GET 端点）
-- [ ] 3.6 调度接入：`scheduler/jobs.py` 插入 Orchestrator
+- [x] 3.1 计划生成：`research/planner/plan_generator.py`
+- [x] 3.2 规则引擎：`research/planner/rule_engine.py`（过期清理）
+- [x] 3.3 编排器：`research/orchestrator.py`（10 步主链路 + 降级矩阵）
+- [x] 3.4 API：`app/api/research.py`（overview/macro/sectors/plans）
+- [x] 3.5 配置：`config.py` 新增 `starmap_*` 配置项
+- [x] 3.6 调度挂接：`main.py` 路由注册scheduler/jobs.py` 插入 Orchestrator
 - [ ] 3.7 配置项：`config.py` 新增所有 `starmap_*` 配置
 - [ ] 3.8 前端：投研总览页面（对接 `GET /api/v1/research/overview`）
 
