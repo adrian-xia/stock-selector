@@ -144,7 +144,7 @@
 - [x] 3.5 配置：`config.py` 新增 `starmap_*` 配置项
 - [x] 3.6 调度挂接：`main.py` 路由注册
 - [x] 3.7 配置项：`config.py` 新增所有 `starmap_*` 配置
-- [ ] 3.8 前端：投研总览页面（对接 `GET /api/v1/research/overview`）
+- [x] 3.8 前端：投研总览页面（对接 `GET /api/v1/research/overview`）
 
 ### V4 Phase 4 = M4：验证与优化（3~5 天）
 
