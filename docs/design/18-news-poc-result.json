@@ -1,0 +1,76 @@
+{
+  "poc_results": [
+    {
+      "source": "tushare",
+      "reachable": false,
+      "news_count": 0,
+      "major_news_count": 0,
+      "latency_ms": 91,
+      "macro_ratio": 0.0,
+      "field_quality": {},
+      "sample_titles": [],
+      "error": null,
+      "notes": [
+        "major_news 返回空 DataFrame",
+        "news 返回空 DataFrame"
+      ]
+    },
+    {
+      "source": "sina_7x24",
+      "reachable": true,
+      "news_count": 60,
+      "latency_ms": 135,
+      "macro_ratio": 0.6,
+      "field_quality": {
+        "present": [
+          "rich_text",
+          "create_time",
+          "tag"
+        ],
+        "missing": [
+          "type"
+        ],
+        "completeness": 0.75
+      },
+      "sample_titles": [
+        "政府工作报告：制定实施城乡居民增收计划，在促进低收入群体增收、增加居民财产性收入、完善薪酬和社保制度等方面推出一批务实举措。（新华社）",
+        "政府工作报告：设立1000亿元财政金融协同促内需专项资金，组合运用贷款贴息、融资担保、风险补偿等方式，支持扩大内需。（新华社）",
+        "据报道，人工智能初创公司Anthropic首席执行官重启与美国国防部就人工智能交易的谈判",
+        "沪深两市成交额超5000亿元，较上日此时缩量277亿元。",
+        "【安排超长期特别国债2500亿元支持消费品以旧换新】政府工作报告：深入实施提振消费专项行动。促进商品消费扩容升级，安排超长期特别国债2500亿元支持消费品以旧换",
+        "【Micro LED概念股持续走强，三安光电等10余股涨停】Micro LED概念股持续走强，三安光电、国星光电、雷曼光电、芯瑞达、瑞丰光电、兆驰股份、沃格光电",
+        "政府工作报告：继续实施适度宽松的货币政策。（央视新闻）",
+        "政府工作报告说，各级政府要更好“当家理财”，建立健全增收节支机制，积极盘活利用存量资源资产，严肃财经纪律，强化预算约束，严控一般性支出，坚决落实过紧日子的要求，",
+        "【燃气轮机概念反复走强 东方电气触及涨停创18年新高】燃气轮机概念反复走强，东方电气触及涨停，创2008年2月以来新高，万泽股份、航宇科技、联德股份、江苏神通、",
+        "【2026年赤字率拟按4%左右安排】政府工作报告在提到继续实施更加积极的财政政策时说，今年赤字率拟按4%左右安排，赤字规模5.89万亿元、比上年增加2300亿元"
+      ],
+      "error": null,
+      "notes": [
+        "宏观相关新闻占比: 18/30 = 60%"
+      ]
+    },
+    {
+      "source": "cls_telegraph",
+      "reachable": false,
+      "news_count": 0,
+      "latency_ms": 268,
+      "macro_ratio": 0.0,
+      "field_quality": {},
+      "sample_titles": [],
+      "error": null,
+      "notes": [
+        "HTTP 404"
+      ]
+    }
+  ],
+  "verdict": {
+    "timestamp": "2026-03-05T09:43:08.447640",
+    "sources_tested": 3,
+    "recommended_primary": "sina_7x24",
+    "recommended_fallback": null,
+    "starmap_scope": "full",
+    "details": [
+      "推荐主数据源 sina_7x24，宏观覆盖率 60%，条数 60，延迟 135ms"
+    ]
+  }
+}

@@ -155,5 +155,13 @@ class Settings(BaseSettings):
     v4_opt_max_concurrency: int = 4                        # 最大并发度
     v4_opt_auto_apply: bool = True                         # 完成后是否自动应用最佳参数
 
+    # --- StarMap (盘后投研) ---
+    starmap_enabled: bool = True                           # 是否启用 StarMap 盘后投研
+    starmap_cron: str = "10 16 * * 1-5"                    # StarMap 执行 cron（周一至周五 16:10）
+    starmap_max_plans: int = 20                            # 最大生成计划数
+    starmap_news_source_whitelist: list[str] = ["sina"]    # 新闻源白名单（空=跳过新闻模块）
+    starmap_degrade_threshold: float = 0.30                # 行业对齐失败率阈值（超过则降级纯量化）
+    starmap_llm_max_retries: int = 2                       # LLM 调用最大重试次数
+
 
 settings = Settings()

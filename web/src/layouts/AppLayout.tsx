@@ -1,5 +1,5 @@
 import { Layout, Menu } from 'antd'
-import { ExperimentOutlined, LineChartOutlined, ControlOutlined, NotificationOutlined, DashboardOutlined, SettingOutlined, CalendarOutlined, FundOutlined } from '@ant-design/icons'
+import { ExperimentOutlined, LineChartOutlined, ControlOutlined, NotificationOutlined, DashboardOutlined, SettingOutlined, CalendarOutlined, FundOutlined, RocketOutlined } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const { Sider, Content } = Layout
@@ -19,6 +19,11 @@ const menuItems = [
     key: '/post-market',
     icon: <FundOutlined />,
     label: '盘后概览',
+  },
+  {
+    key: '/research',
+    icon: <RocketOutlined />,
+    label: 'StarMap 投研',
   },
   {
     key: '/backtest',
@@ -55,18 +60,20 @@ export default function AppLayout() {
   const selectedKey = location.pathname.startsWith('/strategy-config')
     ? '/strategy-config'
     : location.pathname.startsWith('/monitor')
-    ? '/monitor'
-    : location.pathname.startsWith('/news')
-    ? '/news'
-    : location.pathname.startsWith('/optimization')
-    ? '/optimization'
-    : location.pathname.startsWith('/backtest')
-    ? '/backtest'
-    : location.pathname.startsWith('/daily-picks')
-    ? '/daily-picks'
-    : location.pathname.startsWith('/post-market')
-    ? '/post-market'
-    : '/workbench'
+      ? '/monitor'
+      : location.pathname.startsWith('/news')
+        ? '/news'
+        : location.pathname.startsWith('/optimization')
+          ? '/optimization'
+          : location.pathname.startsWith('/backtest')
+            ? '/backtest'
+            : location.pathname.startsWith('/daily-picks')
+              ? '/daily-picks'
+              : location.pathname.startsWith('/post-market')
+                ? '/post-market'
+                : location.pathname.startsWith('/research')
+                  ? '/research'
+                  : '/workbench'
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

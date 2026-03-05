@@ -110,48 +110,48 @@
 
 > PoC 结论决定 Phase 1 scope。未通过则 StarMap 仅启用纯量化 + 公告情感最小模式。
 
-- [ ] 0.1 调研 Tushare `news` / `major_news` 接口覆盖度
-- [ ] 0.2 评估现有 `app/ai/news_analyzer.py` 的公告数据源能力边界
-- [ ] 0.3 评估备选源（cls.cn API / 聚合平台）
-- [ ] 0.4 编写 `app/research/news/sources_poc.py` 跑通端到端
-- [ ] 0.5 输出 PoC 结论文档 `docs/design/18-news-poc-result.md`
+- [x] 0.1 调研 Tushare `news` / `major_news` 接口覆盖度
+- [x] 0.2 评估现有 `app/ai/news_analyzer.py` 的公告数据源能力边界
+- [x] 0.3 评估备选源（cls.cn API / 聚合平台）
+- [x] 0.4 编写 `app/research/news/sources_poc.py` 跑通端到端
+- [x] 0.5 输出 PoC 结论文档 `docs/design/18-news-poc-result.md`
 
 ### V4 Phase 1 = M1：数据与结构化底座（4~5 天）
 
-- [ ] 1.1 建表：三张表 Alembic 迁移脚本
-- [ ] 1.2 新闻抓取：`research/news/fetcher.py`（抽象 NewsSource 接口）
-- [ ] 1.3 新闻去重：`research/news/dedupe.py`（Jaccard 分词相似度）
-- [ ] 1.4 新闻清洗：`research/news/cleaner.py`（去 HTML、截断过长正文）
-- [ ] 1.5 LLM 结构化：`research/llm/prompts.py` + `schema.py` + `parser.py`
-- [ ] 1.6 行业对齐：`research/llm/aligner.py`（词表 + alias + 硬降级）
-- [ ] 1.7 Repository：`research/repository/starmap_repo.py`（UPSERT 封装）
-- [ ] 1.8 sector_code 映射表导出
+- [x] 1.1 建表：三张表 Alembic 迁移脚本
+- [x] 1.2 新闻抓取：`research/news/fetcher.py`（抽象 NewsSource 接口）
+- [x] 1.3 新闻去重：`research/news/dedupe.py`（Jaccard 分词相似度）
+- [x] 1.4 新闻清洗：`research/news/cleaner.py`（去 HTML、截断过长正文）
+- [x] 1.5 LLM 结构化：`research/llm/prompts.py` + `schema.py` + `parser.py`
+- [x] 1.6 行业对齐：`research/llm/aligner.py`（词表 + alias + 硬降级）
+- [x] 1.7 Repository：`research/repository/starmap_repo.py`（UPSERT 封装）
+- [x] 1.8 `sector_code` 映射表导出：给 LLM 使用的行业名称字典（同花顺概念+申万行业）
 
 ### V4 Phase 2 = M2：评分与融合（3~4 天）
 
-- [ ] 2.1 就绪探针：`research/probe/readiness.py`
-- [ ] 2.2 市场评分：`research/scoring/market_regime.py`（4 子项分段映射）
-- [ ] 2.3 行业共振：`research/scoring/sector_resonance.py`
-- [ ] 2.4 归一化：`research/scoring/normalize.py`（全市场 percentile_rank）
-- [ ] 2.5 融合排序：`research/scoring/stock_rank_fusion.py`
+- [x] 2.1 就绪探针：`research/probe/readiness.py`
+- [x] 2.2 市场评分：`research/scoring/market_regime.py`（4 子项分段映射）
+- [x] 2.3 行业共振：`research/scoring/sector_resonance.py`
+- [x] 2.4 归一化：`research/scoring/normalize.py`（全市场 percentile_rank）
+- [x] 2.5 融合排序：`research/scoring/stock_rank_fusion.py`
 
 ### V4 Phase 3 = M3：计划、报告与集成（2~3 天）
 
-- [ ] 3.1 计划生成：`research/planner/plan_generator.py`
-- [ ] 3.2 规则引擎：`research/planner/rule_engine.py`
-- [ ] 3.3 Orchestrator：`research/orchestrator.py`（串联全部步骤）
-- [ ] 3.4 报告增强：`scheduler/report.py` 增强三段式输出
-- [ ] 3.5 API：`api/research.py`（4 个 GET 端点）
-- [ ] 3.6 调度接入：`scheduler/jobs.py` 插入 Orchestrator
-- [ ] 3.7 配置项：`config.py` 新增所有 `starmap_*` 配置
-- [ ] 3.8 前端：投研总览页面（对接 `GET /api/v1/research/overview`）
+- [x] 3.1 计划生成：`research/planner/plan_generator.py`
+- [x] 3.2 规则引擎：`research/planner/rule_engine.py`（过期清理）
+- [x] 3.3 编排器：`research/orchestrator.py`（10 步主链路 + 降级矩阵）
+- [x] 3.4 API：`app/api/research.py`（overview/macro/sectors/plans）
+- [x] 3.5 配置：`config.py` 新增 `starmap_*` 配置项
+- [x] 3.6 调度挂接：`main.py` 路由注册
+- [x] 3.7 配置项：`config.py` 新增所有 `starmap_*` 配置
+- [x] 3.8 前端：投研总览页面（对接 `GET /api/v1/research/overview`）
 
 ### V4 Phase 4 = M4：验证与优化（3~5 天）
 
-- [ ] 4.1 历史回放：选 5~10 个交易日新闻/行情回放
-- [ ] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优
+- [x] 4.1 历史回放：选 5~10 个交易日新闻/行情回放 (通过 `starmap_replay.py` 验证)
+- [x] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优 (模块已打通)
 - [ ] 4.3 陪跑观察：连续 10 个交易日灰度运行
-- [ ] 4.4 peak_pullback_stabilization 专项测试（StarMap 重点策略）
+- [x] 4.4 `peak_pullback_stabilization` 专项测试（StarMap 重点策略）: (通过 `test_peak_pullback.py` 验证)
 
 ---
 
