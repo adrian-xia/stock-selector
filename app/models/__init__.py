@@ -14,6 +14,7 @@ from app.models.raw import (
     RawTushareTradeCal,
 )
 from app.models.strategy import DataSourceConfig, Strategy
+from app.models.starmap import MacroSignalDaily, SectorResonanceDaily, TradePlanDailyExt
 from app.models.technical import TechnicalDaily
 
 __all__ = [
@@ -38,6 +39,9 @@ __all__ = [
     "StockMin",
     "StockSyncProgress",
     "Strategy",
+    "MacroSignalDaily",
+    "SectorResonanceDaily",
+    "TradePlanDailyExt",
     "TechnicalDaily",
     "TradeCalendar",
 ]

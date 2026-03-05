@@ -118,13 +118,13 @@
 
 ### V4 Phase 1 = M1：数据与结构化底座（4~5 天）
 
-- [ ] 1.1 建表：三张表 Alembic 迁移脚本
-- [ ] 1.2 新闻抓取：`research/news/fetcher.py`（抽象 NewsSource 接口）
-- [ ] 1.3 新闻去重：`research/news/dedupe.py`（Jaccard 分词相似度）
-- [ ] 1.4 新闻清洗：`research/news/cleaner.py`（去 HTML、截断过长正文）
-- [ ] 1.5 LLM 结构化：`research/llm/prompts.py` + `schema.py` + `parser.py`
-- [ ] 1.6 行业对齐：`research/llm/aligner.py`（词表 + alias + 硬降级）
-- [ ] 1.7 Repository：`research/repository/starmap_repo.py`（UPSERT 封装）
+- [x] 1.1 建表：三张表 Alembic 迁移脚本
+- [x] 1.2 新闻抓取：`research/news/fetcher.py`（抽象 NewsSource 接口）
+- [x] 1.3 新闻去重：`research/news/dedupe.py`（Jaccard 分词相似度）
+- [x] 1.4 新闻清洗：`research/news/cleaner.py`（去 HTML、截断过长正文）
+- [x] 1.5 LLM 结构化：`research/llm/prompts.py` + `schema.py` + `parser.py`
+- [x] 1.6 行业对齐：`research/llm/aligner.py`（词表 + alias + 硬降级）
+- [x] 1.7 Repository：`research/repository/starmap_repo.py`（UPSERT 封装）
 - [ ] 1.8 sector_code 映射表导出
 
 ### V4 Phase 2 = M2：评分与融合（3~4 天）
