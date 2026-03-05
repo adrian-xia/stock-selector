@@ -2,94 +2,76 @@
 
 将 LLM 返回的自然语言行业名称映射到系统内的同花顺板块代码。
 三级降级策略：精确匹配 → 别名匹配 → 模糊匹配 → 标记 unresolved。
+
+V2: 从 sector_mapping.json（DB 导出）加载 467 条映射 + 硬编码别名。
 """
 
+import json
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# 行业名 → sector_code 静态映射（V1: 硬编码主要行业）
-# 后续 Phase 1.8 从 concept_index 表导出完整映射
-_SECTOR_MAP: dict[str, str] = {
-    # 科技
-    "半导体": "885736",
-    "芯片": "885736",
-    "集成电路": "885736",
-    "人工智能": "885760",
-    "AI": "885760",
-    "大模型": "885760",
-    "云计算": "885768",
-    "软件": "885756",
-    "软件开发": "885756",
-    "计算机": "885756",
-    "消费电子": "885738",
-    "电子": "885738",
-    "通信": "885740",
-    "5G": "885740",
-    "光通信": "885740",
-    # 新能源
-    "新能源": "885748",
-    "光伏": "885724",
-    "太阳能": "885724",
-    "风电": "885750",
-    "风力发电": "885750",
-    "储能": "885752",
-    "锂电池": "885726",
-    "动力电池": "885726",
-    "新能源汽车": "885754",
-    "电动车": "885754",
-    # 消费
-    "消费": "885708",
-    "白酒": "885710",
-    "酿酒": "885710",
-    "食品饮料": "885712",
-    "食品": "885712",
-    "家电": "885714",
-    "家用电器": "885714",
-    "医药": "885716",
-    "医疗": "885716",
-    "生物医药": "885718",
-    "创新药": "885718",
-    "旅游": "885720",
-    "文旅": "885720",
-    "零售": "885722",
-    "商贸": "885722",
-    # 金融
-    "银行": "885702",
-    "券商": "885704",
-    "证券": "885704",
-    "保险": "885706",
-    "金融科技": "885762",
-    # 周期
-    "房地产": "885728",
-    "地产": "885728",
-    "建筑": "885730",
-    "建材": "885732",
-    "钢铁": "885734",
-    "有色金属": "885742",
-    "有色": "885742",
-    "煤炭": "885744",
-    "石油": "885746",
-    "化工": "885764",
-    # 其他
-    "军工": "885758",
-    "国防军工": "885758",
-    "汽车": "885766",
-    "农业": "885770",
-    "环保": "885772",
-    "交通运输": "885774",
-    "物流": "885774",
-    "电力": "885776",
-    "公用事业": "885776",
-    "传媒": "885778",
-    "教育": "885780",
-}
+# --- 加载 sector_mapping.json ---
+_MAPPING_FILE = Path(__file__).parent / "sector_mapping.json"
 
-# 反向映射 sector_code → 标准名称（取第一个注册的名称）
-_CODE_TO_NAME: dict[str, str] = {}
-for name, code in _SECTOR_MAP.items():
-    if code not in _CODE_TO_NAME:
-        _CODE_TO_NAME[code] = name
+_SECTOR_MAP: dict[str, str] = {}  # name → code
+_CODE_TO_NAME: dict[str, str] = {}  # code → canonical name
+
+def _load_mapping() -> None:
+    """从 JSON 文件加载行业映射。"""
+    global _SECTOR_MAP, _CODE_TO_NAME
+
+    if _MAPPING_FILE.exists():
+        with open(_MAPPING_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+
+        # THS 板块 (code → name)，反转为 name → code
+        for code, name in data.get("ths_sectors", {}).items():
+            _SECTOR_MAP[name] = code
+            if code not in _CODE_TO_NAME:
+                _CODE_TO_NAME[code] = name
+
+        # 申万 L1
+        for code, name in data.get("sw_l1", {}).items():
+            if name not in _SECTOR_MAP:
+                _SECTOR_MAP[name] = code
+            if code not in _CODE_TO_NAME:
+                _CODE_TO_NAME[code] = name
+
+        # 申万 L2
+        for code, name in data.get("sw_l2", {}).items():
+            if name not in _SECTOR_MAP:
+                _SECTOR_MAP[name] = code
+            if code not in _CODE_TO_NAME:
+                _CODE_TO_NAME[code] = name
+
+        logger.info("加载行业映射: %d 条 (来源 %s)", len(_SECTOR_MAP), _MAPPING_FILE.name)
+    else:
+        logger.warning("sector_mapping.json 不存在，使用硬编码别名")
+
+    # 硬编码别名补充（常见缩写 / 同义词，不覆盖 JSON 中已有的映射）
+    _ALIASES: dict[str, str] = {
+        "芯片": "885736", "集成电路": "885736",
+        "AI": "885760", "大模型": "885760",
+        "5G": "885740", "光通信": "885740",
+        "软件开发": "885756", "计算机": "885756",
+        "太阳能": "885724", "风力发电": "885750",
+        "动力电池": "885726", "电动车": "885754",
+        "酿酒": "885710", "家电": "885714",
+        "医疗": "885716", "创新药": "885718",
+        "文旅": "885720", "商贸": "885722",
+        "券商": "885704", "地产": "885728",
+        "有色": "885742",
+    }
+    for alias, code in _ALIASES.items():
+        if alias not in _SECTOR_MAP:
+            _SECTOR_MAP[alias] = code
+            if code not in _CODE_TO_NAME:
+                _CODE_TO_NAME[code] = alias
+
+
+_load_mapping()
 
 
 def align_sector(raw_name: str) -> tuple[str | None, str | None]:
