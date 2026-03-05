@@ -61,10 +61,10 @@ async def calc_stock_rank_fusion(
         try:
             rows = await session.execute(
                 text(
-                    "SELECT ts_code, strategy_name, weighted_score "
+                    "SELECT ts_code, strategy_name, pick_score "
                     "FROM strategy_picks "
-                    "WHERE trade_date = :td "
-                    "ORDER BY weighted_score DESC"
+                    "WHERE pick_date = :td "
+                    "ORDER BY pick_score DESC"
                 ),
                 {"td": trade_date},
             )
@@ -77,19 +77,19 @@ async def calc_stock_rank_fusion(
             logger.info("[个股融合] %s: 无选股结果", trade_date)
             return []
 
-        # 聚合：每只股票的策略分 = max(weighted_score)，策略列表
+        # 聚合：每只股票的策略分 = max(pick_score)，策略列表
         stock_data: dict[str, dict] = {}
         for r in picks:
             code = r.ts_code
             if code not in stock_data:
                 stock_data[code] = {
-                    "strategy_score": float(r.weighted_score or 0),
+                    "strategy_score": float(r.pick_score or 0),
                     "strategies": [r.strategy_name],
                 }
             else:
                 stock_data[code]["strategy_score"] = max(
                     stock_data[code]["strategy_score"],
-                    float(r.weighted_score or 0),
+                    float(r.pick_score or 0),
                 )
                 if r.strategy_name not in stock_data[code]["strategies"]:
                     stock_data[code]["strategies"].append(r.strategy_name)

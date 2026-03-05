@@ -150,9 +150,10 @@ async def calc_market_regime(
         try:
             row = await session.execute(
                 text(
-                    "SELECT close, ma5, ma20, ma60 "
-                    "FROM technical_daily "
-                    "WHERE ts_code = '000300.SH' AND trade_date = :td"
+                    "SELECT i.close, t.ma5, t.ma20, t.ma60 "
+                    "FROM technical_daily t "
+                    "JOIN index_daily i ON t.ts_code = i.ts_code AND t.trade_date = i.trade_date "
+                    "WHERE t.ts_code = '000300.SH' AND t.trade_date = :td"
                 ),
                 {"td": trade_date},
             )

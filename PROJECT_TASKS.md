@@ -125,7 +125,7 @@
 - [x] 1.5 LLM 结构化：`research/llm/prompts.py` + `schema.py` + `parser.py`
 - [x] 1.6 行业对齐：`research/llm/aligner.py`（词表 + alias + 硬降级）
 - [x] 1.7 Repository：`research/repository/starmap_repo.py`（UPSERT 封装）
-- [ ] 1.8 sector_code 映射表导出
+- [x] 1.8 `sector_code` 映射表导出：给 LLM 使用的行业名称字典（同花顺概念+申万行业）
 
 ### V4 Phase 2 = M2：评分与融合（3~4 天）
 
@@ -148,10 +148,10 @@
 
 ### V4 Phase 4 = M4：验证与优化（3~5 天）
 
-- [ ] 4.1 历史回放：选 5~10 个交易日新闻/行情回放
-- [ ] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优
+- [x] 4.1 历史回放：选 5~10 个交易日新闻/行情回放 (通过 `starmap_replay.py` 验证)
+- [x] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优 (模块已打通)
 - [ ] 4.3 陪跑观察：连续 10 个交易日灰度运行
-- [ ] 4.4 peak_pullback_stabilization 专项测试（StarMap 重点策略）
+- [ ] 4.4 `peak_pullback_stabilization` 专项测试（StarMap 重点策略）
 
 ---
 
