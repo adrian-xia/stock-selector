@@ -16,7 +16,7 @@ from app.database import async_session_factory
 from app.research.repository.starmap_repo import StarMapRepository
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/research", tags=["research"])
+router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
 
 def _get_repo() -> StarMapRepository:
