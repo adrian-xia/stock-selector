@@ -112,7 +112,9 @@ tsc -b                                               # TypeScript 类型检查
   - 2 个 Guard（财务安全、现金流质量）
   - 2 个 Tagger（成长风格、红利风格）
   - 10 个 Trigger（4 进攻组 + 4 趋势组 + 2 底部组）
-- 实施进度：Phase 2/7 完成（策略适配与重写）
+  - 新 Pipeline V2（Layer 0-3 执行引擎）
+  - 策略工厂 V2 注册（20 个策略完整注册）
+- 实施进度：Phase 3/7 完成（新 Pipeline Layer 0-3）
 
 ### API 路由
 
