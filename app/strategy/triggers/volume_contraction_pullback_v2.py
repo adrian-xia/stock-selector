@@ -1,0 +1,74 @@
+"""Trigger 策略：缩量回调。
+
+趋势组信号，上升趋势中缩量回踩 MA20 支撑。
+返回 list[StrategySignal]，含置信度。
+"""
+
+from datetime import date
+
+import pandas as pd
+
+from app.strategy.base import BaseStrategyV2, SignalGroup, StrategyRole, StrategySignal
+
+
+class VolumeContractionPullbackTriggerV2(BaseStrategyV2):
+    """缩量回调 Trigger：上升趋势中缩量回踩 MA20 支撑。"""
+
+    name = "volume-contraction-pullback-trigger-v2"
+    display_name = "缩量回调"
+    role = StrategyRole.TRIGGER
+    signal_group = SignalGroup.TREND
+    description = "上升趋势中缩量回调至 MA20 支撑位"
+    default_params = {
+        "max_vol_ratio": 0.6,
+        "ma_tolerance": 0.02,
+    }
+    ai_rating = 6.73  # 三模型均分
+
+    async def execute(
+        self,
+        df: pd.DataFrame,
+        target_date: date,
+    ) -> list[StrategySignal]:
+        """执行缩量回调检测。
+
+        Returns:
+            list[StrategySignal]，命中股票列表
+        """
+        max_vol_ratio = self.params.get("max_vol_ratio", 0.6)
+        ma_tolerance = self.params.get("ma_tolerance", 0.02)
+
+        close = df.get("close", pd.Series(dtype=float)).fillna(0)
+        ma5 = df.get("ma5", pd.Series(dtype=float)).fillna(0)
+        ma20 = df.get("ma20", pd.Series(dtype=float)).fillna(0)
+        vol_ratio = df.get("vol_ratio", pd.Series(dtype=float)).fillna(0)
+
+        # 上升趋势：MA5 > MA20
+        uptrend = ma5 > ma20
+
+        # 回调至 MA20 附近（容差范围内）
+        near_ma20 = (close >= ma20 * (1 - ma_tolerance)) & (
+            close <= ma20 * (1 + ma_tolerance)
+        )
+
+        # 缩量
+        low_volume = vol_ratio <= max_vol_ratio
+
+        # MA20 有效
+        valid = ma20 > 0
+
+        # 排除停牌
+        trading = df.get("vol", pd.Series(dtype=float)).fillna(0) > 0
+
+        signal_mask = uptrend & near_ma20 & low_volume & valid & trading
+
+        signals = []
+        for ts_code in df.loc[signal_mask, "ts_code"]:
+            signals.append(
+                StrategySignal(
+                    ts_code=ts_code,
+                    confidence=1.0,
+                )
+            )
+
+        return signals
