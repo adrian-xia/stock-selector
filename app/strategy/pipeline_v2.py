@@ -119,9 +119,27 @@ async def _layer0_sql_filter(
     session: AsyncSession,
     target_date: date,
 ) -> pd.DataFrame:
-    """Layer 0: SQL 硬性排除。"""
+    """Layer 0: SQL 硬性排除。
+
+    复用 V1 pipeline 的 snapshot builder 思路：
+    1. 先查当日行情 + 技术指标
+    2. 再查前日技术指标（_prev 后缀）
+    3. 不在 SQL 中 JOIN 财务数据（Layer 1 需要时再补充）
+    """
     min_list_date = target_date.replace(year=target_date.year - 1)  # 上市满1年简化
 
+    # 获取前一个交易日
+    prev_date_sql = text("""
+        SELECT MAX(trade_date)
+        FROM stock_daily
+        WHERE trade_date < :target_date
+          AND vol > 0
+        LIMIT 1
+    """)
+    prev_result = await session.execute(prev_date_sql, {"target_date": target_date})
+    prev_date = prev_result.scalar()
+
+    # 当日行情 + 技术指标
     query = text("""
         SELECT
             s.ts_code,
@@ -135,26 +153,21 @@ async def _layer0_sql_filter(
             sd.amount,
             sd.pct_chg,
             td.ma5, td.ma10, td.ma20, td.ma60,
-            td.ma5_prev, td.ma20_prev, td.ma60_prev,
             td.macd_dif, td.macd_dea, td.macd_hist,
-            td.macd_dif_prev,
             td.rsi6, td.rsi12,
             td.boll_upper, td.boll_mid, td.boll_lower,
             td.vol_ma5, td.vol_ma10, td.vol_ratio,
-            td.atr14, td.atr14_prev,
+            td.atr14,
             td.high_20, td.high_60,
-            td.close_prev, td.open_prev, td.pct_chg_prev,
-            db.turnover_rate,
-            fi.roe, fi.eps, fi.pe_ttm, fi.pb, fi.dividend_yield,
-            fi.debt_ratio, fi.current_ratio,
-            fi.ocf_per_share, fi.profit_yoy
+            rtdb.turnover_rate
         FROM stocks s
         INNER JOIN stock_daily sd ON s.ts_code = sd.ts_code
-        INNER JOIN technical_daily td ON sd.ts_code = td.ts_code AND sd.trade_date = td.trade_date
-        LEFT JOIN daily_basic db ON sd.ts_code = db.ts_code AND sd.trade_date = db.trade_date
-        LEFT JOIN finance_indicator fi ON s.ts_code = fi.ts_code
+        LEFT JOIN technical_daily td ON sd.ts_code = td.ts_code AND sd.trade_date = td.trade_date
+        LEFT JOIN raw_tushare_daily_basic rtdb
+            ON sd.ts_code = rtdb.ts_code
+            AND rtdb.trade_date = :target_date_str
         WHERE sd.trade_date = :target_date
-          AND s.status = 'L'
+          AND s.list_status = 'L'
           AND s.name NOT LIKE '%ST%'
           AND s.name NOT LIKE '%退%'
           AND sd.amount >= 5000000
@@ -164,8 +177,14 @@ async def _layer0_sql_filter(
           AND sd.vol > 0
     """)
 
+    # raw_tushare_daily_basic 的 trade_date 是 String(8) 格式
+    target_date_str = target_date.strftime("%Y%m%d")
     result = await session.execute(
-        query, {"target_date": target_date, "min_list_date": min_list_date}
+        query, {
+            "target_date": target_date,
+            "target_date_str": target_date_str,
+            "min_list_date": min_list_date,
+        }
     )
     rows = result.fetchall()
 
@@ -173,6 +192,54 @@ async def _layer0_sql_filter(
         return pd.DataFrame()
 
     df = pd.DataFrame(rows, columns=result.keys())
+
+    # 将所有 Decimal 列转为 float
+    for col in df.columns:
+        if col not in ["ts_code", "name", "trade_date"] and df[col].dtype == object:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # 前日技术指标（_prev 后缀）
+    if prev_date is not None and not df.empty:
+        ts_codes = df["ts_code"].tolist()
+        codes_placeholder = ", ".join(f":c{i}" for i in range(len(ts_codes)))
+        code_params = {f"c{i}": code for i, code in enumerate(ts_codes)}
+
+        prev_sql = text(f"""
+            SELECT
+                td.ts_code,
+                td.ma5 AS ma5_prev,
+                td.ma20 AS ma20_prev,
+                td.ma60 AS ma60_prev,
+                td.macd_dif AS macd_dif_prev,
+                td.atr14 AS atr14_prev,
+                sd.close AS close_prev,
+                sd.open AS open_prev,
+                sd.pct_chg AS pct_chg_prev
+            FROM technical_daily td
+            JOIN stock_daily sd
+                ON td.ts_code = sd.ts_code AND td.trade_date = sd.trade_date
+            WHERE td.trade_date = :prev_date
+              AND td.ts_code IN ({codes_placeholder})
+        """)
+        prev_result = await session.execute(
+            prev_sql, {"prev_date": prev_date, **code_params}
+        )
+        prev_rows = prev_result.fetchall()
+
+        if prev_rows:
+            prev_columns = [
+                "ts_code",
+                "ma5_prev", "ma20_prev", "ma60_prev",
+                "macd_dif_prev", "atr14_prev",
+                "close_prev", "open_prev", "pct_chg_prev",
+            ]
+            prev_df = pd.DataFrame(prev_rows, columns=prev_columns)
+            # Decimal → float
+            for col in prev_df.columns:
+                if col != "ts_code" and prev_df[col].dtype == object:
+                    prev_df[col] = pd.to_numeric(prev_df[col], errors="coerce")
+            df = df.merge(prev_df, on="ts_code", how="left")
+
     return df
 
 
@@ -284,11 +351,15 @@ async def _layer3_fusion_ranking(
             signals_by_stock[sig.ts_code] = []
         signals_by_stock[sig.ts_code].append(sig)
 
+    # 将 DataFrame 索引设置为 ts_code，方便后续查找
+    df_indexed = df.set_index("ts_code")
+
     # 获取所有 Confirmer 策略
     confirmers = StrategyFactoryV2.get_by_role(StrategyRole.CONFIRMER)
     confirmer_bonuses = {}
     for meta in confirmers:
         confirmer = meta.strategy_cls()
+        # Confirmer 返回的 Series 索引已经是 ts_code（在各 Confirmer 中设置）
         bonus_series = await confirmer.execute(df, target_date)
         confirmer_bonuses[meta.name] = bonus_series
 
@@ -300,7 +371,9 @@ async def _layer3_fusion_ranking(
             continue
 
         # 获取股票基本信息
-        stock_row = df[df["ts_code"] == ts_code].iloc[0]
+        if ts_code not in df_indexed.index:
+            continue
+        stock_row = df_indexed.loc[ts_code]
 
         # 信号强度分：Σ(静态权重 × 置信度)
         signal_strength = sum(sig.static_weight * sig.confidence for sig in signals)

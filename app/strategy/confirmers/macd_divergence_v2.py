@@ -32,7 +32,7 @@ class MACDDivergenceConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
         """
         lookback = self.params.get("lookback", 20)
 
@@ -51,4 +51,10 @@ class MACDDivergenceConfirmerV2(BaseStrategyV2):
             & (macd_dif > macd_dif_prev)  # DIF 上升
         )
 
-        return divergence.astype(float)
+        result = divergence.astype(float)
+
+        # 确保索引是 ts_code
+        if "ts_code" in df.columns:
+            result.index = df["ts_code"].values
+
+        return result

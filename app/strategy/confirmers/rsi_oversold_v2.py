@@ -34,7 +34,7 @@ class RSIOversoldConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
         """
         period = self.params.get("period", 6)
         oversold = self.params.get("oversold", 20)
@@ -61,4 +61,10 @@ class RSIOversoldConfirmerV2(BaseStrategyV2):
         # 仅在 MA20 向上时启用
         confirmed = rsi_signal & ma20_up
 
-        return confirmed.astype(float)
+        result = confirmed.astype(float)
+
+        # 确保索引是 ts_code
+        if "ts_code" in df.columns:
+            result.index = df["ts_code"].values
+
+        return result

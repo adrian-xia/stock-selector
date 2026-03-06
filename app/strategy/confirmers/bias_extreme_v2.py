@@ -32,7 +32,7 @@ class BIASExtremeConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
         """
         oversold_bias = self.params.get("oversold_bias", -6.0)
 
@@ -45,4 +45,10 @@ class BIASExtremeConfirmerV2(BaseStrategyV2):
         # 极端乖离：BIAS < oversold_bias（如 -6%）
         extreme = (bias < oversold_bias) & (ma20 > 0)
 
-        return extreme.astype(float)
+        result = extreme.astype(float)
+
+        # 确保索引是 ts_code
+        if "ts_code" in df.columns:
+            result.index = df["ts_code"].values
+
+        return result

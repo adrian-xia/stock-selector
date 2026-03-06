@@ -295,7 +295,7 @@ _register_v2(StrategyMetaV2(
     signal_group=None,
     description="资产负债率/流动比率/速动比率",
     strategy_cls=FinancialSafetyGuardV2,
-    ai_rating=6.20,
+    ai_rating=6.72,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -305,7 +305,7 @@ _register_v2(StrategyMetaV2(
     signal_group=None,
     description="OCF/EPS>=1，排除纸面利润",
     strategy_cls=CashflowQualityGuardV2,
-    ai_rating=5.87,
+    ai_rating=7.33,
 ))
 
 # Tagger（2 个）
@@ -318,7 +318,7 @@ _register_v2(StrategyMetaV2(
     signal_group=None,
     description="PE<30 + ROE>=15% + 利润增速>=20%",
     strategy_cls=LowPEHighROETaggerV2,
-    ai_rating=7.13,
+    ai_rating=7.62,
     style_keys=["growth"],
 ))
 
@@ -329,7 +329,7 @@ _register_v2(StrategyMetaV2(
     signal_group=None,
     description="股息率>=3% + PE<20",
     strategy_cls=HighDividendTaggerV2,
-    ai_rating=6.47,
+    ai_rating=8.08,
     style_keys=["dividend"],
 ))
 
@@ -365,7 +365,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.AGGRESSIVE,
     description="强势股首阴后阳线反包，多头重新占优",
     strategy_cls=FirstNegativeReversalTriggerV2,
-    ai_rating=7.27,
+    ai_rating=7.73,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -375,7 +375,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.AGGRESSIVE,
     description="价格创近期新高且成交量显著放大",
     strategy_cls=VolumeBreakoutTriggerV2,
-    ai_rating=7.60,
+    ai_rating=7.42,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -396,7 +396,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.TREND,
     description="上升趋势中缩量回调至MA20支撑位",
     strategy_cls=VolumeContractionPullbackTriggerV2,
-    ai_rating=6.73,
+    ai_rating=7.42,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -416,7 +416,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.TREND,
     description="多头排列中小幅回调不超半分位，多头力量仍强",
     strategy_cls=PullbackHalfRuleTriggerV2,
-    ai_rating=6.40,
+    ai_rating=7.00,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -426,7 +426,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.TREND,
     description="价格突破MA20 + ATR14波动带上轨",
     strategy_cls=ATRBreakoutTriggerV2,
-    ai_rating=6.67,
+    ai_rating=6.97,
 ))
 
 # 底部组（2 个）
@@ -437,7 +437,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.BOTTOM,
     description="极端缩量+低换手率，阶段性底部信号",
     strategy_cls=ExtremeShrinkBottomTriggerV2,
-    ai_rating=6.33,
+    ai_rating=6.68,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -447,7 +447,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.BOTTOM,
     description="量缩价稳，抛压耗尽的底部企稳信号",
     strategy_cls=VolumePriceStableTriggerV2,
-    ai_rating=6.07,
+    ai_rating=6.68,
 ))
 
 

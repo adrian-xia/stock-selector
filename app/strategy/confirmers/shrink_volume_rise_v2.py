@@ -33,7 +33,7 @@ class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
         """
         max_vol_ratio = self.params.get("max_vol_ratio", 0.8)
         min_pct_chg = self.params.get("min_pct_chg", 0.5)
@@ -56,4 +56,10 @@ class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
             & (vol > 0)
         )
 
-        return shrink_rise.astype(float)
+        result = shrink_rise.astype(float)
+
+        # 确保索引是 ts_code
+        if "ts_code" in df.columns:
+            result.index = df["ts_code"].values
+
+        return result

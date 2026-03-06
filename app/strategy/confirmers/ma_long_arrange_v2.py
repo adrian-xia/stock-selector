@@ -30,7 +30,7 @@ class MALongArrangeConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
             满足多头排列返回 1.0，否则 0.0
         """
         ma5 = df.get("ma5", pd.Series(dtype=float)).fillna(0)
@@ -43,4 +43,10 @@ class MALongArrangeConfirmerV2(BaseStrategyV2):
         trading = df.get("vol", pd.Series(dtype=float)).fillna(0) > 0
 
         # 转换为 float：True -> 1.0, False -> 0.0
-        return (signal & trading).astype(float)
+        result = (signal & trading).astype(float)
+
+        # 确保索引是 ts_code
+        if "ts_code" in df.columns:
+            result.index = df["ts_code"].values
+
+        return result
