@@ -165,7 +165,7 @@ tsc -b                                               # TypeScript 类型检查
 | Pipeline 缓存优化 | `archived/12-系统设计-Pipeline缓存优化.md` |
 | V4 量价优化任务 | `archived/14-系统设计-V4量价配合策略优化任务.md` |
 | 高位回落企稳策略 | `archived/15-策略设计-高位回落企稳二次启动.md` |
-| V4 量价配合详细设计 | `archived/v4_planning/01-V4详细设计-量价配合策略.md` |
+| V4 量价配合策略（完整） | `archived/v4_planning/` 目录（4 个文档，85% 已实现） |
 
 V2 详细实施计划见 `PROJECT_TASKS.md`。
 
