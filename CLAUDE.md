@@ -138,19 +138,13 @@ tsc -b                                               # TypeScript 类型检查
 
 ## 设计文档
 
-编码前必读 `docs/design/99-实施范围-V1与V2划分.md`（已归档）。
-
-### 活跃文档（未完成 / 持续更新）
-
-| 模块 | 设计文档 | 状态 |
-|------|---------|------|
-| 盘后投研（StarMap） | `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md` | Phase 0-4 基本完成，陪跑观察中 |
-| StarMap 新闻 PoC | `docs/design/18-news-poc-result.md` | 已完成 |
+所有设计文档已归档到 `docs/design/archived/`。
 
 ### 已归档文档（`docs/design/archived/`）
 
 | 模块 | 设计文档 |
 |------|---------|
+| **StarMap 盘后投研系统** | `archived/18-starmap/` 目录（详细设计 + PoC 结果，Phase 0-4 基本完成） |
 | 数据采集 | `archived/01-详细设计-数据采集.md` |
 | 策略引擎 | `archived/02-详细设计-策略引擎.md` |
 | AI 与回测 | `archived/03-详细设计-AI与回测.md` |
@@ -168,6 +162,7 @@ tsc -b                                               # TypeScript 类型检查
 | V3 实施计划 | `archived/01-V3实施计划.md` |
 | V2 概要设计 | `archived/00-概要设计-v2.md` |
 | 设计补全任务 | `archived/task-设计补全.md` |
+| V3 规划文档 | `archived/v3_planning/` 目录（2 个文档） |
 | V4 量价配合策略（完整） | `archived/v4_planning/` 目录（4 个文档，85% 已实现） |
 
 V2 详细实施计划见 `PROJECT_TASKS.md`。
