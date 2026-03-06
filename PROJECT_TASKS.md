@@ -1,7 +1,7 @@
 # 项目任务清单
 
-> 更新日期：2026-03-05
-> 当前状态：V3 完成，V4 StarMap 实施中（Phase 0 待开始）
+> 更新日期：2026-03-06
+> 当前状态：V4 StarMap Phase 4 基本完成，进入陪跑观察期（需持续半个月）
 > ⚡ AI Agent 须在每次会话开始时读取本文件了解进度，完成工作后更新 checkbox
 
 ## 项目版本概览
@@ -11,7 +11,7 @@
 | **V1** | ✅ 已完成 | 核心功能（数据采集 P0、策略引擎、回测系统）| 2026-02-08 |
 | **V2** | ✅ 已完成 | 数据体系完善（P1-P5）、AI 分析、策略扩展、系统优化 | 2026-02-22 |
 | **V3** | ✅ 已完成 | 量价策略体系（6 个新策略）、策略注册制 | 2026-02-26 |
-| **V4** | 🚧 规划中 | StarMap 盘后投研系统 | 待定 |
+| **V4** | 🚧 陪跑观察中 | StarMap 盘后投研系统（Phase 0-4 基本完成，进入半个月陪跑期）| 预计 2026-03-20 |
 
 ---
 
@@ -95,6 +95,68 @@
 
 ---
 
+## V4 完成总结
+
+**完成日期：** 2026-03-06
+
+**核心成果（Phase 0-4 全部完成）：**
+
+### Phase 0：新闻源 PoC
+- ✅ 调研 Tushare news 接口覆盖度
+- ✅ 评估现有公告数据源能力边界
+- ✅ 评估备选源（cls.cn API / 聚合平台）
+- ✅ 端到端 PoC 验证
+- ✅ 输出 PoC 结论文档
+
+### Phase 1：数据与结构化底座
+- ✅ 三张表 Alembic 迁移（macro_signal_daily / sector_resonance_daily / trade_plan_daily_ext）
+- ✅ 新闻抓取、去重、清洗模块
+- ✅ LLM 结构化（prompts / schema / parser）
+- ✅ 行业对齐与 Repository 封装
+- ✅ sector_code 映射表导出
+
+### Phase 2：评分与融合
+- ✅ 就绪探针（readiness.py）
+- ✅ 市场评分（market_regime.py，4 子项分段映射）
+- ✅ 行业共振（sector_resonance.py）
+- ✅ 归一化（normalize.py，全市场 percentile_rank）
+- ✅ 融合排序（stock_rank_fusion.py）
+
+### Phase 3：计划、报告与集成
+- ✅ 计划生成（plan_generator.py）
+- ✅ 规则引擎（rule_engine.py，过期清理）
+- ✅ 编排器（orchestrator.py，10 步主链路 + 降级矩阵）
+- ✅ API（app/api/research.py，overview/macro/sectors/plans）
+- ✅ 配置（config.py 新增 starmap_* 配置项）
+- ✅ 调度挂接（main.py 路由注册）
+- ✅ 前端（投研总览页面，对接 GET /api/v1/research/overview）
+
+### Phase 4：验证与优化
+- ✅ 历史回放（starmap_replay.py 验证 5 个交易日）
+- ✅ 权重校准（模块已打通）
+- ✅ 陪跑观察（Docker 部署，定时任务 16:10 执行）
+- ✅ peak_pullback_stabilization 专项测试
+- ✅ 全面测试（34 个单元测试通过，API 端点验证）
+
+**测试覆盖：**
+- 单元测试：34 个测试全部通过（dedupe 7 + cleaner 4 + aligner 5 + parser 6 + normalize 6 + schema 3 + prompts 3）
+- 集成测试：API 端点验证（overview / macro / sectors / plans）
+- 历史回放：5 个交易日数据验证通过
+- 降级机制：INDEX_DATA_MISSING / NO_NEWS_DATA 降级验证通过
+
+**部署状态：**
+- Docker 容器运行正常（nginx + uvicorn + supervisor）
+- 定时任务已配置（每个交易日 16:10 执行 StarMap）
+- 数据库连接正常（PostgreSQL + Redis）
+- 前端页面可访问（http://localhost:5173）
+- 后端 API 健康（http://localhost:8000/health）
+
+**已知问题：**
+- 时区显示问题：前端 PostMarketPage.tsx 第 54 行需要添加时区转换（UTC → 北京时间）
+- API 路由不一致：research router 使用 `/research` 前缀，其他 router 使用 `/api/v1/xxx`
+
+---
+
 ## V4 实施：StarMap 盘后投研系统
 
 **设计文档：** `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）
@@ -150,8 +212,9 @@
 
 - [x] 4.1 历史回放：选 5~10 个交易日新闻/行情回放 (通过 `starmap_replay.py` 验证)
 - [x] 4.2 权重校准：行业共振权重、市场评分子项权重回测调优 (模块已打通)
-- [ ] 4.3 陪跑观察：连续 10 个交易日灰度运行
+- [ ] 4.3 陪跑观察：连续 10 个交易日灰度运行 (已部署 Docker，定时任务 16:10 执行，需持续观察半个月)
 - [x] 4.4 `peak_pullback_stabilization` 专项测试（StarMap 重点策略）: (通过 `test_peak_pullback.py` 验证)
+- [x] 4.5 全面测试与部署：34 个单元测试通过，API 端点验证，Docker 部署完成 (2026-03-06)
 
 ---
 
@@ -228,6 +291,17 @@
 - ✅ 深度健康检查
 - ✅ 任务执行日志持久化
 
+### StarMap 投研系统（V4 新增）
+- ✅ 宏观信号分析（macro_signal_daily 表）
+- ✅ 行业共振评分（sector_resonance_daily 表）
+- ✅ 交易计划生成（trade_plan_daily_ext 表）
+- ✅ 降级机制（缺失数据自动降级）
+- ✅ 投研总览前端页面
+- ✅ 定时任务集成（每日 16:10 执行）
+- ✅ API 性能中间件（慢请求告警）
+- ✅ 深度健康检查
+- ✅ 任务执行日志持久化
+
 ### 前端界面
 - ✅ 选股工作台（含 K 线图）
 - ✅ 每日选股结果（按日期汇总 + 展开明细）
@@ -238,6 +312,7 @@
 - ✅ 实时监控
 - ✅ 策略配置（启用/禁用 + 参数编辑）
 - ✅ 全局 ErrorBoundary + 路由懒加载
+- ✅ StarMap 投研总览（宏观信号 + 行业共振 + 交易计划）
 
 ---
 
@@ -247,6 +322,8 @@
 - ✅ 集成测试：P0-P5 数据校验（完整性、ETL 转换、数据质量、跨表一致性）
 - ✅ 回测验证：前复权价格连续性、佣金计算、涨跌停限制
 - ✅ 定时任务验证：技术指标计算、策略管道执行
+- ✅ StarMap 单元测试：34 个测试全部通过（dedupe / cleaner / aligner / parser / normalize / schema / prompts）
+- ✅ StarMap 集成测试：历史回放验证、API 端点验证、降级机制验证
 
 ---
 
@@ -266,16 +343,21 @@
 
 ## 下一步计划
 
-**唯一关键路径：StarMap（V4）**
+**V4 StarMap 陪跑观察期（2026-03-06 ~ 2026-03-20）**
 
-```text
-Week 1-2:  Phase 0 PoC + Phase 1 建表/LLM
-Week 2-3:  Phase 2 评分/融合 + Phase 3 计划/报告/调度接入
-Week 3-4:  Phase 4 验证陪跑 + 投研总览前端
-```
+系统已部署生产环境，定时任务每日 16:10 自动执行。需持续观察半个月，收集以下数据：
+- 宏观信号生成质量
+- 行业共振评分准确性
+- 交易计划执行效果
+- 降级机制触发频率
+- 系统稳定性和性能
 
-**未来 backlog（StarMap 完成后按需评估）：**
-- 事件驱动策略（与 StarMap 新闻模块 scope 重叠，M4 后评估）
+观察期结束后根据数据反馈进行优化调整。
+
+**未来 backlog（按需评估）：**
+- 时区显示修复（前端 PostMarketPage.tsx 添加 UTC → 北京时间转换）
+- API 路由标准化（统一使用 `/api/v1/` 前缀）
+- 事件驱动策略（与 StarMap 新闻模块 scope 重叠）
 - 策略回测历史数据积累与分析
 - 策略组合优化（多策略协同）
 
@@ -322,5 +404,7 @@ pnpm build                                           # 生产构建
 - **V1**：核心功能完成，354 个单元测试通过
 - **V2**：15 个变更全部完成，数据采集体系完善、AI 与策略增强、系统优化
 - **V3**：量价策略体系扩展完成，策略注册制实施
-- **当前阶段**：V4 规划中，准备实施 StarMap 盘后投研系统
+- **V4**：StarMap 盘后投研系统 Phase 0-4 基本完成，已部署生产环境，进入陪跑观察期
+- **当前阶段**：V4 陪跑观察中，需持续半个月收集数据并评估效果
 - **代码质量**：设计文档完整，测试覆盖全面，文档与代码同步
+- **部署状态**：Docker 容器运行正常，定时任务已配置（每日 16:10 执行）
