@@ -252,7 +252,7 @@ _register_v2(StrategyMetaV2(
     signal_group=None,
     description="仅MA20向上时启用，为底部信号加分",
     strategy_cls=RSIOversoldConfirmerV2,
-    ai_rating=6.00,
+    ai_rating=5.58,
 ))
 
 _register_v2(StrategyMetaV2(
@@ -385,7 +385,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.AGGRESSIVE,
     description="资金加速流入，量能持续放大的趋势加速信号",
     strategy_cls=VolumeSurgeContinuationTriggerV2,
-    ai_rating=6.93,
+    ai_rating=7.13,
 ))
 
 # 趋势组（4 个）
@@ -406,7 +406,7 @@ _register_v2(StrategyMetaV2(
     signal_group=SignalGroup.TREND,
     description="前期主升浪后高位回落，缩量企稳后放量小阳二次启动",
     strategy_cls=PeakPullbackStabilizationTriggerV2,
-    ai_rating=7.47,
+    ai_rating=7.85,
 ))
 
 _register_v2(StrategyMetaV2(

@@ -1,7 +1,7 @@
 """Tagger 适配器：将 V1 BaseStrategy 适配为 V2 Tagger 角色。
 
 Tagger 策略返回 dict[str, pd.Series[float]]，键为风格标签，值为强度 Series（0.0-1.0）。
-可以复用 V1 的 filter_batch 方法，将 bool 转换为 1.0/0.0 强度。
+优先使用 V1 策略的 calculate_style_strength 方法，如果不存在则回退到 filter_batch（bool 转 1.0/0.0）。
 """
 
 from datetime import date
@@ -56,9 +56,14 @@ class TaggerAdapter(BaseStrategyV2):
 
         Returns:
             dict[str, pd.Series[float]]，键为风格标签，值为强度 Series（0.0-1.0）
-            V1 策略返回 bool，转换为 1.0（命中）或 0.0（未命中）
+            优先使用 calculate_style_strength，否则回退到 filter_batch（bool 转 1.0/0.0）
         """
-        mask = await self.v1_strategy.filter_batch(df, target_date)
-        # 将 bool 转换为 float：True -> 1.0, False -> 0.0
-        strength = mask.astype(float)
+        # 优先使用 calculate_style_strength 方法
+        if hasattr(self.v1_strategy, "calculate_style_strength"):
+            strength = self.v1_strategy.calculate_style_strength(df, target_date)
+        else:
+            # 回退到 filter_batch，将 bool 转换为 float
+            mask = await self.v1_strategy.filter_batch(df, target_date)
+            strength = mask.astype(float)
+
         return {self.style_key: strength}

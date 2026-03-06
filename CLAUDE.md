@@ -108,13 +108,13 @@ tsc -b                                               # TypeScript 类型检查
 - 适配器模式：`GuardAdapter`/`TaggerAdapter` 包装 V1 策略为 V2 角色
 - 已实现：
   - 1 个 Scorer（质量评分 0-100）
-  - 5 个 Confirmer（加分系数 0.0-1.0，已修复索引问题）
-  - 2 个 Guard（财务安全、现金流质量，工厂函数注册）
-  - 2 个 Tagger（成长风格、红利风格，工厂函数注册）
+  - 5 个 Confirmer（加权 bonus 0.2/0.3，支持 applicable_groups 信号组过滤）
+  - 2 个 Guard（财务安全、现金流质量，真实 BaseStrategyV2 子类）
+  - 2 个 Tagger（成长风格、红利风格，真实 BaseStrategyV2 子类，支持 style_strength 0.0-1.0）
   - 10 个 Trigger（4 进攻组 + 4 趋势组 + 2 底部组）
-  - 新 Pipeline V2（Layer 0-3 执行引擎，已修复 SQL schema 问题）
-  - 策略工厂 V2 注册（20 个策略完整注册，AI rating 已对齐）
-- 实施进度：Phase 3/7 完成（新 Pipeline Layer 0-3，关键阻塞问题已修复）
+  - 新 Pipeline V2（Layer 0-3 执行引擎，含财务数据补充、RSI 前日数据、AI rating 对齐）
+  - 策略工厂 V2 注册（20 个策略完整注册）
+- 实施进度：Phase 3/7 完成（新 Pipeline Layer 0-3，所有阻塞问题已修复）
 
 ### API 路由
 

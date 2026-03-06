@@ -81,6 +81,9 @@ async def execute_pipeline_v2(
 
     logger.info(f"[Pipeline V2] Layer 0 通过: {len(df)} 只")
 
+    # 补充财务数据（Layer 1 的 Guard/Scorer/Tagger 需要）
+    df = await _enrich_finance_data_v2(session, df, target_date)
+
     # Layer 1: 质量底池
     layer1_results = await _layer1_quality_pool(df, target_date)
     passed_stocks = [r for r in layer1_results if r.passed_guard]
@@ -212,6 +215,8 @@ async def _layer0_sql_filter(
                 td.ma60 AS ma60_prev,
                 td.macd_dif AS macd_dif_prev,
                 td.atr14 AS atr14_prev,
+                td.rsi6 AS rsi6_prev,
+                td.rsi12 AS rsi12_prev,
                 sd.close AS close_prev,
                 sd.open AS open_prev,
                 sd.pct_chg AS pct_chg_prev
@@ -231,6 +236,7 @@ async def _layer0_sql_filter(
                 "ts_code",
                 "ma5_prev", "ma20_prev", "ma60_prev",
                 "macd_dif_prev", "atr14_prev",
+                "rsi6_prev", "rsi12_prev",
                 "close_prev", "open_prev", "pct_chg_prev",
             ]
             prev_df = pd.DataFrame(prev_rows, columns=prev_columns)
@@ -240,6 +246,100 @@ async def _layer0_sql_filter(
                     prev_df[col] = pd.to_numeric(prev_df[col], errors="coerce")
             df = df.merge(prev_df, on="ts_code", how="left")
 
+    return df
+
+
+async def _enrich_finance_data_v2(
+    session: AsyncSession,
+    df: pd.DataFrame,
+    target_date: date,
+) -> pd.DataFrame:
+    """为 DataFrame 补充财务指标数据（V2 专用）。
+
+    使用每只股票最新一期已公告的财务报告（ann_date <= target_date）。
+    """
+    if df.empty:
+        return df
+
+    ts_codes = df["ts_code"].tolist()
+    codes_placeholder = ", ".join(f":c{i}" for i in range(len(ts_codes)))
+    code_params = {f"c{i}": code for i, code in enumerate(ts_codes)}
+
+    # 使用 DISTINCT ON 获取每只股票最新一期财务数据
+    finance_sql = text(f"""
+        SELECT DISTINCT ON (ts_code)
+            ts_code,
+            pe_ttm, pb, roe, eps,
+            revenue_yoy, profit_yoy,
+            current_ratio, quick_ratio, debt_ratio,
+            gross_margin, net_margin,
+            ocf_per_share
+        FROM finance_indicator
+        WHERE ts_code IN ({codes_placeholder})
+          AND ann_date <= :target_date
+        ORDER BY ts_code, end_date DESC
+    """)
+
+    result = await session.execute(
+        finance_sql, {"target_date": target_date, **code_params}
+    )
+    rows = result.fetchall()
+
+    if rows:
+        fin_columns = [
+            "ts_code", "pe_ttm", "pb", "roe", "eps",
+            "revenue_yoy", "profit_yoy",
+            "current_ratio", "quick_ratio", "debt_ratio",
+            "gross_margin", "net_margin",
+            "ocf_per_share",
+        ]
+        fin_df = pd.DataFrame(rows, columns=fin_columns)
+        # Decimal → float
+        for col in fin_df.columns:
+            if col != "ts_code" and fin_df[col].dtype == object:
+                fin_df[col] = pd.to_numeric(fin_df[col], errors="coerce")
+        df = df.merge(fin_df, on="ts_code", how="left")
+
+    # 从 raw_tushare_daily_basic 补充每日估值指标（dividend_yield 等）
+    # daily_basic 的估值数据比 finance_indicator 更实时（每日更新），优先使用
+    daily_basic_sql = text(f"""
+        SELECT
+            ts_code,
+            pe_ttm AS db_pe_ttm,
+            pb AS db_pb,
+            dv_ttm AS dividend_yield
+        FROM raw_tushare_daily_basic
+        WHERE trade_date = :trade_date_str
+          AND ts_code IN ({codes_placeholder})
+    """)
+
+    # raw_tushare_daily_basic 的 trade_date 是 String(8) 格式
+    trade_date_str = target_date.strftime("%Y%m%d")
+    db_result = await session.execute(
+        daily_basic_sql, {"trade_date_str": trade_date_str, **code_params}
+    )
+    db_rows = db_result.fetchall()
+
+    if db_rows:
+        db_columns = ["ts_code", "db_pe_ttm", "db_pb", "dividend_yield"]
+        db_df = pd.DataFrame(db_rows, columns=db_columns)
+        # Decimal → float
+        for col in db_df.columns:
+            if col != "ts_code" and db_df[col].dtype == object:
+                db_df[col] = pd.to_numeric(db_df[col], errors="coerce")
+        df = df.merge(db_df, on="ts_code", how="left")
+
+        # daily_basic 的估值指标覆盖 finance_indicator 的（更实时）
+        for col, db_col in [("pe_ttm", "db_pe_ttm"), ("pb", "db_pb")]:
+            if db_col in df.columns:
+                if col in df.columns:
+                    # 用 daily_basic 的值填充 finance_indicator 中的 NULL
+                    df[col] = df[col].fillna(df[db_col])
+                else:
+                    df[col] = df[db_col]
+                df.drop(columns=[db_col], inplace=True)
+
+    logger.info(f"[Pipeline V2] 财务数据补充完成：{len(df)} 只股票")
     return df
 
 
@@ -356,12 +456,17 @@ async def _layer3_fusion_ranking(
 
     # 获取所有 Confirmer 策略
     confirmers = StrategyFactoryV2.get_by_role(StrategyRole.CONFIRMER)
-    confirmer_bonuses = {}
+    confirmer_data = {}
     for meta in confirmers:
         confirmer = meta.strategy_cls()
         # Confirmer 返回的 Series 索引已经是 ts_code（在各 Confirmer 中设置）
         bonus_series = await confirmer.execute(df, target_date)
-        confirmer_bonuses[meta.name] = bonus_series
+        # 获取 confirmer 的适用信号组
+        applicable_groups = getattr(confirmer, "applicable_groups", [])
+        confirmer_data[meta.name] = {
+            "bonus_series": bonus_series,
+            "applicable_groups": applicable_groups,
+        }
 
     # 计算每只股票的最终得分
     picks = []
@@ -378,11 +483,22 @@ async def _layer3_fusion_ranking(
         # 信号强度分：Σ(静态权重 × 置信度)
         signal_strength = sum(sig.static_weight * sig.confidence for sig in signals)
 
-        # Confirmer 加分：叠加所有 confirmer，封顶 0.6
+        # Confirmer 加分：按信号组过滤，叠加所有匹配的 confirmer，封顶 0.6
+        # 获取该股票的所有信号组
+        stock_signal_groups = {sig.signal_group for sig in signals}
+
         total_bonus = 0.0
-        for bonus_series in confirmer_bonuses.values():
-            if ts_code in bonus_series.index:
-                total_bonus += float(bonus_series.loc[ts_code])
+        for confirmer_name, data in confirmer_data.items():
+            bonus_series = data["bonus_series"]
+            applicable_groups = data["applicable_groups"]
+
+            # 如果 confirmer 没有限制信号组，或者股票信号组与 confirmer 适用组有交集
+            if not applicable_groups or any(
+                sg in applicable_groups for sg in stock_signal_groups
+            ):
+                if ts_code in bonus_series.index:
+                    total_bonus += float(bonus_series.loc[ts_code])
+
         confirmed_bonus = min(total_bonus, 0.6)
 
         signal_strength += confirmed_bonus

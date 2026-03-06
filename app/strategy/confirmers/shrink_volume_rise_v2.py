@@ -1,14 +1,14 @@
 """Confirmer 策略：缩量上涨。
 
 筹码锁定确认，为趋势延续信号 +0.2 加分。
-返回加分系数 0.0-1.0。
+返回加分权重（0.0 或 0.2）。
 """
 
 from datetime import date
 
 import pandas as pd
 
-from app.strategy.base import BaseStrategyV2, StrategyRole
+from app.strategy.base import BaseStrategyV2, SignalGroup, StrategyRole
 
 
 class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
@@ -24,6 +24,8 @@ class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
         "min_pct_chg": 0.5,
     }
     ai_rating = 6.87  # 三模型均分（从 trigger 降级为 confirmer）
+    bonus_weight = 0.2  # 加分权重
+    applicable_groups = [SignalGroup.TREND_CONTINUATION]  # 适用信号组
 
     async def execute(
         self,
@@ -33,7 +35,7 @@ class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分权重（0.0 或 0.2）
         """
         max_vol_ratio = self.params.get("max_vol_ratio", 0.8)
         min_pct_chg = self.params.get("min_pct_chg", 0.5)
@@ -56,7 +58,8 @@ class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
             & (vol > 0)
         )
 
-        result = shrink_rise.astype(float)
+        # 返回加分权重：满足条件返回 0.2，否则 0.0
+        result = shrink_rise.astype(float) * self.bonus_weight
 
         # 确保索引是 ts_code
         if "ts_code" in df.columns:

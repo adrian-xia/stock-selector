@@ -1,14 +1,14 @@
 """Confirmer 策略：RSI 超卖回升。
 
 仅在 MA20 向上时启用，为底部信号 +0.2 加分。
-返回加分系数 0.0-1.0。
+返回加分权重（0.0 或 0.2）。
 """
 
 from datetime import date
 
 import pandas as pd
 
-from app.strategy.base import BaseStrategyV2, StrategyRole
+from app.strategy.base import BaseStrategyV2, SignalGroup, StrategyRole
 
 
 class RSIOversoldConfirmerV2(BaseStrategyV2):
@@ -25,6 +25,8 @@ class RSIOversoldConfirmerV2(BaseStrategyV2):
         "bounce": 30,
     }
     ai_rating = 5.58  # 三模型均分
+    bonus_weight = 0.2  # 加分权重
+    applicable_groups = [SignalGroup.BOTTOM_REVERSAL]  # 适用信号组
 
     async def execute(
         self,
@@ -34,7 +36,7 @@ class RSIOversoldConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
+            pd.Series[float]，索引为 ts_code，加分权重（0.0 或 0.2）
         """
         period = self.params.get("period", 6)
         oversold = self.params.get("oversold", 20)
@@ -61,7 +63,8 @@ class RSIOversoldConfirmerV2(BaseStrategyV2):
         # 仅在 MA20 向上时启用
         confirmed = rsi_signal & ma20_up
 
-        result = confirmed.astype(float)
+        # 返回加分权重：满足条件返回 0.2，否则 0.0
+        result = confirmed.astype(float) * self.bonus_weight
 
         # 确保索引是 ts_code
         if "ts_code" in df.columns:

@@ -1,14 +1,14 @@
 """Confirmer 策略：均线多头排列。
 
 作为趋势方向确认，为趋势组信号 +0.3 加分。
-返回加分系数 0.0-1.0（满足条件返回 1.0，否则 0.0）。
+返回加分权重（0.0 或 0.3）。
 """
 
 from datetime import date
 
 import pandas as pd
 
-from app.strategy.base import BaseStrategyV2, StrategyRole
+from app.strategy.base import BaseStrategyV2, SignalGroup, StrategyRole
 
 
 class MALongArrangeConfirmerV2(BaseStrategyV2):
@@ -21,6 +21,11 @@ class MALongArrangeConfirmerV2(BaseStrategyV2):
     description = "MA5 > MA10 > MA20 > MA60，为趋势组信号加分"
     default_params = {}
     ai_rating = 6.53  # 三模型均分（从独立策略降级为 confirmer）
+    bonus_weight = 0.3  # 加分权重
+    applicable_groups = [
+        SignalGroup.TREND_FOLLOWING,
+        SignalGroup.TREND_CONTINUATION,
+    ]  # 适用信号组
 
     async def execute(
         self,
@@ -30,8 +35,7 @@ class MALongArrangeConfirmerV2(BaseStrategyV2):
         """执行确认检查。
 
         Returns:
-            pd.Series[float]，索引为 ts_code，加分系数 0.0-1.0
-            满足多头排列返回 1.0，否则 0.0
+            pd.Series[float]，索引为 ts_code，加分权重（0.0 或 0.3）
         """
         ma5 = df.get("ma5", pd.Series(dtype=float)).fillna(0)
         ma10 = df.get("ma10", pd.Series(dtype=float)).fillna(0)
@@ -42,8 +46,8 @@ class MALongArrangeConfirmerV2(BaseStrategyV2):
         signal = (ma5 > ma10) & (ma10 > ma20) & (ma20 > ma60) & (ma60 > 0)
         trading = df.get("vol", pd.Series(dtype=float)).fillna(0) > 0
 
-        # 转换为 float：True -> 1.0, False -> 0.0
-        result = (signal & trading).astype(float)
+        # 返回加分权重：满足条件返回 0.3，否则 0.0
+        result = (signal & trading).astype(float) * self.bonus_weight
 
         # 确保索引是 ts_code
         if "ts_code" in df.columns:
