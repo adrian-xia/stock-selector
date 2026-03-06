@@ -138,20 +138,14 @@ tsc -b                                               # TypeScript 类型检查
 
 ## 设计文档
 
-编码前必读 `docs/design/99-实施范围-V1与V2划分.md`。
+编码前必读 `docs/design/99-实施范围-V1与V2划分.md`（已归档）。
 
 ### 活跃文档（未完成 / 持续更新）
 
 | 模块 | 设计文档 | 状态 |
 |------|---------|------|
-| 前端交互 | `docs/design/04-详细设计-前端与交互.md` | 70% |
-| 定时任务 | `docs/design/10-系统设计-定时任务调度.md` | 75% |
-| 测试策略 | `docs/design/13-系统设计-测试策略.md` | 60% |
-| 盘后投研（StarMap） | `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md` | Phase 0 PoC 完成 |
-| V1/V2 范围 | `docs/design/99-实施范围-V1与V2划分.md` | 持续更新 |
-| 项目总体计划 | `docs/design/99-项目总体计划.md` | 持续更新 |
-| V3 概要设计 | `docs/design/00-V3概要设计.md` | 部分完成 |
-| V3 实施计划 | `docs/design/01-V3实施计划.md` | 部分完成 |
+| 盘后投研（StarMap） | `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md` | Phase 0-4 基本完成，陪跑观察中 |
+| StarMap 新闻 PoC | `docs/design/18-news-poc-result.md` | 已完成 |
 
 ### 已归档文档（`docs/design/archived/`）
 
@@ -160,11 +154,20 @@ tsc -b                                               # TypeScript 类型检查
 | 数据采集 | `archived/01-详细设计-数据采集.md` |
 | 策略引擎 | `archived/02-详细设计-策略引擎.md` |
 | AI 与回测 | `archived/03-详细设计-AI与回测.md` |
+| 前端交互 | `archived/04-详细设计-前端与交互.md` |
 | 量价综合策略 | `archived/05-详细设计-量价综合选股策略.md` |
+| 定时任务 | `archived/10-系统设计-定时任务调度.md` |
 | 缓存策略 | `archived/11-系统设计-缓存策略.md` |
 | Pipeline 缓存优化 | `archived/12-系统设计-Pipeline缓存优化.md` |
+| 测试策略 | `archived/13-系统设计-测试策略.md` |
 | V4 量价优化任务 | `archived/14-系统设计-V4量价配合策略优化任务.md` |
 | 高位回落企稳策略 | `archived/15-策略设计-高位回落企稳二次启动.md` |
+| V1/V2 范围 | `archived/99-实施范围-V1与V2划分.md` |
+| 项目总体计划 | `archived/99-项目总体计划.md` |
+| V3 概要设计 | `archived/00-V3概要设计.md` |
+| V3 实施计划 | `archived/01-V3实施计划.md` |
+| V2 概要设计 | `archived/00-概要设计-v2.md` |
+| 设计补全任务 | `archived/task-设计补全.md` |
 | V4 量价配合策略（完整） | `archived/v4_planning/` 目录（4 个文档，85% 已实现） |
 
 V2 详细实施计划见 `PROJECT_TASKS.md`。
