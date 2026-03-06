@@ -105,7 +105,9 @@ tsc -b                                               # TypeScript 类型检查
 - 市场状态感知：牛市/熊市/震荡市自适应权重
 - 双注册表：`STRATEGY_REGISTRY`（V1）+ `STRATEGY_REGISTRY_V2`（V2）并存
 - 基类：`BaseStrategy`（V1）+ `BaseStrategyV2`（V2）向后兼容
-- 实施进度：Phase 1/7 完成（基础架构）
+- 适配器模式：`GuardAdapter`/`TaggerAdapter` 包装 V1 策略为 V2 角色
+- 已实现：1 个 Scorer（质量评分 0-100）、5 个 Confirmer（加分系数 0.0-1.0）
+- 实施进度：Phase 2/7 进行中（策略适配与重写）
 
 ### API 路由
 
