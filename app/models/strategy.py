@@ -52,6 +52,12 @@ class Strategy(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     params: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # V2 新增字段
+    role: Mapped[str | None] = mapped_column(String(20), nullable=True, default="trigger")
+    signal_group: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_rating: Mapped[float | None] = mapped_column(Numeric(4, 2), nullable=True, default=5.0)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
