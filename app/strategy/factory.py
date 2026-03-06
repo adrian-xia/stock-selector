@@ -1,16 +1,17 @@
 """策略工厂：注册、查询和实例化策略。
 
 V1 使用手动字典注册，所有策略在模块底部显式注册。
+V2 新增双注册表：STRATEGY_REGISTRY（V1）+ STRATEGY_REGISTRY_V2（V2）。
 """
 
 from dataclasses import dataclass, field
 
-from app.strategy.base import BaseStrategy
+from app.strategy.base import BaseStrategy, BaseStrategyV2, SignalGroup, StrategyRole
 
 
 @dataclass(frozen=True)
 class StrategyMeta:
-    """策略元数据，描述一个策略的静态信息。"""
+    """策略元数据（V1），描述一个策略的静态信息。"""
 
     name: str                          # 唯一标识，如 "ma-cross"
     display_name: str                  # 显示名称，如 "均线金叉"
@@ -21,12 +22,31 @@ class StrategyMeta:
     param_space: dict = field(default_factory=dict)  # 可优化参数空间
 
 
-# 策略注册表：name -> StrategyMeta
+@dataclass(frozen=True)
+class StrategyMetaV2:
+    """策略元数据（V2）。"""
+
+    name: str
+    display_name: str
+    role: StrategyRole
+    signal_group: SignalGroup | None
+    description: str
+    strategy_cls: type[BaseStrategyV2]
+    ai_rating: float  # 三模型综合均分
+    default_params: dict = field(default_factory=dict)
+    param_space: dict = field(default_factory=dict)
+    style_keys: list[str] = field(default_factory=list)  # tagger 可产出的风格标签键（元数据）
+
+
+# V1 策略注册表：name -> StrategyMeta
 STRATEGY_REGISTRY: dict[str, StrategyMeta] = {}
+
+# V2 策略注册表：name -> StrategyMetaV2
+STRATEGY_REGISTRY_V2: dict[str, StrategyMetaV2] = {}
 
 
 class StrategyFactory:
-    """策略工厂，提供策略的查询和实例化能力。"""
+    """策略工厂，提供策略的查询和实例化能力（V1）。"""
 
     @classmethod
     def get_strategy(
@@ -95,9 +115,99 @@ class StrategyFactory:
         return STRATEGY_REGISTRY[name]
 
 
+class StrategyFactoryV2:
+    """策略工厂（V2），提供 V2 策略的查询和实例化能力。"""
+
+    @classmethod
+    def get_strategy(
+        cls,
+        name: str,
+        params: dict | None = None,
+    ) -> BaseStrategyV2:
+        """根据策略名称实例化 V2 策略对象。
+
+        Args:
+            name: 策略唯一标识
+            params: 运行时参数（覆盖默认值）
+
+        Returns:
+            V2 策略实例
+
+        Raises:
+            KeyError: 策略未注册
+        """
+        if name not in STRATEGY_REGISTRY_V2:
+            available = list(STRATEGY_REGISTRY_V2.keys())
+            raise KeyError(
+                f"V2 策略 '{name}' 未注册，可用策略：{available}"
+            )
+        meta = STRATEGY_REGISTRY_V2[name]
+        return meta.strategy_cls(params=params)
+
+    @classmethod
+    def get_all(cls) -> list[StrategyMetaV2]:
+        """获取所有已注册 V2 策略的元数据列表。"""
+        return list(STRATEGY_REGISTRY_V2.values())
+
+    @classmethod
+    def get_by_role(cls, role: StrategyRole) -> list[StrategyMetaV2]:
+        """按角色查询 V2 策略。
+
+        Args:
+            role: StrategyRole 枚举值
+
+        Returns:
+            匹配角色的策略元数据列表
+        """
+        return [
+            m for m in STRATEGY_REGISTRY_V2.values()
+            if m.role == role
+        ]
+
+    @classmethod
+    def get_by_signal_group(cls, signal_group: SignalGroup) -> list[StrategyMetaV2]:
+        """按信号组查询 V2 trigger 策略。
+
+        Args:
+            signal_group: SignalGroup 枚举值
+
+        Returns:
+            匹配信号组的 trigger 策略元数据列表
+        """
+        return [
+            m for m in STRATEGY_REGISTRY_V2.values()
+            if m.role == StrategyRole.TRIGGER and m.signal_group == signal_group
+        ]
+
+    @classmethod
+    def get_meta(cls, name: str) -> StrategyMetaV2:
+        """获取指定 V2 策略的元数据。
+
+        Args:
+            name: 策略唯一标识
+
+        Returns:
+            V2 策略元数据
+
+        Raises:
+            KeyError: 策略未注册
+        """
+        if name not in STRATEGY_REGISTRY_V2:
+            available = list(STRATEGY_REGISTRY_V2.keys())
+            raise KeyError(
+                f"V2 策略 '{name}' 未注册，可用策略：{available}"
+            )
+        return STRATEGY_REGISTRY_V2[name]
+
+
 def _register(meta: StrategyMeta) -> None:
-    """内部注册函数，将策略元数据写入注册表。"""
+    """内部注册函数，将 V1 策略元数据写入注册表。"""
     STRATEGY_REGISTRY[meta.name] = meta
+
+
+def _register_v2(meta: StrategyMetaV2) -> None:
+    """内部注册函数，将 V2 策略元数据写入注册表。"""
+    STRATEGY_REGISTRY_V2[meta.name] = meta
 
 
 # ---------------------------------------------------------------------------

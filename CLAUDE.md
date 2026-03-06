@@ -87,6 +87,7 @@ tsc -b                                               # TypeScript 类型检查
 
 ### 策略引擎
 
+**V1 架构**（当前生产）：
 - 36 种策略：24 技术面 + 12 基本面（`app/strategy/technical/` + `app/strategy/fundamental/`）
 - 扁平继承自 `BaseStrategy`，通过工厂模式注册（`app/strategy/factory.py`）
 - 策略注册制：盘后链路从 `strategies` 数据库表读取启用的策略
@@ -96,6 +97,15 @@ tsc -b                                               # TypeScript 类型检查
 - Pipeline 缓存加速：Layer 1-2 结果写入 `pipeline_cache` 表，同一天多参数组合共享，实测 300x+ 加速
 - 基本面优化器补充：缓存模式下按交易日复用财务字段，且无基本面策略时跳过财务补充，避免 Layer 3 反复查询拖慢任务
 - 每周自动 cron（`app/scheduler/market_opt_job.py`），最佳参数自动写入 strategies 表
+
+**V2 架构**（开发中，设计文档：`docs/design/20-策略引擎V2-全新设计.md`）：
+- 策略角色分层：guard（排雷）/scorer（评分）/tagger（标签）/trigger（信号）/confirmer（确认）
+- 36 → 20 策略：9 个淘汰、7 个合并、5 个降级为 confirmer
+- 新 Pipeline：Layer 0（SQL）→ Layer 1（质量底池）→ Layer 2（信号触发）→ Layer 3（多因子融合）→ Layer 4（AI 终审）
+- 市场状态感知：牛市/熊市/震荡市自适应权重
+- 双注册表：`STRATEGY_REGISTRY`（V1）+ `STRATEGY_REGISTRY_V2`（V2）并存
+- 基类：`BaseStrategy`（V1）+ `BaseStrategyV2`（V2）向后兼容
+- 实施进度：Phase 1/7 完成（基础架构）
 
 ### API 路由
 

@@ -148,7 +148,10 @@ async def _layer1_base_filter(
         WHERE sd.trade_date = :target_date
           AND s.list_status = 'L'
           AND sd.vol > 0
+          AND sd.amount >= 5000000
           AND sd.turnover_rate >= :min_turnover
+          AND sd.pct_chg > -9.9
+          AND sd.pct_chg < 9.9
     """)
 
     params: dict = {
@@ -207,12 +210,10 @@ async def _build_market_snapshot(
             sd.turnover_rate, sd.open, sd.high, sd.low,
             td.ma5, td.ma10, td.ma20, td.ma60, td.ma120, td.ma250,
             td.macd_dif, td.macd_dea, td.macd_hist,
-            td.kdj_k, td.kdj_d, td.kdj_j,
             td.rsi6, td.rsi12, td.rsi24,
             td.boll_upper, td.boll_mid, td.boll_lower,
             td.vol_ma5, td.vol_ma10, td.vol_ratio,
             td.atr14,
-            td.obv, td.donchian_upper, td.donchian_lower,
             td.high_20, td.high_60
         FROM stock_daily sd
         LEFT JOIN technical_daily td
@@ -233,12 +234,10 @@ async def _build_market_snapshot(
         "turnover_rate", "open", "high", "low",
         "ma5", "ma10", "ma20", "ma60", "ma120", "ma250",
         "macd_dif", "macd_dea", "macd_hist",
-        "kdj_k", "kdj_d", "kdj_j",
         "rsi6", "rsi12", "rsi24",
         "boll_upper", "boll_mid", "boll_lower",
         "vol_ma5", "vol_ma10", "vol_ratio",
         "atr14",
-        "obv", "donchian_upper", "donchian_lower",
         "high_20", "high_60",
     ]
     df = pd.DataFrame(rows, columns=columns)
