@@ -18,8 +18,11 @@ logger = logging.getLogger(__name__)
 def _get_strategy_display_names() -> dict[str, str]:
     """获取策略英文名 → 中文名映射。"""
     try:
-        from app.strategy.factory import STRATEGY_REGISTRY
-        return {name: meta.display_name for name, meta in STRATEGY_REGISTRY.items()}
+        from app.strategy.factory import STRATEGY_REGISTRY, STRATEGY_REGISTRY_V2
+
+        name_map = {name: meta.display_name for name, meta in STRATEGY_REGISTRY.items()}
+        name_map.update({name: meta.display_name for name, meta in STRATEGY_REGISTRY_V2.items()})
+        return name_map
     except Exception:
         return {}
 
@@ -31,6 +34,258 @@ def _display(name: str, name_map: dict[str, str]) -> str:
 
 
 V4_STRATEGY_NAME = "volume-price-pattern"
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """安全转换为 float。"""
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _compact_item(item: Any) -> str:
+    """将列表/字典项压缩为可读单行文本。"""
+    if item is None:
+        return "—"
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        preferred_keys = (
+            "title",
+            "name",
+            "sector",
+            "sector_name",
+            "reason",
+            "driver",
+            "summary",
+            "text",
+            "content",
+        )
+        picked = [str(item[k]) for k in preferred_keys if item.get(k)]
+        if picked:
+            return " / ".join(picked[:3])
+        return ", ".join(f"{k}={v}" for k, v in item.items())
+    if isinstance(item, (list, tuple, set)):
+        return " / ".join(_compact_item(part) for part in list(item)[:3])
+    return str(item)
+
+
+def _inline_list(items: Any, empty: str = "无") -> str:
+    """将列表压缩为一行。"""
+    if not items:
+        return empty
+    if isinstance(items, (list, tuple, set)):
+        return "、".join(_compact_item(item) for item in items[:6])
+    return _compact_item(items)
+
+
+def _append_bullets(md: list[str], title: str, items: Any, empty: str = "无") -> None:
+    """向 Markdown 追加列表项。"""
+    md.append(f"### {title}\n")
+    if not items:
+        md.append(f"- {empty}")
+        md.append("")
+        return
+
+    if not isinstance(items, (list, tuple, set)):
+        items = [items]
+
+    for item in items:
+        md.append(f"- {_compact_item(item)}")
+    md.append("")
+
+
+def generate_starmap_report(
+    trade_date: date,
+    elapsed: float,
+    result: dict[str, Any],
+    macro_signal: Any | None,
+    sectors: list[Any] | None,
+    plans: list[Any] | None,
+) -> tuple[str, str]:
+    """生成 StarMap 盘后投研 Markdown 报告。"""
+    name_map = _get_strategy_display_names()
+    sectors = sectors or []
+    plans = plans or []
+    steps_completed = result.get("steps_completed", [])
+    degrade_flags = result.get("degrade_flags", [])
+    errors = result.get("errors", [])
+    stats = result.get("stats", {})
+    status = result.get("status", "unknown")
+
+    elapsed_min = int(elapsed / 60)
+    elapsed_sec = int(elapsed % 60)
+
+    risk_appetite = getattr(macro_signal, "risk_appetite", "unknown")
+    risk_score = _safe_float(getattr(macro_signal, "global_risk_score", 50.0), 50.0)
+    sector_count = len(sectors)
+    plan_count = len(plans)
+
+    status_cn = {
+        "success": "成功",
+        "partial": "部分成功",
+        "failed": "失败",
+    }.get(status, status)
+    summary_lines = [
+        f"🧭 StarMap {trade_date} | {status_cn}",
+        f"⏱ 耗时 {elapsed_min}分{elapsed_sec}秒 | 已完成 {len(steps_completed)} 步",
+        f"🌍 风险偏好 {risk_appetite} | 风险分 {risk_score:.1f}",
+        f"🏭 行业共振 {sector_count} 个 | 增强计划 {plan_count} 条",
+    ]
+    if degrade_flags:
+        summary_lines.append(f"⚠️ 降级标记 {len(degrade_flags)} 个")
+    if errors:
+        summary_lines.append(f"❗ 异常 {len(errors)} 个")
+    summary_text = "\n".join(summary_lines)
+
+    md = [f"# StarMap 盘后投研报告 — {trade_date}\n"]
+    md.append("> 本报告由 StarMap 自动生成，并同步推送到 Telegram。\n")
+
+    md.append("## 执行摘要\n")
+    md.append("| 指标 | 值 |")
+    md.append("|------|-----|")
+    md.append(f"| 执行状态 | {status_cn} |")
+    md.append(f"| 总耗时 | {elapsed_min}分{elapsed_sec}秒 |")
+    md.append(f"| 已完成步骤 | {len(steps_completed)} |")
+    md.append(f"| 降级标记 | {len(degrade_flags)} |")
+    md.append(f"| 异常数 | {len(errors)} |")
+    md.append(f"| 行业共振数 | {sector_count} |")
+    md.append(f"| 增强计划数 | {plan_count} |")
+    md.append("")
+
+    _append_bullets(md, "执行步骤", steps_completed, empty="无")
+    _append_bullets(md, "降级标记", degrade_flags, empty="无")
+    _append_bullets(md, "异常记录", errors, empty="无")
+
+    md.append("## 宏观信号\n")
+    if macro_signal is None:
+        md.append("暂无宏观信号数据。\n")
+    else:
+        model_name = getattr(macro_signal, "model_name", "unknown")
+        prompt_version = getattr(macro_signal, "prompt_version", "unknown")
+        content_hash = getattr(macro_signal, "content_hash", "")
+        md.append("| 字段 | 值 |")
+        md.append("|------|-----|")
+        md.append(f"| 风险偏好 | {risk_appetite} |")
+        md.append(f"| 全局风险分 | {risk_score:.1f} |")
+        md.append(f"| 模型 | {model_name} |")
+        md.append(f"| Prompt 版本 | {prompt_version} |")
+        md.append(f"| 内容哈希 | `{content_hash[:16]}` |")
+        md.append("")
+        md.append("### 宏观摘要\n")
+        md.append(getattr(macro_signal, "macro_summary", "无"))
+        md.append("")
+        _append_bullets(
+            md, "利好行业", getattr(macro_signal, "positive_sectors", []), empty="无"
+        )
+        _append_bullets(
+            md, "利空行业", getattr(macro_signal, "negative_sectors", []), empty="无"
+        )
+        _append_bullets(
+            md, "关键驱动", getattr(macro_signal, "key_drivers", []), empty="无"
+        )
+
+    md.append("## 行业共振\n")
+    if not sectors:
+        md.append("暂无行业共振数据。\n")
+    else:
+        md.append("| 排名 | 行业 | 代码 | 总分 | 新闻 | 资金 | 趋势 | 置信度 | 驱动 |")
+        md.append("|------|------|------|------|------|------|------|--------|------|")
+        for idx, sector in enumerate(sectors, 1):
+            md.append(
+                f"| {idx} "
+                f"| {getattr(sector, 'sector_name', '')} "
+                f"| {getattr(sector, 'sector_code', '')} "
+                f"| {_safe_float(getattr(sector, 'final_score', 0)):.1f} "
+                f"| {_safe_float(getattr(sector, 'news_score', 0)):.1f} "
+                f"| {_safe_float(getattr(sector, 'moneyflow_score', 0)):.1f} "
+                f"| {_safe_float(getattr(sector, 'trend_score', 0)):.1f} "
+                f"| {_safe_float(getattr(sector, 'confidence', 0)):.1f} "
+                f"| {_inline_list(getattr(sector, 'drivers', []))} |"
+            )
+        md.append("")
+
+    md.append("## 增强交易计划\n")
+    if not plans:
+        md.append("暂无增强交易计划。\n")
+    else:
+        source_counter = Counter(getattr(plan, "source_strategy", "unknown") for plan in plans)
+        plan_type_counter = Counter(getattr(plan, "plan_type", "unknown") for plan in plans)
+
+        md.append("### 计划分布\n")
+        md.append(f"- 来源策略分布：{', '.join(f'{_display(k, name_map)}×{v}' for k, v in source_counter.most_common())}")
+        md.append(f"- 计划类型分布：{', '.join(f'{k}×{v}' for k, v in plan_type_counter.most_common())}")
+        md.append("")
+
+        md.append("| 排名 | 代码 | 来源策略 | 类型 | 置信度 | 仓位 | 市场状态 | 行业 | 风险提示 |")
+        md.append("|------|------|----------|------|--------|------|----------|------|----------|")
+        for idx, plan in enumerate(plans, 1):
+            md.append(
+                f"| {idx} "
+                f"| {getattr(plan, 'ts_code', '')} "
+                f"| {_display(getattr(plan, 'source_strategy', 'unknown'), name_map)} "
+                f"| {getattr(plan, 'plan_type', '')} "
+                f"| {_safe_float(getattr(plan, 'confidence', 0)):.1f} "
+                f"| {_safe_float(getattr(plan, 'position_suggestion', 0)):.2f} "
+                f"| {getattr(plan, 'market_regime', '')} "
+                f"| {getattr(plan, 'sector_name', '') or '—'} "
+                f"| {_inline_list(getattr(plan, 'risk_flags', []))} |"
+            )
+        md.append("")
+
+        detail_plans = plans[: min(len(plans), 10)]
+        md.append("### 重点计划明细\n")
+        for plan in detail_plans:
+            strategy_name = getattr(plan, "source_strategy", "unknown")
+            md.append(
+                f"#### {getattr(plan, 'ts_code', '')}｜{_display(strategy_name, name_map)}\n"
+            )
+            md.append(f"- 计划类型：{getattr(plan, 'plan_type', '')}")
+            md.append(f"- 计划状态：{getattr(plan, 'plan_status', '')}")
+            valid_date = getattr(plan, "valid_date", None)
+            if valid_date:
+                md.append(f"- 生效日期：{valid_date}")
+            direction = getattr(plan, "direction", None)
+            if direction:
+                md.append(f"- 方向：{direction}")
+            md.append(f"- 置信度：{_safe_float(getattr(plan, 'confidence', 0)):.1f}")
+            md.append(f"- 建议仓位：{_safe_float(getattr(plan, 'position_suggestion', 0)):.2f}")
+            md.append(f"- 市场状态：{getattr(plan, 'market_regime', '')}")
+            trigger_price = getattr(plan, "trigger_price", None)
+            if trigger_price is not None:
+                md.append(f"- 触发价：{_safe_float(trigger_price):.4f}")
+            stop_loss_price = getattr(plan, "stop_loss_price", None)
+            if stop_loss_price is not None:
+                md.append(f"- 数值止损：{_safe_float(stop_loss_price):.4f}")
+            take_profit_price = getattr(plan, "take_profit_price", None)
+            if take_profit_price is not None:
+                md.append(f"- 数值止盈：{_safe_float(take_profit_price):.4f}")
+            md.append(f"- 入场规则：{getattr(plan, 'entry_rule', '')}")
+            md.append(f"- 止损规则：{getattr(plan, 'stop_loss_rule', '')}")
+            md.append(f"- 止盈规则：{getattr(plan, 'take_profit_rule', '')}")
+            emergency_exit_text = getattr(plan, "emergency_exit_text", None)
+            if emergency_exit_text:
+                md.append(f"- 紧急离场：{emergency_exit_text}")
+            risk_flags = getattr(plan, "risk_flags", [])
+            if risk_flags:
+                md.append(f"- 风险提示：{_inline_list(risk_flags)}")
+            reasoning = getattr(plan, "reasoning", [])
+            if reasoning:
+                md.append(f"- 生成依据：{_inline_list(reasoning)}")
+            md.append("")
+
+    md.append("## 运行统计\n")
+    md.append("| 指标 | 值 |")
+    md.append("|------|-----|")
+    for key, value in stats.items():
+        md.append(f"| {key} | {value} |")
+    md.append("")
+
+    md.append("---\n*StarMap 自动生成并推送到 Telegram*\n")
+    return summary_text, "\n".join(md)
 
 
 def generate_post_market_report(

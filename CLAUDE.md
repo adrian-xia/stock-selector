@@ -72,10 +72,10 @@ tsc -b                                               # TypeScript 类型检查
 2. Raw 层同步 — 从 Tushare 拉取原始数据到 raw 表（`app/data/manager.py` → `sync_raw_daily`）
 3. ETL 清洗 — raw 表 → 业务表（`app/data/etl.py` → `etl_daily`）
 4. 技术指标计算 — 增量计算 MA/MACD/KDJ/滚动最高价等 31 项指标（`app/data/batch.py` → `compute_incremental`）
-5. 策略执行 — Pipeline 执行已启用策略（`app/strategy/pipeline.py`）
-6. 命中率回填 — 回填历史选股结果的 N 日收益率（`app/strategy/pipeline.py`）
+5. 策略执行 — V2 Pipeline 执行已启用 trigger（`app/strategy/pipeline_v2.py`）
+6. 命中率回填 — 回填 `strategy_picks` 的 N 日收益率（`app/data/manager.py` / 调度链路）
 7. 缓存刷新 — 刷新 Redis 缓存
-8. ⭐ StarMap 投研（`app/research/orchestrator.py`，开发中）
+8. ⭐ StarMap 投研（`app/research/orchestrator.py`，已接入生产主链）
 
 核心入口：`sync_daily_by_date(dates)` — 按日期批量同步全市场数据（3 次 API 调用拉全市场）。
 
@@ -87,15 +87,23 @@ tsc -b                                               # TypeScript 类型检查
 
 ### 策略引擎
 
-- 36 种策略：24 技术面 + 12 基本面（`app/strategy/technical/` + `app/strategy/fundamental/`）
-- 扁平继承自 `BaseStrategy`，通过工厂模式注册（`app/strategy/factory.py`）
-- 策略注册制：盘后链路从 `strategies` 数据库表读取启用的策略
-- Pipeline 执行：SQL 粗筛 → 技术面 → 基本面 → 加权排序（`app/strategy/pipeline.py`）
-- 加权排序基于 5d 命中率（`strategy_hit_stats` 表），权重 [0.3, 3.0]
-- 全市场选股回放优化：`app/optimization/market_optimizer.py`，历史回放评估参数组合
-- Pipeline 缓存加速：Layer 1-2 结果写入 `pipeline_cache` 表，同一天多参数组合共享，实测 300x+ 加速
-- 基本面优化器补充：缓存模式下按交易日复用财务字段，且无基本面策略时跳过财务补充，避免 Layer 3 反复查询拖慢任务
-- 每周自动 cron（`app/scheduler/market_opt_job.py`），最佳参数自动写入 strategies 表
+**当前生产架构**（设计文档：`docs/design/20-策略引擎V2-全新设计.md`）：
+- 策略角色分层：guard（排雷）/scorer（评分）/tagger（标签）/trigger（信号）/confirmer（确认）
+- 策略集合已完成 36 → 20 精简：9 个淘汰、7 个合并、5 个降级为 confirmer
+- 当前主路径为 20 个 V2 策略：
+  - 1 个 Scorer（质量评分 0-100）
+  - 5 个 Confirmer（加法 bonus 0.2/0.3，支持 applicable_groups 信号组过滤，封顶 0.6）
+  - 2 个 Guard（财务安全、现金流质量）
+  - 2 个 Tagger（成长风格、红利风格，支持 style_strength 0.0-1.0）
+  - 10 个 Trigger（4 进攻组 + 4 趋势组 + 2 底部组）
+- Pipeline：Layer 0（SQL 硬过滤）→ Layer 1（质量底池）→ Layer 2（信号触发）→ Layer 3（多因子融合）
+- 多因子融合包含：市场状态系数、rolling_performance 乘数（收敛到 `[0.8, 1.2]`）、style bonus、confirmer additive bonus
+- 盘后调度、工作台 API、参数优化、策略配置页都已切到 V2
+- `app/optimization/market_optimizer.py` 仅优化 V2 trigger，目标为命中率 + 盈亏比 − 回撤
+- V1 主执行链路和旧策略文件已删除；仅保留：
+  - `volume-price-pattern`（V4 独立策略）
+  - `cashflow_quality` / `financial_safety` / `high_dividend` / `low_pe_high_roe` 四个基础策略供 adapter 复用
+- `strategies` 表启动时会同步活跃策略，并物理清理废弃 V1 策略及其关联历史
 
 ### API 路由
 
@@ -133,7 +141,7 @@ tsc -b                                               # TypeScript 类型检查
 - 所有代码需要详细的中文注释
 - **每次完成功能变更，必须同步更新：**
   - `README.md` — 功能特性、技术栈、环境要求、配置说明、项目结构、测试数量
-  - `CLAUDE.md` — 技术栈、V1 范围、目录结构
+  - `CLAUDE.md` — 技术栈、当前策略架构、目录结构
   - `.env.example` — 如果新增了配置项
 
 ## 设计文档
@@ -144,7 +152,7 @@ tsc -b                                               # TypeScript 类型检查
 
 | 模块 | 设计文档 |
 |------|---------|
-| **StarMap 盘后投研系统** | `archived/18-starmap/` 目录（详细设计 + PoC 结果，Phase 0-4 基本完成） |
+| **StarMap 盘后投研系统** | `archived/18-starmap/` 目录（详细设计 + PoC 结果；当前代码已接入主链并作为统一计划层） |
 | 数据采集 | `archived/01-详细设计-数据采集.md` |
 | 策略引擎 | `archived/02-详细设计-策略引擎.md` |
 | AI 与回测 | `archived/03-详细设计-AI与回测.md` |
@@ -235,7 +243,7 @@ docker-compose down  # 停止服务
 
 **⚡ 每次新会话开始时，必须先读取 `PROJECT_TASKS.md`**。该文件包含 V4 StarMap 的详细 checkpoint 进度（Phase 0~4，27 个子任务 checkbox）。完成工作后务必更新对应 checkbox。
 
-当前阶段：V4 StarMap 实施中。设计文档 `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）。
+当前阶段：V2/V4 → StarMap 统一链路已落地，StarMap 为唯一计划层与 Markdown/Telegram 报告输出层。设计文档 `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）。
 
 ## 不做
 

@@ -12,8 +12,10 @@ from app.data.manager import DataManager
 from app.data.tushare import TushareClient
 from app.database import async_session_factory
 from app.scheduler.task_logger import TaskLogger
-from app.strategy.factory import StrategyFactory
-from app.strategy.pipeline import execute_pipeline
+from app.strategy.base import StrategyRole
+from app.strategy.factory import StrategyFactoryV2
+from app.strategy.market_regime import compute_and_store_regime
+from app.strategy.pipeline_v2 import execute_pipeline_v2
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +225,7 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
             gap_result = await manager.sync_raw_tables(
                 "all", target, target, mode="gap_fill"
             )
-            if gap_result:
+            if isinstance(gap_result, dict) and gap_result:
                 gap_filled = sum(
                     1 for v in gap_result.values()
                     if isinstance(v, dict) and v.get("rows", 0) > 0
@@ -296,39 +298,38 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 
+        # 步骤 4.5：市场状态预计算（非关键，失败不阻断）
+        regime_start = time.monotonic()
+        try:
+            regime = await compute_and_store_regime(async_session_factory, target)
+            logger.info(
+                "[市场状态] 完成：%s，耗时 %.1fs",
+                regime.value,
+                time.monotonic() - regime_start,
+            )
+        except Exception:
+            logger.warning(
+                "[市场状态] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - regime_start,
+                traceback.format_exc(),
+            )
+
         # 步骤 5：完整性门控 → 策略执行/跳过
         summary = await manager.get_sync_summary(target)
         completion_rate = summary["completion_rate"]
         threshold = settings.data_completeness_threshold
+        picks = []
+        plans = []
 
         if completion_rate >= threshold:
             logger.info(
                 "[完整性门控] 通过：完成率 %.1f%% >= 阈值 %.1f%%，执行策略",
                 completion_rate * 100, threshold * 100,
             )
-            picks = []
-            plans = []
             try:
                 picks = await pipeline_step(target)
             except Exception:
                 logger.error("[盘后链路] 策略管道执行失败\n%s", traceback.format_exc())
-
-            # 步骤 5.05：生成交易计划（非关键，失败不阻断）
-            if picks:
-                plan_start = time.monotonic()
-                try:
-                    from app.strategy.trade_plan import TradePlanGenerator
-                    generator = TradePlanGenerator()
-                    plans = await generator.generate(async_session_factory, picks, target)
-                    logger.info(
-                        "[交易计划] 生成完成：%d 条，耗时 %.1fs",
-                        len(plans), time.monotonic() - plan_start,
-                    )
-                except Exception:
-                    logger.warning(
-                        "[交易计划] 生成失败（继续执行），耗时 %.1fs\n%s",
-                        time.monotonic() - plan_start, traceback.format_exc(),
-                    )
 
             # 步骤 5.1：回填选股收益率（非关键，失败不阻断）
             returns_start = time.monotonic()
@@ -402,6 +403,25 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
 
             starmap_result = await starmap_job(target)
             if starmap_result:
+                try:
+                    from app.research.repository.starmap_repo import StarMapRepository
+
+                    repo = StarMapRepository(async_session_factory)
+                    starmap_plans = await repo.get_trade_plans(target)
+                    plans = [
+                        {
+                            "ts_code": p.ts_code,
+                            "trigger_type": p.plan_type,
+                            "trigger_price": float(p.trigger_price) if p.trigger_price is not None else None,
+                            "stop_loss": float(p.stop_loss_price) if p.stop_loss_price is not None else None,
+                            "take_profit": float(p.take_profit_price) if p.take_profit_price is not None else None,
+                            "source_strategy": p.source_strategy,
+                            "confidence": float(p.confidence) if p.confidence is not None else None,
+                        }
+                        for p in starmap_plans
+                    ]
+                except Exception:
+                    logger.warning("[StarMap] 计划回读失败\n%s", traceback.format_exc())
                 logger.info(
                     "[StarMap] 完成: status=%s, steps=%d",
                     starmap_result.get("status"),
@@ -529,19 +549,21 @@ async def cache_refresh_step(target_date: date) -> None:
 
 
 async def pipeline_step(target_date: date) -> list:
-    """执行策略管道：仅执行用户启用的策略（注册制）。
+    """执行统一选股管道（V2 主链 + V4 独立链）。
 
-    从 strategies 表读取 is_enabled=True 的策略及其自定义参数，
-    传递给 execute_pipeline 执行。
+    优先读取 strategies 表中启用的 V2 trigger 及其自定义参数；
+    若数据库尚未配置 V2 trigger，则默认执行全部 V2 trigger。
 
     Args:
         target_date: 目标日期
 
     Returns:
-        候选股票列表（StockPick）
+        候选股票列表（通用 StockPick）
     """
     import json
     from sqlalchemy import text as sa_text
+    from app.strategy.pick_types import StockPick
+    from app.strategy.v4_daily_runner import execute_volume_price_pattern_daily
 
     step_start = time.monotonic()
     logger.info("[策略管道] 开始：%s", target_date)
@@ -553,18 +575,14 @@ async def pipeline_step(target_date: date) -> list:
         )
         rows = result.fetchall()
 
-    if not rows:
-        logger.warning("[策略管道] 没有启用的策略，跳过执行")
-        return []
-
-    strategy_names = []
+    strategy_names: list[str] = []
     strategy_params: dict[str, dict] = {}
+    available_triggers = {
+        meta.name for meta in StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    }
+
     for name, params_str in rows:
-        # 校验策略在内存注册表中存在
-        try:
-            StrategyFactory.get_meta(name)
-        except KeyError:
-            logger.warning("[策略管道] 策略 %s 已启用但未注册，跳过", name)
+        if name not in available_triggers:
             continue
         strategy_names.append(name)
         # 解析自定义参数
@@ -577,25 +595,66 @@ async def pipeline_step(target_date: date) -> list:
                 pass
 
     if not strategy_names:
-        logger.warning("[策略管道] 没有有效的启用策略，跳过执行")
-        return []
+        strategy_names = sorted(available_triggers)
+        logger.info("[策略管道] 未发现启用的 V2 trigger，默认执行全部 %d 个", len(strategy_names))
 
     logger.info("[策略管道] 启用策略 %d 个：%s", len(strategy_names), strategy_names)
 
-    result = await execute_pipeline(
+    result = await execute_pipeline_v2(
         session_factory=async_session_factory,
-        strategy_names=strategy_names,
         target_date=target_date,
+        trigger_names=strategy_names,
         top_n=50,
         strategy_params=strategy_params or None,
+        save_picks=True,
     )
 
-    elapsed = int(time.monotonic() - step_start)
-    logger.info(
-        "[策略管道] 完成：筛选出 %d 只，耗时 %dms",
-        len(result.picks), result.elapsed_ms,
+    def _to_generic_pick(pick) -> StockPick:
+        return StockPick(
+            ts_code=pick.ts_code,
+            name=pick.name,
+            close=float(pick.close),
+            pct_chg=float(pick.pct_chg),
+            matched_strategies=list(pick.matched_strategies),
+            match_count=pick.match_count,
+            weighted_score=float(pick.weighted_score),
+        )
+
+    v2_picks = [_to_generic_pick(pick) for pick in result.picks]
+    v4_picks = await execute_volume_price_pattern_daily(
+        target_date=target_date,
+        session_factory=async_session_factory,
+        save_picks=True,
     )
-    return result.picks
+
+    merged: dict[str, StockPick] = {}
+    for pick in v2_picks + v4_picks:
+        existing = merged.get(pick.ts_code)
+        if not existing:
+            merged[pick.ts_code] = pick
+            continue
+        existing.weighted_score = max(existing.weighted_score, pick.weighted_score)
+        existing.matched_strategies = sorted(
+            set(existing.matched_strategies) | set(pick.matched_strategies)
+        )
+        existing.match_count = len(existing.matched_strategies)
+        if not existing.name and pick.name:
+            existing.name = pick.name
+        if not existing.close and pick.close:
+            existing.close = pick.close
+        if not existing.pct_chg and pick.pct_chg:
+            existing.pct_chg = pick.pct_chg
+
+    combined_picks = sorted(
+        merged.values(), key=lambda pick: pick.weighted_score, reverse=True
+    )
+
+    logger.info(
+        "[策略管道] 完成：V2=%d 只, V4=%d 只, 合并后=%d 只，耗时 %dms，regime=%s",
+        len(v2_picks), len(v4_picks), len(combined_picks), result.elapsed_ms,
+        result.market_regime,
+    )
+    return combined_picks
 
 
 async def sync_stock_list_job() -> None:

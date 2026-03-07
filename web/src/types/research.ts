@@ -24,6 +24,14 @@ export interface TradePlanItem {
     source_strategy: string
     plan_type: string
     plan_status: string
+    valid_date: string | null
+    direction: string
+    trigger_price: number | null
+    stop_loss_price: number | null
+    take_profit_price: number | null
+    risk_reward_ratio: number | null
+    triggered: boolean | null
+    actual_price: number | null
     entry_rule: string
     stop_loss_rule: string
     take_profit_rule: string

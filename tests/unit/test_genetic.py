@@ -145,7 +145,7 @@ class TestGeneticOptimizer:
 
         optimizer = GeneticOptimizer(session_factory=MagicMock())
         results = await optimizer.optimize(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             param_space=SAMPLE_SPACE,
             stock_codes=["600519.SH"],
             start_date=date(2025, 1, 1),
@@ -169,7 +169,7 @@ class TestGeneticOptimizer:
 
         optimizer = GeneticOptimizer(session_factory=MagicMock())
         await optimizer.optimize(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             param_space={"fast": {"type": "int", "min": 3, "max": 5, "step": 1}},
             stock_codes=["600519.SH"],
             start_date=date(2025, 1, 1),

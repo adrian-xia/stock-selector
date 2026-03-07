@@ -8,6 +8,7 @@
 
 import logging
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -141,6 +142,16 @@ class NotificationManager:
             markdown_content: 完整报告内容（作为 .md 文件发送）
             filename: 附件文件名
         """
+        # 0. 本地落盘留档
+        try:
+            output_dir = Path(settings.report_output_dir).expanduser()
+            output_dir.mkdir(parents=True, exist_ok=True)
+            report_path = output_dir / filename
+            report_path.write_text(markdown_content, encoding="utf-8")
+            logger.info("[NotificationManager] 报告已落盘: %s", report_path)
+        except Exception:
+            logger.warning("[NotificationManager] 报告落盘失败: %s", filename, exc_info=True)
+
         # 1. 发摘要文本
         await self.send(NotificationLevel.INFO, title, summary_text)
 
@@ -152,4 +163,3 @@ class NotificationManager:
                     await channel.send_document(filename, content_bytes, caption=title)
                 except Exception:
                     logger.warning("[NotificationManager] 文件发送失败: %s", filename, exc_info=True)
-

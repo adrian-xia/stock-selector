@@ -11,14 +11,16 @@
 - **数据初始化向导** — 交互式引导首次数据初始化，支持 1年/3年/自定义范围选项，全量同步 P0-P5 数据
 - **优雅关闭** — 捕获 SIGTERM/SIGINT 信号，等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁
 - **技术指标计算** — 自动计算 MA/EMA/MACD/KDJ/RSI/BOLL/ATR/WR/CCI/BIAS/OBV/DMI/MTM/ROC/PSY/TRIX/EMV/VR/BRAR/CR/MFI/HIGH_20/HIGH_60 等 80+ 个技术指标（基于 idx_factor_pro 接口）
-- **36 种选股策略** — 24 种技术面策略（趋势跟踪、震荡指标、量价分析、量价配合）+ 12 种基本面策略（估值、盈利、安全、综合评分），支持自由组合；策略注册制管理，盘后链路仅执行用户启用的策略，支持自定义参数
-- **策略加权排序** — 基于 5d 命中率动态加权排序（weighted_score），权重范围 [0.3, 3.0]，命中率高的策略在结果中权重更大，替代简单 match_count 排序
+- **V2 策略引擎** — 当前生产主路径为 20 个 V2 策略：1 scorer + 5 confirmer + 2 guard + 2 tagger + 10 trigger；触发策略按 进攻组/趋势组/底部组 分层管理，盘后链路、工作台、参数优化和策略配置页均已切到 V2；另保留 1 个独立 V4 量价配合策略（`volume-price-pattern`），详见 `docs/design/20-策略引擎V2-全新设计.md`
+- **多因子融合排序** — 最终分数由 trigger 信号强度、质量底分、风格增益和 confirmer bonus 共同决定；其中 `rolling_performance` 作为 trigger 有效权重乘数并收敛到 `[0.8, 1.2]`，`confirmer` 为加法叠加且封顶 0.6
 - **行业/市场筛选** — 选股 API 支持 industries/markets 参数过滤，覆盖 110 个行业 + 4 个市场（主板/创业板/科创板/北交所）
-- **交易计划引擎** — 基于选股结果自动生成 T+1 触发条件/止损/止盈，4 种触发类型（breakout/reversal/value/volume_signal），盈亏比 2:1，结果持久化到 trade_plans 表
-- **5 层漏斗筛选** — SQL 粗筛 → 技术面 → 基本面 → 排序 → AI 终审
+- **统一计划层** — 底层 V2/V4 只负责产出 `strategy_picks`；真正的执行计划统一由 StarMap 生成并持久化到 `trade_plan_daily_ext`，包含 `valid_date`、方向、触发价、止损/止盈、仓位建议和风控标记
+- **V2 Pipeline** — Layer 0 SQL 硬过滤 → Layer 1 质量底池（guard/scorer/tagger）→ Layer 2 trigger 信号触发 → Layer 3 多因子融合排序；调度链路直接运行 `execute_pipeline_v2`
+- **StarMap 投研总览** — 盘后投研层，按“宏观 → 行业 → 个股融合 → 增强交易计划”编排；统一消费当日 V2/V4 的 `strategy_picks`、行业共振和宏观信号，生成唯一计划层和投研总览
+- **Markdown 报告归档与推送** — 盘后主链、全市场优化、V4 优化、失败重试、StarMap 投研都会生成完整 Markdown 报告；报告会落盘到 `reports/`，并通过 Telegram 发送摘要 + `.md` 附件
 - **AI 智能分析** — 由 OpenClaw 接管，每日盘后自动深度分析选股结果并推送报告
 - **历史回测** — 基于 Backtrader，支持 A 股佣金、印花税、涨跌停限制
-- **参数优化** — 网格搜索 + 遗传算法自动寻找策略最优参数，支持任务管理和结果可视化；全市场选股回放优化（MarketOptimizer）通过历史交易日回放评估参数组合的实际选股效果（命中率+收益率），每周 cron 自动执行并应用最佳参数；优化器缓存模式新增财务数据按交易日复用，避免重复 Layer 3 财务补充造成的卡顿
+- **参数优化** — 当前已拆为两条独立分支：V2 全市场参数优化回放 `execute_pipeline_v2`，结果写入 `market_optimization_tasks`；V4 量价配合参数优化运行独立回测/网格搜索，结果写入 `v4_backtest_results`
 - **新闻舆情** — 东方财富/新浪7x24快讯/同花顺三源采集，AI 情感分析已暂停，每日情感聚合，盘后链路自动执行，前端新闻仪表盘（新闻列表 + 情感趋势图 + 每日摘要）
 - **实时监控** — WebSocket 实时行情推送（Tushare Pro 轮询 + Redis Pub/Sub 分发），告警规则引擎（价格预警 + 策略信号），多渠道通知（企业微信/Telegram），前端监控看板（自选股行情、告警管理、连接状态指示）
 - **定时任务** — 盘后自动执行数据同步、指标计算、缓存刷新、策略筛选、新闻采集全链路
@@ -27,6 +29,34 @@
 - **监控与日志** — 结构化日志（JSON/文本自动切换）、日志轮转、API 请求性能中间件（慢请求告警）、深度健康检查（数据库/Redis/Tushare）、任务执行日志持久化与查询 API、盘后链路全路径状态回收（非交易日/锁占用/异常均正确记录 skipped/failed）
 - **前端界面** — React 19 + Ant Design 6 + ECharts 6，选股工作台（含 K 线图）+ 每日选股结果（按日期汇总+展开明细）+ 盘后概览（统计卡片+任务日志+命中率+交易计划）+ 回测中心 + 参数优化（单股回测+全市场优化）+ 新闻舆情 + 实时监控 + 策略配置（启用/禁用策略、自定义参数）；全局 ErrorBoundary 错误边界、路由级懒加载（React.lazy + Suspense）、Vite 代码分割、React Query 统一数据获取
 - **测试覆盖** — 单元测试覆盖全部 API 端点、策略引擎、回测引擎、数据源客户端、数据完整性检查、数据初始化向导、优雅关闭、自动数据更新、P2 资金流向 ETL、P3 指数数据 ETL、P4 板块数据 ETL、P5 补充数据同步、实时监控（行情采集、告警引擎、通知渠道、WebSocket、告警 API）；集成测试覆盖 P0-P5 数据校验（数据完整性、ETL 转换正确性、数据质量、跨表一致性、综合时间连续性和数据新鲜度）
+
+## 当前流程关系
+
+当前与“策略”直接相关的流程，建议按 **执行层 → 优化层 → 投研层** 来理解：
+
+- **执行层 / V2 策略池** — 当前生产主链；盘后链路运行 `execute_pipeline_v2`，将结果写入 `strategy_picks`
+- **执行层 / V4 量价配合** — 独立保留的专题链路；使用观察池与 T0/Tk 两阶段状态机，不走 `Pipeline V2` 主流程，但日常命中结果同样写入 `strategy_picks`
+- **优化层 / V2 参数优化** — 只优化 V2 trigger；通过全市场回放 `execute_pipeline_v2` 评估参数，结果写入 `market_optimization_tasks`
+- **优化层 / V4 参数优化** — 只优化 `volume-price-pattern`；通过独立 `run_backtest` / `run_grid_search` 回放，结果写入 `v4_backtest_results`
+- **投研层 / StarMap** — 盘后投研与展示层；在宏观、行业、资金等维度上，对当日策略结果做二次融合，输出投研总览和增强交易计划
+
+### 日常主链
+
+```text
+数据同步 / 指标计算
+  -> V2 Pipeline
+  -> V4 Daily Runner
+  -> strategy_picks
+  -> StarMap（个股融合 / 增强计划 / Markdown 报告）
+  -> trade_plan_daily_ext / 投研总览 / Telegram
+```
+
+### 当前边界
+
+- **V2 是主生产选股链**：工作台、策略配置、日常盘后筛选、V2 参数优化都已切到 V2
+- **V4 是独立专题链**：保留策略、观察池、回测和参数优化能力，不属于当前 V2 工作台主排序链，但日常结果会并入 StarMap 统一计划层
+- **StarMap 是唯一计划层**：底层 V2/V4 只负责信号与候选股，真正对外使用的交易计划、Markdown 报告和 Telegram 推送都由 StarMap 统一生成
+- **两个优化器互不串线**：V2 优化器不评估 V4，V4 优化器也不走 `MarketOptimizer`
 
 ## 技术栈
 
@@ -188,9 +218,10 @@ SKIP_INTEGRITY_CHECK=true uv run uvicorn app.main:app --reload
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/strategy/run` | 执行选股策略管道（未指定日期时自动使用最近有数据的交易日） |
-| GET | `/api/v1/strategy/list` | 获取可用策略列表（支持按分类过滤） |
-| GET | `/api/v1/strategy/schema/{name}` | 获取策略参数元数据 |
+| POST | `/api/v1/strategy/run-v2` | 执行 V2 选股策略管道（未指定日期时自动使用最近有数据的交易日） |
+| GET | `/api/v1/strategy/list-v2` | 获取 V2 trigger 策略列表 |
+| GET | `/api/v1/strategy/schema-v2/{name}` | 获取 V2 策略参数元数据 |
+| GET | `/api/v1/strategy/config` | 获取 V2 trigger 配置状态 |
 | POST | `/api/v1/backtest/run` | 执行回测并返回结果 |
 | GET | `/api/v1/backtest/result/{task_id}` | 查询回测结果（含交易明细和净值曲线） |
 | GET | `/api/v1/backtest/list` | 分页查询回测任务列表 |
@@ -427,11 +458,19 @@ stock-selector/
 │   │   ├── indicator.py        #   技术指标计算
 │   │   └── manager.py          #   DataManager
 │   ├── strategy/               # 策略引擎
-│   │   ├── base.py             #   BaseStrategy 抽象基类
-│   │   ├── technical/          #   24 种技术面策略
-│   │   ├── fundamental/        #   12 种基本面策略
-│   │   ├── factory.py          #   策略注册工厂
-│   │   └── pipeline.py         #   5 层执行管道
+│   │   ├── base.py             #   BaseStrategy / BaseStrategyV2 抽象基类
+│   │   ├── triggers/           #   V2 trigger 策略（10 个）
+│   │   ├── confirmers/         #   V2 confirmer 策略（5 个）
+│   │   ├── guards/             #   V2 guard 策略（2 个）
+│   │   ├── taggers/            #   V2 tagger 策略（2 个）
+│   │   ├── scorers/            #   V2 scorer 策略（1 个）
+│   │   ├── technical/          #   仅保留 V4 量价配合策略
+│   │   ├── fundamental/        #   仅保留 adapter 复用的 4 个基础策略
+│   │   ├── factory.py          #   V2 策略注册工厂
+│   │   ├── pipeline_v2.py      #   V2 执行管道
+│   │   ├── market_regime.py    #   市场状态判定
+│   │   ├── weight_engine.py    #   动态权重 / 风格增益
+│   │   └── pick_store.py       #   strategy_picks 持久化
 │   ├── ai/                     # AI 分析模块（已停用，分析由 OpenClaw 接管）
 │   │   ├── clients/gemini.py   #   Gemini Flash 客户端（已停用）
 │   │   ├── prompts.py          #   Prompt 模板
@@ -524,4 +563,3 @@ stock-selector/
 - **task-设计补全.md** - 任务跟踪
 
 **V2 详细实施计划见：** [PROJECT_TASKS.md](PROJECT_TASKS.md)
-

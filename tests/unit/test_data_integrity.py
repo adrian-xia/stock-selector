@@ -233,74 +233,117 @@ class TestEnvironmentIsolation:
 
 
 class TestSyncFromProgressResume:
-    """验证断点续传：重启后只处理未完成的股票（Task 8.4）。"""
+    """验证启动同步恢复链路。"""
+
+    @staticmethod
+    def _mock_db_factory(*sessions: AsyncMock) -> MagicMock:
+        factory = MagicMock()
+        factory.return_value.__aenter__ = AsyncMock(side_effect=list(sessions))
+        factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        return factory
 
     @pytest.mark.asyncio
     async def test_only_processes_unsynced_stocks(self) -> None:
-        """sync_from_progress 只处理 get_stocks_needing_sync 返回的股票。"""
+        """sync_from_progress 应只补齐缺失交易日。"""
         mock_manager = AsyncMock()
         mock_manager.acquire_sync_lock.return_value = True
         mock_manager.reset_stale_status.return_value = 2  # 2 个 stale 状态被重置
         mock_manager.init_sync_progress.return_value = {"total_stocks": 100, "new_records": 0}
         mock_manager.sync_delisted_status.return_value = {"marked": 0, "restored": 0}
-        # 只有 3 只股票需要同步（其余 97 只已完成）
-        mock_manager.get_stocks_needing_sync.return_value = [
-            "600519.SH", "000001.SZ", "000002.SZ"
-        ]
-        mock_manager.process_stocks_batch.return_value = {
-            "success": 3, "failed": 0, "timeout": False
-        }
+        mock_manager.sync_daily_by_date.return_value = {"success": 2, "failed": 0, "timeout": False}
+        mock_manager.sync_raw_tables.return_value = {}
         mock_manager.get_sync_summary.return_value = {
             "total": 100, "data_done": 100, "indicator_done": 100,
             "failed": 0, "completion_rate": 1.0,
         }
 
+        latest_session = AsyncMock()
+        latest_result = MagicMock()
+        latest_result.scalar_one_or_none.return_value = date(2026, 2, 13)
+        latest_session.execute.return_value = latest_result
+
+        dates_session = AsyncMock()
+        trade_dates_result = MagicMock()
+        trade_dates_result.all.return_value = [
+            (date(2026, 2, 11),),
+            (date(2026, 2, 12),),
+            (date(2026, 2, 13),),
+        ]
+        existing_dates_result = MagicMock()
+        existing_dates_result.all.return_value = [
+            (date(2026, 2, 11),),
+        ]
+        dates_session.execute.side_effect = [trade_dates_result, existing_dates_result]
+
         with patch("app.scheduler.core.settings") as mock_settings, \
              patch("app.data.tushare.TushareClient"), \
              patch("app.data.manager.DataManager", return_value=mock_manager), \
-             patch("app.database.async_session_factory"):
+             patch(
+                 "app.database.async_session_factory",
+                 self._mock_db_factory(latest_session, dates_session),
+             ):
             mock_settings.data_integrity_check_enabled = True
             mock_settings.daily_sync_concurrency = 10
             mock_settings.sync_batch_timeout = 14400
+            mock_settings.data_start_date = "2020-01-01"
 
             await sync_from_progress(skip_check=False)
 
-        # 验证：只处理了 3 只未完成的股票
-        mock_manager.process_stocks_batch.assert_called_once()
-        call_args = mock_manager.process_stocks_batch.call_args
-        assert call_args.args[0] == ["600519.SH", "000001.SZ", "000002.SZ"]
-        # 验证锁的获取和释放
-        mock_manager.acquire_sync_lock.assert_called_once()
-        mock_manager.release_sync_lock.assert_called_once()
+        mock_manager.sync_daily_by_date.assert_awaited_once_with(
+            [date(2026, 2, 12), date(2026, 2, 13)]
+        )
+        assert mock_manager.sync_raw_tables.await_count == 3
+        mock_manager.acquire_sync_lock.assert_awaited_once()
+        mock_manager.release_sync_lock.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_skips_when_all_synced(self) -> None:
-        """所有股票已同步时不执行批量处理。"""
+        """所有交易日已补齐时不执行按日期同步。"""
         mock_manager = AsyncMock()
         mock_manager.acquire_sync_lock.return_value = True
         mock_manager.reset_stale_status.return_value = 0
         mock_manager.init_sync_progress.return_value = {"total_stocks": 100, "new_records": 0}
         mock_manager.sync_delisted_status.return_value = {"marked": 0, "restored": 0}
-        mock_manager.get_stocks_needing_sync.return_value = []  # 全部已同步
         mock_manager.get_sync_summary.return_value = {
             "total": 100, "data_done": 100, "indicator_done": 100,
             "failed": 0, "completion_rate": 1.0,
         }
 
+        latest_session = AsyncMock()
+        latest_result = MagicMock()
+        latest_result.scalar_one_or_none.return_value = date(2026, 2, 13)
+        latest_session.execute.return_value = latest_result
+
+        dates_session = AsyncMock()
+        trade_dates_result = MagicMock()
+        trade_dates_result.all.return_value = [
+            (date(2026, 2, 11),),
+            (date(2026, 2, 12),),
+        ]
+        existing_dates_result = MagicMock()
+        existing_dates_result.all.return_value = [
+            (date(2026, 2, 11),),
+            (date(2026, 2, 12),),
+        ]
+        dates_session.execute.side_effect = [trade_dates_result, existing_dates_result]
+
         with patch("app.scheduler.core.settings") as mock_settings, \
              patch("app.data.tushare.TushareClient"), \
              patch("app.data.manager.DataManager", return_value=mock_manager), \
-             patch("app.database.async_session_factory"):
+             patch(
+                 "app.database.async_session_factory",
+                 self._mock_db_factory(latest_session, dates_session),
+             ):
             mock_settings.data_integrity_check_enabled = True
 
             await sync_from_progress(skip_check=False)
 
-        # 验证：不执行批量处理
-        mock_manager.process_stocks_batch.assert_not_called()
+        mock_manager.sync_daily_by_date.assert_not_awaited()
+        mock_manager.get_sync_summary.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_resets_stale_status_before_sync(self) -> None:
-        """重启后先重置 stale 状态再查询待处理股票。"""
+        """重启后先重置 stale 状态，再初始化和同步退市状态。"""
         call_order = []
         mock_manager = AsyncMock()
         mock_manager.acquire_sync_lock.return_value = True
@@ -311,21 +354,35 @@ class TestSyncFromProgressResume:
         mock_manager.sync_delisted_status.side_effect = lambda: (
             call_order.append("delisted"), {"marked": 0, "restored": 0}
         )[1]
-        mock_manager.get_stocks_needing_sync.side_effect = lambda d: (
-            call_order.append("query"), []
+        mock_manager.get_sync_summary.side_effect = lambda _target_date: (
+            call_order.append("summary"),
+            {
+                "total": 50, "data_done": 50, "indicator_done": 50,
+                "failed": 0, "completion_rate": 1.0,
+            },
         )[1]
-        mock_manager.get_sync_summary.return_value = {
-            "total": 50, "data_done": 50, "indicator_done": 50,
-            "failed": 0, "completion_rate": 1.0,
-        }
+
+        latest_session = AsyncMock()
+        latest_result = MagicMock()
+        latest_result.scalar_one_or_none.return_value = date(2026, 2, 13)
+        latest_session.execute.return_value = latest_result
+
+        dates_session = AsyncMock()
+        trade_dates_result = MagicMock()
+        trade_dates_result.all.return_value = [(date(2026, 2, 13),)]
+        existing_dates_result = MagicMock()
+        existing_dates_result.all.return_value = [(date(2026, 2, 13),)]
+        dates_session.execute.side_effect = [trade_dates_result, existing_dates_result]
 
         with patch("app.scheduler.core.settings") as mock_settings, \
              patch("app.data.tushare.TushareClient"), \
              patch("app.data.manager.DataManager", return_value=mock_manager), \
-             patch("app.database.async_session_factory"):
+             patch(
+                 "app.database.async_session_factory",
+                 self._mock_db_factory(latest_session, dates_session),
+             ):
             mock_settings.data_integrity_check_enabled = True
 
             await sync_from_progress(skip_check=False)
 
-        # 验证执行顺序：reset → init → delisted → query
-        assert call_order == ["reset", "init", "delisted", "query"]
+        assert call_order == ["reset", "init", "delisted", "summary"]

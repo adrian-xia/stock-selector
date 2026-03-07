@@ -54,11 +54,18 @@ export default function StrategyConfigPage() {
 
   const hasEdits = Object.keys(edits).length > 0
 
-  // 按分类分组
-  const technicalStrategies = merged.filter((s) => s.category === 'technical')
-  const fundamentalStrategies = merged.filter((s) => s.category === 'fundamental')
-
   const enabledCount = merged.filter((s) => s.is_enabled).length
+  const categoryLabelMap: Record<string, string> = {
+    aggressive: '进攻组',
+    trend: '趋势组',
+    bottom: '底部组',
+  }
+
+  const groupedStrategies = merged.reduce<Record<string, StrategyConfig[]>>((acc, strategy) => {
+    if (!acc[strategy.category]) acc[strategy.category] = []
+    acc[strategy.category].push(strategy)
+    return acc
+  }, {})
 
   // 切换启用状态
   const toggleEnabled = (name: string, checked: boolean) => {
@@ -160,38 +167,21 @@ export default function StrategyConfigPage() {
     />
   )
 
-  const collapseItems = [
-    {
-      key: 'technical',
-      label: (
-        <Space>
-          <span>技术面策略</span>
-          <Badge
-            count={technicalStrategies.filter((s) => s.is_enabled).length}
-            style={{ backgroundColor: '#52c41a' }}
-            showZero
-          />
-          <Tag>共 {technicalStrategies.length} 个</Tag>
-        </Space>
-      ),
-      children: renderTable(technicalStrategies),
-    },
-    {
-      key: 'fundamental',
-      label: (
-        <Space>
-          <span>基本面策略</span>
-          <Badge
-            count={fundamentalStrategies.filter((s) => s.is_enabled).length}
-            style={{ backgroundColor: '#52c41a' }}
-            showZero
-          />
-          <Tag>共 {fundamentalStrategies.length} 个</Tag>
-        </Space>
-      ),
-      children: renderTable(fundamentalStrategies),
-    },
-  ]
+  const collapseItems = Object.entries(groupedStrategies).map(([category, items]) => ({
+    key: category,
+    label: (
+      <Space>
+        <span>{categoryLabelMap[category] ?? category}</span>
+        <Badge
+          count={items.filter((s) => s.is_enabled).length}
+          style={{ backgroundColor: '#52c41a' }}
+          showZero
+        />
+        <Tag>共 {items.length} 个</Tag>
+      </Space>
+    ),
+    children: renderTable(items),
+  }))
 
   return (
     <Card
@@ -215,7 +205,7 @@ export default function StrategyConfigPage() {
       loading={isLoading}
     >
       <Collapse
-        defaultActiveKey={['technical', 'fundamental']}
+        defaultActiveKey={collapseItems.map((item) => item.key)}
         items={collapseItems}
       />
     </Card>

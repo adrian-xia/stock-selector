@@ -7,12 +7,13 @@ import pytest
 
 from app.ai.clients.gemini import GeminiTimeoutError
 from app.ai.manager import AIManager
-from app.strategy.pipeline import StockPick
+from app.strategy.pick_types import StockPick
 
 
 def _make_settings(api_key: str = "test-key", use_adc: bool = False) -> MagicMock:
     """构造 mock Settings。"""
     s = MagicMock()
+    s.ai_provider = "gemini"
     s.gemini_api_key = api_key
     s.gemini_use_adc = use_adc
     s.gemini_model_id = "gemini-2.0-flash"
@@ -33,7 +34,7 @@ def _make_picks(count: int = 3) -> list[StockPick]:
     return [
         StockPick(
             ts_code=code, name=name, close=close, pct_chg=pct,
-            matched_strategies=["ma-cross"], match_count=1,
+            matched_strategies=["volume-breakout-trigger-v2"], match_count=1,
         )
         for code, name, close, pct in stocks[:count]
     ]

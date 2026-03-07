@@ -16,7 +16,12 @@ from app.database import async_session_factory
 from app.optimization.genetic import GeneticOptimizer
 from app.optimization.grid_search import GridSearchOptimizer
 from app.optimization.param_space import count_combinations
-from app.strategy.factory import STRATEGY_REGISTRY, StrategyFactory
+from app.strategy.base import StrategyRole
+from app.strategy.factory import (
+    StrategyFactoryV2,
+    build_v2_param_space,
+    resolve_v2_default_params,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,28 @@ router = APIRouter(prefix="/api/v1/optimization", tags=["optimization"])
 
 # 最大网格搜索组合数限制
 MAX_GRID_COMBINATIONS = 10000
+
+
+def _get_trigger_meta(strategy_name: str):
+    """仅返回可优化的 V2 trigger 策略元数据。"""
+    try:
+        meta = StrategyFactoryV2.get_meta(strategy_name)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"未知策略: {strategy_name}") from exc
+
+    if meta.role != StrategyRole.TRIGGER:
+        raise HTTPException(status_code=400, detail="仅支持优化 V2 trigger 策略")
+    return meta
+
+
+def _resolve_param_space(meta, req_param_space: dict | None) -> dict:
+    if req_param_space:
+        return req_param_space
+
+    if getattr(meta, "param_space", None):
+        return meta.param_space
+
+    return build_v2_param_space(resolve_v2_default_params(meta))
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +139,6 @@ class ParamSpaceResponse(BaseModel):
 @router.post("/run", response_model=OptimizationRunResponse)
 async def run_optimization(req: OptimizationRunRequest) -> OptimizationRunResponse:
     """提交参数优化任务并执行。"""
-    # 校验策略
-    if req.strategy_name not in STRATEGY_REGISTRY:
-        raise HTTPException(status_code=400, detail=f"未知策略: {req.strategy_name}")
-
     if req.algorithm not in ("grid", "genetic"):
         raise HTTPException(status_code=400, detail="algorithm 必须为 grid 或 genetic")
 
@@ -123,8 +146,8 @@ async def run_optimization(req: OptimizationRunRequest) -> OptimizationRunRespon
         raise HTTPException(status_code=400, detail="开始日期必须早于结束日期")
 
     # 确定参数空间
-    meta = StrategyFactory.get_meta(req.strategy_name)
-    param_space = req.param_space if req.param_space else meta.param_space
+    meta = _get_trigger_meta(req.strategy_name)
+    param_space = _resolve_param_space(meta, req.param_space)
     if not param_space:
         raise HTTPException(status_code=400, detail="该策略未定义参数空间，请手动指定 param_space")
 
@@ -408,18 +431,16 @@ async def list_optimization_tasks(
 @router.get("/param-space/{strategy_name}", response_model=ParamSpaceResponse)
 async def get_param_space(strategy_name: str) -> ParamSpaceResponse:
     """查询策略的参数空间定义。"""
-    if strategy_name not in STRATEGY_REGISTRY:
-        raise HTTPException(status_code=400, detail=f"未知策略: {strategy_name}")
-
-    meta = StrategyFactory.get_meta(strategy_name)
-    if not meta.param_space:
+    meta = _get_trigger_meta(strategy_name)
+    param_space = _resolve_param_space(meta, None)
+    if not param_space:
         raise HTTPException(status_code=404, detail=f"策略 {strategy_name} 未定义参数空间")
 
     return ParamSpaceResponse(
         strategy_name=meta.name,
         display_name=meta.display_name,
-        default_params=meta.default_params,
-        param_space=meta.param_space,
+        default_params=resolve_v2_default_params(meta),
+        param_space=param_space,
     )
 
 
@@ -441,6 +462,7 @@ class MarketOptResultItem(BaseModel):
     params: dict
     hit_rate_5d: float
     avg_return_5d: float
+    profit_loss_ratio: float = 0.0
     max_drawdown: float
     total_picks: int
     score: float
@@ -477,13 +499,9 @@ class MarketOptTaskItem(BaseModel):
 @router.post("/market-opt/run")
 async def run_market_optimization(req: MarketOptRunRequest) -> dict:
     """提交全市场选股回放优化任务。"""
-    # 校验策略
-    if req.strategy_name not in STRATEGY_REGISTRY:
-        raise HTTPException(status_code=400, detail=f"未知策略: {req.strategy_name}")
-
     # 确定参数空间
-    meta = StrategyFactory.get_meta(req.strategy_name)
-    param_space = req.param_space if req.param_space else meta.param_space
+    meta = _get_trigger_meta(req.strategy_name)
+    param_space = _resolve_param_space(meta, req.param_space)
     if not param_space:
         raise HTTPException(status_code=400, detail="该策略未定义参数空间，请手动指定 param_space")
 
@@ -577,6 +595,7 @@ async def _run_market_opt_task(
                 "params": r.params,
                 "hit_rate_5d": r.hit_rate_5d,
                 "avg_return_5d": r.avg_return_5d,
+                "profit_loss_ratio": r.profit_loss_ratio,
                 "max_drawdown": r.max_drawdown,
                 "total_picks": r.total_picks,
                 "score": r.score,

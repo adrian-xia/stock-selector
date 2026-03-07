@@ -29,7 +29,7 @@ class TestRunBacktestApi:
     async def test_invalid_date_range_returns_400(self) -> None:
         """start_date >= end_date 应返回 400。"""
         req = BacktestRunRequest(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             stock_codes=["600519.SH"],
             start_date=date(2025, 12, 31),
             end_date=date(2025, 1, 1),
@@ -42,7 +42,7 @@ class TestRunBacktestApi:
     async def test_same_date_returns_400(self) -> None:
         """start_date == end_date 应返回 400。"""
         req = BacktestRunRequest(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             stock_codes=["600519.SH"],
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 1),
@@ -115,7 +115,7 @@ class TestRunBacktestApi:
         mock_factory.return_value.__aenter__ = AsyncMock(side_effect=side_effect_aenter)
 
         req = BacktestRunRequest(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             stock_codes=["600519.SH"],
             start_date=date(2024, 1, 1),
             end_date=date(2025, 12, 31),
@@ -157,7 +157,7 @@ class TestRunBacktestApi:
         mock_writer_cls.return_value = mock_writer
 
         req = BacktestRunRequest(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             stock_codes=["600519.SH"],
             start_date=date(2024, 1, 1),
             end_date=date(2025, 12, 31),
@@ -198,7 +198,7 @@ class TestGetBacktestResult:
         mock_result = MagicMock()
         mock_result.mappings.return_value.first.return_value = {
             "id": 1,
-            "strategy_name": "ma-cross",
+            "strategy_name": "volume-breakout-trigger-v2",
             "status": "running",
         }
         mock_session.execute.return_value = mock_result
@@ -217,7 +217,7 @@ class TestGetBacktestResult:
         mock_result = MagicMock()
         mock_result.mappings.return_value.first.return_value = {
             "id": 2,
-            "strategy_name": "rsi-oversold",
+            "strategy_name": "first-negative-reversal-trigger-v2",
             "status": "failed",
             "error_message": "数据不足",
         }
@@ -236,7 +236,7 @@ class TestGetBacktestResult:
         task_result = MagicMock()
         task_result.mappings.return_value.first.return_value = {
             "id": 3,
-            "strategy_name": "ma-cross",
+            "strategy_name": "volume-breakout-trigger-v2",
             "stock_codes": json.dumps(["600519.SH"]),
             "start_date": date(2024, 1, 1),
             "end_date": date(2025, 12, 31),

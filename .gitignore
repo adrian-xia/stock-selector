@@ -29,6 +29,7 @@ htmlcov/
 
 # Logs
 logs/
+reports/
 
 # Node (前端)
 web/node_modules/

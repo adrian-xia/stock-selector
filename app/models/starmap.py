@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, Index, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Date, Index, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -86,12 +86,20 @@ class TradePlanDailyExt(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     ts_code: Mapped[str] = mapped_column(String(20), nullable=False)
     source_strategy: Mapped[str] = mapped_column(String(64), nullable=False)
     plan_type: Mapped[str] = mapped_column(String(32), nullable=False)  # breakout/pullback/reversal
     plan_status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="'PENDING'"
     )  # PENDING/EXPIRED
+    direction: Mapped[str] = mapped_column(String(16), nullable=False, server_default="'buy'")
+    trigger_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    stop_loss_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    take_profit_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    risk_reward_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    triggered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    actual_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     entry_rule: Mapped[str] = mapped_column(Text, nullable=False)
     stop_loss_rule: Mapped[str] = mapped_column(Text, nullable=False)
     take_profit_rule: Mapped[str] = mapped_column(Text, nullable=False)

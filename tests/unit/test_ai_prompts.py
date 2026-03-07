@@ -3,7 +3,7 @@
 from datetime import date
 
 from app.ai.prompts import build_analysis_prompt
-from app.strategy.pipeline import StockPick
+from app.strategy.pick_types import StockPick
 
 
 class TestBuildAnalysisPrompt:
@@ -15,7 +15,7 @@ class TestBuildAnalysisPrompt:
             name=name,
             close=1705.20,
             pct_chg=1.25,
-            matched_strategies=["ma-cross", "low-pe-high-roe"],
+            matched_strategies=["volume-breakout-trigger-v2", "low-pe-high-roe-tagger-v2"],
             match_count=2,
         )
 

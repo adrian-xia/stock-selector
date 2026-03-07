@@ -13,7 +13,7 @@ from app.models.raw import (
     RawTushareStkLimit,
     RawTushareTradeCal,
 )
-from app.models.strategy import DataSourceConfig, Strategy
+from app.models.strategy import DataSourceConfig, MarketRegimeDaily, Strategy
 from app.models.starmap import MacroSignalDaily, SectorResonanceDaily, TradePlanDailyExt
 from app.models.technical import TechnicalDaily
 
@@ -27,6 +27,7 @@ __all__ = [
     "DataSourceConfig",
     "DragonTiger",
     "FinanceIndicator",
+    "MarketRegimeDaily",
     "MoneyFlow",
     "RawTushareAdjFactor",
     "RawTushareDaily",

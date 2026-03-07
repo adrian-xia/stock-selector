@@ -14,7 +14,7 @@ from app.config import settings
 from app.database import async_session_factory
 from app.optimization.market_optimizer import MarketOptimizer
 from app.optimization.param_space import count_combinations
-from app.strategy.factory import StrategyFactory
+from app.strategy.factory import StrategyFactoryV2, build_v2_param_space, resolve_v2_default_params
 
 logger = logging.getLogger(__name__)
 
@@ -47,30 +47,23 @@ async def weekly_market_opt_job() -> None:
         logger.info("无启用策略，跳过优化")
         return
 
-    # 过滤有 param_space 的策略
-    # 基本面策略 Layer 3 计算量过大，暂时跳过优化
-    SKIP_STRATEGIES = {
-        "growth-stock", "financial-safety", "pb-value", "peg-value",
-        "ps-value", "high-dividend", "gross-margin-up", "cashflow-quality",
-        "profit-continuous-growth", "cashflow-coverage", "quality-score",
-        "low-pe-high-roe",
-    }
+    # 仅优化 V2 trigger
     candidates: list[tuple[str, dict]] = []
     for name in enabled_names:
         try:
-            meta = StrategyFactory.get_meta(name)
+            meta = StrategyFactoryV2.get_meta(name)
         except KeyError:
             continue
-        if not meta.param_space:
+        if meta.role.value != "trigger":
             continue
-        if name in SKIP_STRATEGIES:
-            logger.info("策略 %s 为基本面策略，暂时跳过优化", name)
+        param_space = meta.param_space or build_v2_param_space(resolve_v2_default_params(meta))
+        if not param_space:
             continue
-        combos = count_combinations(meta.param_space)
+        combos = count_combinations(param_space)
         if combos > settings.market_opt_max_combinations:
             logger.info("策略 %s 组合数 %d 超过 %d，跳过", name, combos, settings.market_opt_max_combinations)
             continue
-        candidates.append((name, meta.param_space))
+        candidates.append((name, param_space))
 
     if not candidates:
         logger.info("无可优化策略（无 param_space 或组合数过大）")
@@ -133,6 +126,7 @@ async def weekly_market_opt_job() -> None:
                     "params": r.params,
                     "hit_rate_5d": r.hit_rate_5d,
                     "avg_return_5d": r.avg_return_5d,
+                    "profit_loss_ratio": r.profit_loss_ratio,
                     "max_drawdown": r.max_drawdown,
                     "total_picks": r.total_picks,
                     "score": r.score,

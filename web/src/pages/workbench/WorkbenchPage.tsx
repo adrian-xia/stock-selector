@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Row, Col, Card, Button, Checkbox, message, Statistic, Space } from 'antd'
+import { Row, Col, Card, Button, message, Statistic, Space, Tag } from 'antd'
 import { PlayCircleOutlined } from '@ant-design/icons'
 import { runStrategy } from '../../api/strategy'
 import StrategyPanel from './StrategyPanel'
@@ -16,9 +16,6 @@ interface SelectedStrategy {
 export default function WorkbenchPage() {
   // 策略选择状态
   const [selected, setSelected] = useState<Record<string, SelectedStrategy>>({})
-  // 基础过滤
-  const [excludeST, setExcludeST] = useState(true)
-  const [excludeHalt, setExcludeHalt] = useState(true)
   // 执行状态
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<StrategyRunResponse | null>(null)
@@ -68,7 +65,9 @@ export default function WorkbenchPage() {
     try {
       const res = await runStrategy({
         strategy_names: names,
-        base_filter: { exclude_st: excludeST, exclude_halt: excludeHalt },
+        strategy_params: Object.fromEntries(
+          Object.entries(selected).map(([name, item]) => [name, item.params]),
+        ),
         top_n: 50,
       })
       setResult(res)
@@ -85,12 +84,8 @@ export default function WorkbenchPage() {
       <Col span={7}>
         <Card title="策略配置" size="small" style={{ marginBottom: 12 }}>
           <div style={{ marginBottom: 12 }}>
-            <Checkbox checked={excludeST} onChange={(e) => setExcludeST(e.target.checked)}>
-              剔除 ST
-            </Checkbox>
-            <Checkbox checked={excludeHalt} onChange={(e) => setExcludeHalt(e.target.checked)}>
-              剔除停牌
-            </Checkbox>
+            <Tag color="blue">V2</Tag>
+            <span>默认启用硬性排除与质量底池，仅选择要参与排序的 Trigger</span>
           </div>
           <StrategyPanel
             selected={Object.keys(selected)}
@@ -123,19 +118,16 @@ export default function WorkbenchPage() {
             <Statistic title="筛选日期" value={result.target_date} />
             <Statistic title="结果数量" value={result.total_picks} />
             <Statistic title="耗时" value={result.elapsed_ms} suffix="ms" />
+            <Statistic title="市场状态" value={result.market_regime} />
           </Space>
         )}
         <ResultTable
           picks={result?.picks ?? []}
           loading={loading}
-          aiEnabled={result?.ai_enabled ?? false}
           onRowClick={setSelectedStock}
         />
         <div style={{ marginTop: 12 }}>
-          <StockDetail
-            stock={selectedStock}
-            aiEnabled={result?.ai_enabled ?? false}
-          />
+          <StockDetail stock={selectedStock} />
         </div>
       </Col>
     </Row>

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 if TYPE_CHECKING:
-    from app.strategy.pipeline import StockPick
+    from app.strategy.pick_types import StockPick
 
 logger = logging.getLogger(__name__)
 

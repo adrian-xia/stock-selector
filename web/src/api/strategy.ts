@@ -9,18 +9,18 @@ import type {
 /** 获取可用策略列表 */
 export async function fetchStrategyList(category?: string) {
   const params = category ? { category } : {}
-  const { data } = await apiClient.get<StrategyListResponse>('/strategy/list', { params })
+  const { data } = await apiClient.get<StrategyListResponse>('/strategy/list-v2', { params })
   return data
 }
 
 /** 获取策略参数 schema */
 export async function fetchStrategySchema(name: string) {
-  const { data } = await apiClient.get<StrategySchemaResponse>(`/strategy/schema/${name}`)
+  const { data } = await apiClient.get<StrategySchemaResponse>(`/strategy/schema-v2/${name}`)
   return data
 }
 
 /** 执行选股策略 */
 export async function runStrategy(req: StrategyRunRequest) {
-  const { data } = await apiClient.post<StrategyRunResponse>('/strategy/run', req)
+  const { data } = await apiClient.post<StrategyRunResponse>('/strategy/run-v2', req)
   return data
 }

@@ -3,8 +3,12 @@ export interface StrategyMeta {
   name: string
   display_name: string
   category: string
+  role: string
+  signal_group?: string | null
   description: string
   default_params: Record<string, number | string | boolean>
+  param_space: Record<string, unknown>
+  ai_rating: number
 }
 
 /** 策略列表响应 */
@@ -38,11 +42,10 @@ export interface StrategyConfigListResponse {
 /** 选股执行请求 */
 export interface StrategyRunRequest {
   strategy_names: string[]
+  strategy_params?: Record<string, Record<string, number | string | boolean>>
   target_date?: string
-  base_filter?: {
-    exclude_st?: boolean
-    exclude_halt?: boolean
-  }
+  industries?: string[]
+  markets?: string[]
   top_n?: number
 }
 
@@ -54,9 +57,20 @@ export interface StockPick {
   pct_chg: number
   matched_strategies: string[]
   match_count: number
-  ai_score?: number | null
-  ai_signal?: string | null
-  ai_summary?: string | null
+  weighted_score: number
+  quality_score: number
+  tags: Record<string, number>
+  triggered_signals: Array<{
+    strategy: string
+    group: string
+    confidence: number
+    weight: number
+  }>
+  confirmed_bonus: number
+  dynamic_weight: number
+  style_bonus: number
+  final_score: number
+  market_regime: string
 }
 
 /** 选股执行响应 */
@@ -65,6 +79,7 @@ export interface StrategyRunResponse {
   total_picks: number
   elapsed_ms: number
   layer_stats: Record<string, number>
+  market_regime: string
   ai_enabled: boolean
   picks: StockPick[]
 }

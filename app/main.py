@@ -1,9 +1,12 @@
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import bindparam, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.ai import router as ai_router
 from app.api.alert import router as alert_router
@@ -25,7 +28,8 @@ from app.config import settings
 from app.database import async_session_factory, engine
 from app.logger import setup_logging
 from app.scheduler.core import start_scheduler, stop_scheduler
-from app.strategy.factory import StrategyFactory
+from app.strategy.base import StrategyRole
+from app.strategy.factory import STRATEGY_REGISTRY, StrategyFactoryV2, resolve_v2_default_params
 
 logger = logging.getLogger(__name__)
 
@@ -62,35 +66,179 @@ async def _graceful_shutdown() -> None:
     logger.info("[关闭] 完成")
 
 
+def _build_active_strategy_rows() -> list[dict]:
+    """构造当前活跃策略元数据。"""
+    trigger_metas = StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    rows = [
+        {
+            "name": meta.name,
+            "category": meta.signal_group.value if meta.signal_group else meta.role.value,
+            "description": meta.description or "",
+            "params": json.dumps(resolve_v2_default_params(meta)),
+            "role": meta.role.value,
+            "signal_group": meta.signal_group.value if meta.signal_group else None,
+            "ai_rating": float(meta.ai_rating),
+        }
+        for meta in trigger_metas
+    ]
+    rows.extend(
+        {
+            "name": meta.name,
+            "category": meta.category,
+            "description": meta.description or "",
+            "params": json.dumps(meta.default_params),
+            "role": "legacy",
+            "signal_group": None,
+            "ai_rating": None,
+        }
+        for meta in STRATEGY_REGISTRY.values()
+    )
+    return rows
+
+
+async def _cleanup_obsolete_strategy_data(
+    session: AsyncSession,
+    active_names: list[str],
+) -> dict[str, int]:
+    """物理清理已废弃策略及其历史数据。"""
+    select_sql = (
+        text("SELECT id, name FROM strategies WHERE name NOT IN :active_names")
+        .bindparams(bindparam("active_names", expanding=True))
+    )
+    result = await session.execute(select_sql, {"active_names": active_names})
+    obsolete_rows = result.fetchall()
+
+    if not obsolete_rows:
+        return {"strategies": 0}
+
+    obsolete_ids = [int(row[0]) for row in obsolete_rows]
+    obsolete_names = [str(row[1]) for row in obsolete_rows]
+
+    stats = {"strategies": len(obsolete_names)}
+
+    delete_specs = [
+        (
+            "optimization_results",
+            text("""
+                DELETE FROM optimization_results
+                WHERE task_id IN (
+                    SELECT id FROM optimization_tasks
+                    WHERE strategy_name IN :obsolete_names
+                )
+            """).bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "optimization_tasks",
+            text("DELETE FROM optimization_tasks WHERE strategy_name IN :obsolete_names")
+            .bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "market_optimization_tasks",
+            text("DELETE FROM market_optimization_tasks WHERE strategy_name IN :obsolete_names")
+            .bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "strategy_picks",
+            text("DELETE FROM strategy_picks WHERE strategy_name IN :obsolete_names")
+            .bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "strategy_hit_stats",
+            text("DELETE FROM strategy_hit_stats WHERE strategy_name IN :obsolete_names")
+            .bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "trade_plan_daily_ext",
+            text("DELETE FROM trade_plan_daily_ext WHERE source_strategy IN :obsolete_names")
+            .bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "strategy_watchpool",
+            text("DELETE FROM strategy_watchpool WHERE strategy_name IN :obsolete_names")
+            .bindparams(bindparam("obsolete_names", expanding=True)),
+            {"obsolete_names": obsolete_names},
+        ),
+        (
+            "backtest_results",
+            text("""
+                DELETE FROM backtest_results
+                WHERE task_id IN (
+                    SELECT id FROM backtest_tasks
+                    WHERE strategy_id IN :obsolete_ids
+                )
+            """).bindparams(bindparam("obsolete_ids", expanding=True)),
+            {"obsolete_ids": obsolete_ids},
+        ),
+        (
+            "backtest_tasks",
+            text("DELETE FROM backtest_tasks WHERE strategy_id IN :obsolete_ids")
+            .bindparams(bindparam("obsolete_ids", expanding=True)),
+            {"obsolete_ids": obsolete_ids},
+        ),
+        (
+            "strategies",
+            text("DELETE FROM strategies WHERE id IN :obsolete_ids")
+            .bindparams(bindparam("obsolete_ids", expanding=True)),
+            {"obsolete_ids": obsolete_ids},
+        ),
+    ]
+
+    for key, sql, params in delete_specs:
+        delete_result = await session.execute(sql, params)
+        stats[key] = delete_result.rowcount or 0
+
+    logger.info(
+        "[策略清理] 删除废弃策略 %d 个：%s",
+        len(obsolete_names),
+        obsolete_names,
+    )
+    return stats
+
+
 async def _sync_strategies_to_db() -> None:
-    """将内存中注册的策略同步到 strategies 表（UPSERT）。
+    """将内存中注册的策略同步到 strategies 表，并清理废弃策略。
 
-    - 新策略默认 is_enabled=False，需要用户在策略配置页面手动启用
-    - 已有策略仅更新元数据（category、description），不覆盖 is_enabled 和 params
+    - 仅同步当前仍在使用的策略：
+      - V2 trigger（策略配置/执行入口）
+      - V4 `volume-price-pattern`（独立链路仍在使用）
+    - 同时物理删除数据库中的废弃 V1 策略及其关联历史
     """
-    from sqlalchemy import text
-    import json
+    active_rows = _build_active_strategy_rows()
+    active_names = sorted(row["name"] for row in active_rows)
 
-    all_meta = StrategyFactory.get_all()
     async with async_session_factory() as session:
-        for meta in all_meta:
+        for row in active_rows:
             await session.execute(
                 text("""
-                    INSERT INTO strategies (name, category, description, params, is_enabled)
-                    VALUES (:name, :category, :description, :params, false)
+                    INSERT INTO strategies (
+                        name, category, description, params, is_enabled,
+                        role, signal_group, ai_rating
+                    )
+                    VALUES (
+                        :name, :category, :description, :params, false,
+                        :role, :signal_group, :ai_rating
+                    )
                     ON CONFLICT (name) DO UPDATE SET
                         category = EXCLUDED.category,
                         description = EXCLUDED.description,
+                        params = EXCLUDED.params,
+                        role = EXCLUDED.role,
+                        signal_group = EXCLUDED.signal_group,
+                        ai_rating = EXCLUDED.ai_rating,
                         updated_at = NOW()
                 """),
-                {
-                    "name": meta.name,
-                    "category": meta.category,
-                    "description": meta.description or "",
-                    "params": json.dumps(meta.default_params),
-                },
+                row,
             )
+        cleanup_stats = await _cleanup_obsolete_strategy_data(session, active_names)
         await session.commit()
+        if cleanup_stats.get("strategies", 0) > 0:
+            logger.info("[策略清理] 清理统计：%s", cleanup_stats)
 
 
 @asynccontextmanager

@@ -35,6 +35,7 @@ def generate_trade_plans(
     market_regime: MarketRegimeResult,
     sector_scores: dict[str, float],
     trade_date: date,
+    valid_date: date,
     max_plans: int = 20,
 ) -> list[dict]:
     """生成增强交易计划列表。
@@ -44,6 +45,7 @@ def generate_trade_plans(
         market_regime: 市场状态评分
         sector_scores: {sector_code: final_score}
         trade_date: 交易日
+        valid_date: 下一个有效交易日
         max_plans: 最大计划数
 
     Returns:
@@ -64,6 +66,9 @@ def generate_trade_plans(
         # 风控规则
         entry_rule, stop_loss_rule, take_profit_rule = _generate_rules(
             plan_type, market_regime
+        )
+        trigger_price, stop_loss_price, take_profit_price, risk_reward_ratio = (
+            _generate_execution_prices(plan_type, stock.close, market_regime)
         )
 
         # 极端风险兜底（设计文档 §6.4）
@@ -99,10 +104,18 @@ def generate_trade_plans(
 
         plans.append({
             "trade_date": trade_date,
+            "valid_date": valid_date,
             "ts_code": stock.ts_code,
             "source_strategy": stock.source_strategies[0] if stock.source_strategies else "unknown",
             "plan_type": plan_type,
             "plan_status": "PENDING",
+            "direction": "buy",
+            "trigger_price": trigger_price,
+            "stop_loss_price": stop_loss_price,
+            "take_profit_price": take_profit_price,
+            "risk_reward_ratio": risk_reward_ratio,
+            "triggered": None,
+            "actual_price": None,
             "entry_rule": entry_rule,
             "stop_loss_rule": stop_loss_rule,
             "take_profit_rule": take_profit_rule,
@@ -150,3 +163,36 @@ def _generate_rules(
         profit = "盈利 5% 减半仓，8% 清仓"
 
     return entry, stop, profit
+
+
+def _generate_execution_prices(
+    plan_type: str,
+    close: float,
+    regime: MarketRegimeResult,
+) -> tuple[float | None, float | None, float | None, float]:
+    """生成执行型数值计划字段。"""
+    if close <= 0:
+        return None, None, None, 2.0
+
+    risk_reward_ratio = 2.0
+    if plan_type == "breakout":
+        trigger_price = round(close * 1.01, 4)
+        stop_pct = 0.02 if regime.risk_score >= 60 else 0.05
+        stop_loss_price = round(trigger_price * (1 - stop_pct), 4)
+    elif plan_type == "pullback":
+        trigger_price = round(close, 4)
+        stop_pct = 0.02 if regime.risk_score >= 60 else 0.03
+        stop_loss_price = round(close * (1 - stop_pct), 4)
+    else:
+        trigger_price = round(close * 1.005, 4)
+        stop_loss_price = round(close * 0.98, 4)
+
+    if trigger_price <= stop_loss_price:
+        take_profit_price = round(trigger_price * 1.08, 4)
+    else:
+        take_profit_price = round(
+            trigger_price + (trigger_price - stop_loss_price) * risk_reward_ratio,
+            4,
+        )
+
+    return trigger_price, stop_loss_price, take_profit_price, risk_reward_ratio

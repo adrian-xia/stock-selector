@@ -7,42 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
-class TradePlan(Base):
-    """交易计划：基于 T 日数据生成 T+1 触发条件。"""
-
-    __tablename__ = "trade_plans"
-    __table_args__ = (
-        Index("idx_plan_date", "plan_date"),
-        Index("idx_plan_code_date", "ts_code", "plan_date"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts_code: Mapped[str] = mapped_column(String(16), nullable=False)
-    plan_date: Mapped[date] = mapped_column(Date, nullable=False)   # 生成日期（T日）
-    valid_date: Mapped[date] = mapped_column(Date, nullable=False)  # 有效日期（T+1）
-
-    # 触发条件
-    direction: Mapped[str] = mapped_column(String(8), nullable=False, default="buy")
-    trigger_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    trigger_condition: Mapped[str] = mapped_column(Text, nullable=False)
-    trigger_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
-
-    # 风控
-    stop_loss: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
-    take_profit: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
-    risk_reward_ratio: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-
-    # 来源
-    source_strategy: Mapped[str] = mapped_column(String(64), nullable=False)
-    confidence: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-
-    # 执行结果（盘后回填）
-    triggered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    actual_price: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-
 class Strategy(Base):
     __tablename__ = "strategies"
 
@@ -52,6 +16,33 @@ class Strategy(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     params: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # V2 新增字段
+    role: Mapped[str | None] = mapped_column(String(20), nullable=True, default="trigger")
+    signal_group: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_rating: Mapped[float | None] = mapped_column(Numeric(4, 2), nullable=True, default=5.0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class MarketRegimeDaily(Base):
+    """每日市场状态快照。"""
+
+    __tablename__ = "market_regime_daily"
+    __table_args__ = (
+        Index("idx_market_regime_daily_regime", "regime"),
+    )
+
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    benchmark_code: Mapped[str] = mapped_column(String(16), nullable=False, default="000001.SH")
+    regime: Mapped[str] = mapped_column(String(16), nullable=False)
+    close: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma20: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma60: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    prev_ma20: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

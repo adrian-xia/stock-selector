@@ -164,6 +164,25 @@ class StarMapRepository:
             result = await session.execute(query)
             return list(result.scalars().all())
 
+    async def get_next_trade_date(self, current_date: date) -> date:
+        """获取下一个交易日；若不存在则回退到当前日期。"""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT cal_date
+                    FROM trade_calendar
+                    WHERE is_open = true
+                      AND cal_date > :current_date
+                    ORDER BY cal_date
+                    LIMIT 1
+                    """
+                ),
+                {"current_date": current_date},
+            )
+            row = result.fetchone()
+            return row[0] if row else current_date
+
     # -----------------------------------------------------------------------
     # 跨表查询
     # -----------------------------------------------------------------------
@@ -201,11 +220,22 @@ class StarMapRepository:
             "trade_plans": [
                 {
                     "ts_code": p.ts_code,
+                    "valid_date": p.valid_date.isoformat() if p.valid_date else None,
                     "source_strategy": p.source_strategy,
                     "plan_type": p.plan_type,
+                    "direction": p.direction,
+                    "trigger_price": float(p.trigger_price) if p.trigger_price is not None else None,
+                    "stop_loss_price": float(p.stop_loss_price) if p.stop_loss_price is not None else None,
+                    "take_profit_price": float(p.take_profit_price) if p.take_profit_price is not None else None,
+                    "risk_reward_ratio": float(p.risk_reward_ratio) if p.risk_reward_ratio is not None else None,
                     "confidence": float(p.confidence),
                     "position_suggestion": float(p.position_suggestion),
                     "market_regime": p.market_regime,
+                    "entry_rule": p.entry_rule,
+                    "stop_loss_rule": p.stop_loss_rule,
+                    "take_profit_rule": p.take_profit_rule,
+                    "plan_status": p.plan_status,
+                    "risk_flags": p.risk_flags,
                 }
                 for p in plans
             ],

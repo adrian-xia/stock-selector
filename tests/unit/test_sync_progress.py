@@ -109,13 +109,15 @@ class TestGetSyncSummary:
 
     async def test_calculates_completion_rate(self) -> None:
         mock_session = AsyncMock()
-        # 5 次 execute 调用：total, data_done, indicator_done, failed, both_done
+        # 6 次 execute 调用：total, data_done, indicator_done, failed, both_done, raw_summary
         total_r = MagicMock(); total_r.scalar.return_value = 100
         data_r = MagicMock(); data_r.scalar.return_value = 95
         ind_r = MagicMock(); ind_r.scalar.return_value = 90
         failed_r = MagicMock(); failed_r.scalar.return_value = 2
         both_r = MagicMock(); both_r.scalar.return_value = 88
-        mock_session.execute.side_effect = [total_r, data_r, ind_r, failed_r, both_r]
+        raw_r = MagicMock()
+        raw_r.scalars.return_value.all.return_value = []
+        mock_session.execute.side_effect = [total_r, data_r, ind_r, failed_r, both_r, raw_r]
 
         mgr = _make_manager_with_session(mock_session)
         summary = await mgr.get_sync_summary(date(2026, 2, 13))
@@ -125,6 +127,8 @@ class TestGetSyncSummary:
         assert summary["indicator_done"] == 90
         assert summary["failed"] == 2
         assert summary["completion_rate"] == 0.88
+        assert summary["raw_summary"]["up_to_date"] == 0
+        assert summary["raw_summary"]["total_tables"] > 0
 
     async def test_returns_zero_when_no_stocks(self) -> None:
         mock_session = AsyncMock()

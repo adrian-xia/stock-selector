@@ -28,7 +28,7 @@ class TestListBacktestTasks:
         mock_list_result.mappings.return_value.all.return_value = [
             {
                 "id": 2,
-                "strategy_name": "rsi_oversold",
+                "strategy_name": "first-negative-reversal-trigger-v2",
                 "stock_codes": json.dumps(["000001.SZ"]),
                 "start_date": date(2024, 6, 1),
                 "end_date": date(2025, 6, 1),
@@ -38,7 +38,7 @@ class TestListBacktestTasks:
             },
             {
                 "id": 1,
-                "strategy_name": "ma_cross",
+                "strategy_name": "volume-breakout-trigger-v2",
                 "stock_codes": ["600519.SH", "000001.SZ"],
                 "start_date": date(2024, 1, 1),
                 "end_date": date(2025, 12, 31),
