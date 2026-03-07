@@ -101,7 +101,7 @@ tsc -b                                               # TypeScript 类型检查
 - 盘后调度、工作台 API、参数优化、策略配置页都已切到 V2
 - `app/optimization/market_optimizer.py` 仅优化 V2 trigger，目标为命中率 + 盈亏比 − 回撤
 - V1 主执行链路和旧策略文件已删除；仅保留：
-  - `volume-price-pattern`（V4 独立策略）
+  - `volume-price-pattern`（V4 独立策略，通过 `v4_daily_runner` 纳入日常选股落库流程）
   - `cashflow_quality` / `financial_safety` / `high_dividend` / `low_pe_high_roe` 四个基础策略供 adapter 复用
 - `strategies` 表启动时会同步活跃策略，并物理清理废弃 V1 策略及其关联历史
 

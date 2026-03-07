@@ -11,7 +11,7 @@
 - **数据初始化向导** — 交互式引导首次数据初始化，支持 1年/3年/自定义范围选项，全量同步 P0-P5 数据
 - **优雅关闭** — 捕获 SIGTERM/SIGINT 信号，等待运行中的任务完成后再关闭（30秒超时），启动时自动清除残留同步锁
 - **技术指标计算** — 自动计算 MA/EMA/MACD/KDJ/RSI/BOLL/ATR/WR/CCI/BIAS/OBV/DMI/MTM/ROC/PSY/TRIX/EMV/VR/BRAR/CR/MFI/HIGH_20/HIGH_60 等 80+ 个技术指标（基于 idx_factor_pro 接口）
-- **V2 策略引擎** — 当前生产主路径为 20 个 V2 策略：1 scorer + 5 confirmer + 2 guard + 2 tagger + 10 trigger；触发策略按 进攻组/趋势组/底部组 分层管理，盘后链路、工作台、参数优化和策略配置页均已切到 V2；另保留 1 个独立 V4 量价配合策略（`volume-price-pattern`），详见 `docs/design/20-策略引擎V2-全新设计.md`
+- **V2 策略引擎** — 当前生产主路径为 20 个 V2 策略：1 scorer + 5 confirmer + 2 guard + 2 tagger + 10 trigger；触发策略按 进攻组/趋势组/底部组 分层管理，盘后链路、工作台、参数优化和策略配置页均已切到 V2；另保留 1 个独立 V4 量价配合策略（`volume-price-pattern`），通过 `v4_daily_runner` 纳入日常选股落库流程，详见 `docs/design/20-策略引擎V2-全新设计.md`
 - **多因子融合排序** — 最终分数由 trigger 信号强度、质量底分、风格增益和 confirmer bonus 共同决定；其中 `rolling_performance` 作为 trigger 有效权重乘数并收敛到 `[0.8, 1.2]`，`confirmer` 为加法叠加且封顶 0.6
 - **行业/市场筛选** — 选股 API 支持 industries/markets 参数过滤，覆盖 110 个行业 + 4 个市场（主板/创业板/科创板/北交所）
 - **统一计划层** — 底层 V2/V4 只负责产出 `strategy_picks`；真正的执行计划统一由 StarMap 生成并持久化到 `trade_plan_daily_ext`，包含 `valid_date`、方向、触发价、止损/止盈、仓位建议和风控标记
