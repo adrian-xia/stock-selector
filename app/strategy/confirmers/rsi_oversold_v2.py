@@ -26,7 +26,7 @@ class RSIOversoldConfirmerV2(BaseStrategyV2):
     }
     ai_rating = 5.58  # 三模型均分
     bonus_weight = 0.2  # 加分权重
-    applicable_groups = [SignalGroup.BOTTOM_REVERSAL]  # 适用信号组
+    applicable_groups = [SignalGroup.BOTTOM]  # 适用信号组
 
     async def execute(
         self,

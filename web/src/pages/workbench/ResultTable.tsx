@@ -2,24 +2,15 @@ import { Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { StockPick } from '../../types'
 
-const { Text, Paragraph } = Typography
-
-const signalColorMap: Record<string, string> = {
-  STRONG_BUY: 'red',
-  BUY: 'volcano',
-  HOLD: 'default',
-  SELL: 'green',
-  STRONG_SELL: 'cyan',
-}
+const { Text } = Typography
 
 interface Props {
   picks: StockPick[]
   loading: boolean
-  aiEnabled: boolean
   onRowClick: (record: StockPick) => void
 }
 
-export default function ResultTable({ picks, loading, aiEnabled, onRowClick }: Props) {
+export default function ResultTable({ picks, loading, onRowClick }: Props) {
   const columns: ColumnsType<StockPick> = [
     {
       title: '代码',
@@ -50,46 +41,38 @@ export default function ResultTable({ picks, loading, aiEnabled, onRowClick }: P
       ),
     },
     {
-      title: '匹配策略数',
+      title: '触发数',
       dataIndex: 'match_count',
       width: 100,
       sorter: (a, b) => a.match_count - b.match_count,
     },
-    ...(aiEnabled
-      ? [
-          {
-            title: 'AI 评分',
-            dataIndex: 'ai_score' as const,
-            width: 90,
-            sorter: (a: StockPick, b: StockPick) => (a.ai_score ?? 0) - (b.ai_score ?? 0),
-            render: (v: number | null) => v ?? '-',
-          },
-          {
-            title: 'AI 信号',
-            dataIndex: 'ai_signal' as const,
-            width: 110,
-            render: (v: string | null) => {
-              if (!v) return '-'
-              const color = signalColorMap[v] ?? 'default'
-              return <Tag color={color}>{v}</Tag>
-            },
-          },
-        ]
-      : []),
+    {
+      title: '质量分',
+      dataIndex: 'quality_score',
+      width: 90,
+      sorter: (a, b) => a.quality_score - b.quality_score,
+      render: (v: number) => v.toFixed(1),
+    },
+    {
+      title: '综合分',
+      dataIndex: 'final_score',
+      width: 100,
+      sorter: (a, b) => a.final_score - b.final_score,
+      render: (v: number) => v.toFixed(3),
+    },
+    {
+      title: '风格',
+      dataIndex: 'tags',
+      width: 160,
+      render: (tags: StockPick['tags']) => {
+        const entries = Object.entries(tags ?? {})
+        if (!entries.length) return '-'
+        return entries.map(([key, value]) => (
+          <Tag key={key}>{key}:{value.toFixed(2)}</Tag>
+        ))
+      },
+    },
   ]
-
-  // AI 摘要展开行
-  const expandable = aiEnabled
-    ? {
-        expandedRowRender: (record: StockPick) =>
-          record.ai_summary ? (
-            <Paragraph style={{ margin: 0 }}>{record.ai_summary}</Paragraph>
-          ) : (
-            <Text type="secondary">暂无 AI 分析摘要</Text>
-          ),
-        rowExpandable: (record: StockPick) => !!record.ai_score,
-      }
-    : undefined
 
   return (
     <Table<StockPick>
@@ -99,7 +82,6 @@ export default function ResultTable({ picks, loading, aiEnabled, onRowClick }: P
       loading={loading}
       size="small"
       pagination={{ pageSize: 20, showSizeChanger: false }}
-      expandable={expandable}
       onRow={(record) => ({
         onClick: () => onRowClick(record),
         style: { cursor: 'pointer' },

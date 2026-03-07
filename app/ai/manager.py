@@ -30,7 +30,7 @@ from app.models.ai import AIAnalysisResult
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from app.strategy.pipeline import StockPick
+    from app.strategy.pick_types import StockPick
 
 logger = logging.getLogger(__name__)
 

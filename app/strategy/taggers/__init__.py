@@ -5,7 +5,7 @@ Tagger 输出 dict[str, pd.Series[float]]，风格强度 0.0-1.0。
 """
 
 from app.strategy.adapters.tagger_adapter import TaggerAdapter
-from app.strategy.base import BaseStrategyV2
+from app.strategy.base import BaseStrategyV2, StrategyRole
 from app.strategy.fundamental.high_dividend import HighDividendStrategy
 from app.strategy.fundamental.low_pe_high_roe import LowPEHighROEStrategy
 
@@ -13,22 +13,22 @@ from app.strategy.fundamental.low_pe_high_roe import LowPEHighROEStrategy
 class LowPEHighROETaggerV2(BaseStrategyV2):
     """低估值高成长 Tagger V2。"""
 
+    name = "low-pe-high-roe-tagger-v2"
+    display_name = "低估值高成长（标签）"
+    role = StrategyRole.TAGGER
+    signal_group = None
+    description = "PE<30 + ROE>=15% + 利润增速>=20%"
+    default_params = LowPEHighROEStrategy.default_params
+    ai_rating = 7.62
+
     def __init__(self, params: dict | None = None) -> None:
         """初始化 Tagger。"""
+        super().__init__(params)
         self._adapter = TaggerAdapter(
-            LowPEHighROEStrategy(params),
+            LowPEHighROEStrategy(self.params),
             style_key="growth",
-            ai_rating=7.13,
+            ai_rating=self.ai_rating,
         )
-        # 复制适配器的属性
-        self.name = self._adapter.name
-        self.display_name = self._adapter.display_name
-        self.role = self._adapter.role
-        self.signal_group = self._adapter.signal_group
-        self.description = self._adapter.description
-        self.default_params = self._adapter.default_params
-        self.ai_rating = self._adapter.ai_rating
-        self.params = self._adapter.params
 
     async def execute(self, df, target_date):
         """执行 Tagger 策略。"""
@@ -38,22 +38,22 @@ class LowPEHighROETaggerV2(BaseStrategyV2):
 class HighDividendTaggerV2(BaseStrategyV2):
     """高股息 Tagger V2。"""
 
+    name = "high-dividend-tagger-v2"
+    display_name = "高股息（标签）"
+    role = StrategyRole.TAGGER
+    signal_group = None
+    description = "股息率>=3% + PE<20"
+    default_params = HighDividendStrategy.default_params
+    ai_rating = 8.08
+
     def __init__(self, params: dict | None = None) -> None:
         """初始化 Tagger。"""
+        super().__init__(params)
         self._adapter = TaggerAdapter(
-            HighDividendStrategy(params),
+            HighDividendStrategy(self.params),
             style_key="dividend",
-            ai_rating=6.47,
+            ai_rating=self.ai_rating,
         )
-        # 复制适配器的属性
-        self.name = self._adapter.name
-        self.display_name = self._adapter.display_name
-        self.role = self._adapter.role
-        self.signal_group = self._adapter.signal_group
-        self.description = self._adapter.description
-        self.default_params = self._adapter.default_params
-        self.ai_rating = self._adapter.ai_rating
-        self.params = self._adapter.params
 
     async def execute(self, df, target_date):
         """执行 Tagger 策略。"""

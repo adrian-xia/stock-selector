@@ -7,15 +7,24 @@ Layer 3: 多因子融合排序（Confirmer + 市场状态感知）
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date
 
 import pandas as pd
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.database import async_session_factory
 from app.strategy.base import SignalGroup, StrategyRole, StrategySignal
 from app.strategy.factory import StrategyFactoryV2
+from app.strategy.market_regime import MarketRegime, get_market_regime
+from app.strategy.pick_store import save_strategy_picks
+from app.strategy.weight_engine import (
+    compute_rolling_performance,
+    get_signal_group_coefficient,
+    get_style_bonus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,31 +62,151 @@ class StockPickV2:
     tags: dict[str, float]
     triggered_signals: list[dict]
     confirmed_bonus: float
+    dynamic_weight: float
+    style_bonus: float
+    market_regime: str
     final_score: float
+
+    @property
+    def matched_strategies(self) -> list[str]:
+        return [signal["strategy"] for signal in self.triggered_signals]
+
+    @property
+    def match_count(self) -> int:
+        return len(self.triggered_signals)
+
+    @property
+    def weighted_score(self) -> float:
+        return self.final_score
+
+    @property
+    def ai_score(self) -> None:
+        return None
+
+    @property
+    def ai_signal(self) -> None:
+        return None
+
+    @property
+    def ai_summary(self) -> None:
+        return None
+
+
+@dataclass
+class PipelineV2Result:
+    """V2 Pipeline 执行结果。"""
+
+    target_date: date
+    picks: list[StockPickV2]
+    layer_stats: dict[str, int]
+    elapsed_ms: int
+    market_regime: str
+    ai_enabled: bool = False
 
 
 async def execute_pipeline_v2(
-    session: AsyncSession,
     target_date: date,
+    session_factory: async_sessionmaker = async_session_factory,
+    trigger_names: list[str] | None = None,
+    strategy_params: dict[str, dict] | None = None,
     top_n: int = 50,
-) -> list[StockPickV2]:
+    industries: list[str] | None = None,
+    markets: list[str] | None = None,
+    save_picks: bool = False,
+) -> PipelineV2Result:
     """执行 V2 Pipeline。
 
     Args:
-        session: 数据库会话
+        session_factory: 异步数据库会话工厂
         target_date: 目标日期
+        trigger_names: 运行的 V2 trigger 名称列表，None 表示全部 trigger
+        strategy_params: trigger 名称 -> 运行时参数
         top_n: 返回前 N 只股票
+        industries: 行业过滤
+        markets: 市场过滤
+        save_picks: 是否写入 strategy_picks（调度场景使用）
 
     Returns:
-        list[StockPickV2]，按 final_score 降序排列
+        PipelineV2Result
     """
-    logger.info(f"[Pipeline V2] 开始执行，日期={target_date}, top_n={top_n}")
+    start_time = time.monotonic()
+    layer_stats: dict[str, int] = {}
+    logger.info(
+        "[Pipeline V2] 开始执行，日期=%s, top_n=%s, triggers=%s",
+        target_date,
+        top_n,
+        trigger_names or "ALL",
+    )
+
+    async with session_factory() as session:
+        result = await _execute_pipeline_v2_on_session(
+            session=session,
+            session_factory=session_factory,
+            target_date=target_date,
+            trigger_names=trigger_names,
+            strategy_params=strategy_params,
+            top_n=top_n,
+            industries=industries,
+            markets=markets,
+            layer_stats=layer_stats,
+        )
+
+    result.elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+    if save_picks and result.picks:
+        active_triggers = trigger_names or [
+            meta.name for meta in StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+        ]
+        try:
+            await save_strategy_picks(
+                session_factory=session_factory,
+                strategy_names=active_triggers,
+                target_date=target_date,
+                picks=result.picks,
+            )
+        except Exception:
+            logger.exception("[Pipeline V2] 保存 strategy_picks 失败，不影响主流程")
+
+    logger.info(
+        "[Pipeline V2] 完成，返回 %d 只股票，耗时 %dms，regime=%s",
+        len(result.picks),
+        result.elapsed_ms,
+        result.market_regime,
+    )
+    return result
+
+
+async def _execute_pipeline_v2_on_session(
+    session: AsyncSession,
+    session_factory: async_sessionmaker,
+    target_date: date,
+    trigger_names: list[str] | None,
+    strategy_params: dict[str, dict] | None,
+    top_n: int,
+    industries: list[str] | None,
+    markets: list[str] | None,
+    layer_stats: dict[str, int],
+) -> PipelineV2Result:
+    """在既有会话上执行 V2 Pipeline。"""
+    market_regime = await get_market_regime(session_factory, target_date)
 
     # Layer 0: SQL 硬性排除
-    df = await _layer0_sql_filter(session, target_date)
+    df = await _layer0_sql_filter(
+        session,
+        target_date,
+        industries=industries,
+        markets=markets,
+    )
+    layer_stats["layer0"] = len(df)
     if df.empty:
         logger.warning("[Pipeline V2] Layer 0 无股票通过")
-        return []
+        return PipelineV2Result(
+            target_date=target_date,
+            picks=[],
+            layer_stats=layer_stats,
+            elapsed_ms=0,
+            market_regime=market_regime.value,
+        )
 
     logger.info(f"[Pipeline V2] Layer 0 通过: {len(df)} 只")
 
@@ -87,9 +216,16 @@ async def execute_pipeline_v2(
     # Layer 1: 质量底池
     layer1_results = await _layer1_quality_pool(df, target_date)
     passed_stocks = [r for r in layer1_results if r.passed_guard]
+    layer_stats["layer1"] = len(passed_stocks)
     if not passed_stocks:
         logger.warning("[Pipeline V2] Layer 1 无股票通过 Guard")
-        return []
+        return PipelineV2Result(
+            target_date=target_date,
+            picks=[],
+            layer_stats=layer_stats,
+            elapsed_ms=0,
+            market_regime=market_regime.value,
+        )
 
     logger.info(f"[Pipeline V2] Layer 1 通过: {len(passed_stocks)} 只")
 
@@ -98,29 +234,62 @@ async def execute_pipeline_v2(
     df_passed = df[df["ts_code"].isin(passed_codes)].copy()
 
     # Layer 2: 信号触发
-    layer2_signals = await _layer2_trigger_signals(df_passed, target_date)
+    layer2_signals = await _layer2_trigger_signals(
+        df_passed,
+        target_date,
+        trigger_names=trigger_names,
+        strategy_params=strategy_params,
+    )
+    layer_stats["layer2_signals"] = len(layer2_signals)
     if not layer2_signals:
         logger.warning("[Pipeline V2] Layer 2 无信号触发")
-        return []
+        return PipelineV2Result(
+            target_date=target_date,
+            picks=[],
+            layer_stats=layer_stats,
+            elapsed_ms=0,
+            market_regime=market_regime.value,
+        )
 
     logger.info(f"[Pipeline V2] Layer 2 触发信号: {len(layer2_signals)} 个")
 
+    active_signal_names = sorted({signal.strategy_name for signal in layer2_signals})
+    rolling_performance = await compute_rolling_performance(
+        session,
+        active_signal_names,
+        target_date,
+    )
+
     # Layer 3: 多因子融合排序
     picks = await _layer3_fusion_ranking(
-        session, df_passed, layer1_results, layer2_signals, target_date
+        session=session,
+        df=df_passed,
+        layer1_results=layer1_results,
+        layer2_signals=layer2_signals,
+        target_date=target_date,
+        market_regime=market_regime,
+        rolling_performance=rolling_performance,
     )
 
     # 排序并返回 top_n
     picks.sort(key=lambda x: x.final_score, reverse=True)
-    result = picks[:top_n]
+    result_picks = picks[:top_n]
+    layer_stats["layer3"] = len(result_picks)
 
-    logger.info(f"[Pipeline V2] 完成，返回 {len(result)} 只股票")
-    return result
+    return PipelineV2Result(
+        target_date=target_date,
+        picks=result_picks,
+        layer_stats=layer_stats,
+        elapsed_ms=0,
+        market_regime=market_regime.value,
+    )
 
 
 async def _layer0_sql_filter(
     session: AsyncSession,
     target_date: date,
+    industries: list[str] | None = None,
+    markets: list[str] | None = None,
 ) -> pd.DataFrame:
     """Layer 0: SQL 硬性排除。
 
@@ -147,6 +316,8 @@ async def _layer0_sql_filter(
         SELECT
             s.ts_code,
             s.name,
+            s.industry,
+            s.market,
             sd.trade_date,
             sd.open,
             sd.high,
@@ -195,6 +366,11 @@ async def _layer0_sql_filter(
         return pd.DataFrame()
 
     df = pd.DataFrame(rows, columns=result.keys())
+
+    if industries:
+        df = df[df["industry"].isin(industries)].copy()
+    if markets:
+        df = df[df["market"].isin(markets)].copy()
 
     # 将所有 Decimal 列转为 float
     for col in df.columns:
@@ -333,8 +509,8 @@ async def _enrich_finance_data_v2(
         for col, db_col in [("pe_ttm", "db_pe_ttm"), ("pb", "db_pb")]:
             if db_col in df.columns:
                 if col in df.columns:
-                    # 用 daily_basic 的值填充 finance_indicator 中的 NULL
-                    df[col] = df[col].fillna(df[db_col])
+                    # 优先使用 daily_basic 的实时值，缺失时再回退到 finance_indicator
+                    df[col] = df[db_col].combine_first(df[col])
                 else:
                     df[col] = df[db_col]
                 df.drop(columns=[db_col], inplace=True)
@@ -410,13 +586,20 @@ async def _layer1_quality_pool(
 async def _layer2_trigger_signals(
     df: pd.DataFrame,
     target_date: date,
+    trigger_names: list[str] | None = None,
+    strategy_params: dict[str, dict] | None = None,
 ) -> list[Layer2Signal]:
     """Layer 2: 信号触发（Trigger）。"""
     signals = []
 
     triggers = StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    if trigger_names:
+        trigger_name_set = set(trigger_names)
+        triggers = [meta for meta in triggers if meta.name in trigger_name_set]
+
     for meta in triggers:
-        trigger = meta.strategy_cls()
+        params = (strategy_params or {}).get(meta.name)
+        trigger = StrategyFactoryV2.get_strategy(meta.name, params=params)
         strategy_signals = await trigger.execute(df, target_date)
 
         for sig in strategy_signals:
@@ -439,6 +622,8 @@ async def _layer3_fusion_ranking(
     layer1_results: list[Layer1Result],
     layer2_signals: list[Layer2Signal],
     target_date: date,
+    market_regime: MarketRegime,
+    rolling_performance: dict[str, float],
 ) -> list[StockPickV2]:
     """Layer 3: 多因子融合排序。"""
     # 构建 Layer 1 结果字典
@@ -480,8 +665,15 @@ async def _layer3_fusion_ranking(
             continue
         stock_row = df_indexed.loc[ts_code]
 
-        # 信号强度分：Σ(静态权重 × 置信度)
-        signal_strength = sum(sig.static_weight * sig.confidence for sig in signals)
+        # 信号强度分：
+        # Σ(静态权重 × 市场状态系数 × rolling_performance × 信号置信度)
+        signal_strength = sum(
+            sig.static_weight
+            * get_signal_group_coefficient(market_regime, sig.signal_group)
+            * rolling_performance.get(sig.strategy_name, 1.0)
+            * sig.confidence
+            for sig in signals
+        )
 
         # Confirmer 加分：按信号组过滤，叠加所有匹配的 confirmer，封顶 0.6
         # 获取该股票的所有信号组
@@ -506,8 +698,20 @@ async def _layer3_fusion_ranking(
         # 质量底分
         quality_score_normalized = layer1_result.quality_score / 100.0
 
-        # 最终得分（简化版，暂不考虑动态加权和风格增益）
-        final_score = signal_strength * 0.5 + quality_score_normalized * 0.5
+        # 动态加权展示值：该股票触发信号的 rolling_performance 均值
+        dynamic_weight = (
+            sum(rolling_performance.get(sig.strategy_name, 1.0) for sig in signals) / len(signals)
+            if signals else 1.0
+        )
+
+        # 风格增益：style_strength × regime_style_bonus（转换为相对 1.0 的增减项）
+        style_bonus = get_style_bonus(layer1_result.tags, market_regime)
+
+        final_score = (
+            signal_strength * 0.5
+            + quality_score_normalized * 0.4
+            + style_bonus * 0.1
+        )
 
         # 构建触发信号列表
         triggered_signals = [
@@ -530,6 +734,9 @@ async def _layer3_fusion_ranking(
                 tags=layer1_result.tags,
                 triggered_signals=triggered_signals,
                 confirmed_bonus=confirmed_bonus,
+                dynamic_weight=dynamic_weight,
+                style_bonus=style_bonus,
+                market_regime=market_regime.value,
                 final_score=final_score,
             )
         )

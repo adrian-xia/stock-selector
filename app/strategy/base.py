@@ -55,7 +55,7 @@ class BaseStrategy(ABC):
     V1 采用扁平继承，不设中间抽象子类。
 
     Attributes:
-        name: 策略唯一标识（kebab-case），如 "ma-cross"
+        name: 策略唯一标识（kebab-case），如 "volume-breakout-trigger-v2"
         display_name: 人类可读名称，如 "均线金叉"
         category: 策略分类，"technical" 或 "fundamental"（V1）
         description: 策略逻辑的一句话描述

@@ -64,6 +64,27 @@ class Strategy(Base):
     )
 
 
+class MarketRegimeDaily(Base):
+    """每日市场状态快照。"""
+
+    __tablename__ = "market_regime_daily"
+    __table_args__ = (
+        Index("idx_market_regime_daily_regime", "regime"),
+    )
+
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    benchmark_code: Mapped[str] = mapped_column(String(16), nullable=False, default="000001.SH")
+    regime: Mapped[str] = mapped_column(String(16), nullable=False)
+    close: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma20: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    ma60: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    prev_ma20: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class DataSourceConfig(Base):
     __tablename__ = "data_source_configs"
 

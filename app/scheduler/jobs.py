@@ -12,8 +12,10 @@ from app.data.manager import DataManager
 from app.data.tushare import TushareClient
 from app.database import async_session_factory
 from app.scheduler.task_logger import TaskLogger
-from app.strategy.factory import StrategyFactory
-from app.strategy.pipeline import execute_pipeline
+from app.strategy.base import StrategyRole
+from app.strategy.factory import StrategyFactoryV2
+from app.strategy.market_regime import compute_and_store_regime
+from app.strategy.pipeline_v2 import execute_pipeline_v2
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +298,22 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 
+        # 步骤 4.5：市场状态预计算（非关键，失败不阻断）
+        regime_start = time.monotonic()
+        try:
+            regime = await compute_and_store_regime(async_session_factory, target)
+            logger.info(
+                "[市场状态] 完成：%s，耗时 %.1fs",
+                regime.value,
+                time.monotonic() - regime_start,
+            )
+        except Exception:
+            logger.warning(
+                "[市场状态] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - regime_start,
+                traceback.format_exc(),
+            )
+
         # 步骤 5：完整性门控 → 策略执行/跳过
         summary = await manager.get_sync_summary(target)
         completion_rate = summary["completion_rate"]
@@ -529,16 +547,16 @@ async def cache_refresh_step(target_date: date) -> None:
 
 
 async def pipeline_step(target_date: date) -> list:
-    """执行策略管道：仅执行用户启用的策略（注册制）。
+    """执行 V2 策略管道。
 
-    从 strategies 表读取 is_enabled=True 的策略及其自定义参数，
-    传递给 execute_pipeline 执行。
+    优先读取 strategies 表中启用的 V2 trigger 及其自定义参数；
+    若数据库尚未配置 V2 trigger，则默认执行全部 V2 trigger。
 
     Args:
         target_date: 目标日期
 
     Returns:
-        候选股票列表（StockPick）
+        候选股票列表（StockPickV2）
     """
     import json
     from sqlalchemy import text as sa_text
@@ -553,18 +571,14 @@ async def pipeline_step(target_date: date) -> list:
         )
         rows = result.fetchall()
 
-    if not rows:
-        logger.warning("[策略管道] 没有启用的策略，跳过执行")
-        return []
-
-    strategy_names = []
+    strategy_names: list[str] = []
     strategy_params: dict[str, dict] = {}
+    available_triggers = {
+        meta.name for meta in StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    }
+
     for name, params_str in rows:
-        # 校验策略在内存注册表中存在
-        try:
-            StrategyFactory.get_meta(name)
-        except KeyError:
-            logger.warning("[策略管道] 策略 %s 已启用但未注册，跳过", name)
+        if name not in available_triggers:
             continue
         strategy_names.append(name)
         # 解析自定义参数
@@ -577,23 +591,24 @@ async def pipeline_step(target_date: date) -> list:
                 pass
 
     if not strategy_names:
-        logger.warning("[策略管道] 没有有效的启用策略，跳过执行")
-        return []
+        strategy_names = sorted(available_triggers)
+        logger.info("[策略管道] 未发现启用的 V2 trigger，默认执行全部 %d 个", len(strategy_names))
 
     logger.info("[策略管道] 启用策略 %d 个：%s", len(strategy_names), strategy_names)
 
-    result = await execute_pipeline(
+    result = await execute_pipeline_v2(
         session_factory=async_session_factory,
-        strategy_names=strategy_names,
         target_date=target_date,
+        trigger_names=strategy_names,
         top_n=50,
         strategy_params=strategy_params or None,
+        save_picks=True,
     )
 
-    elapsed = int(time.monotonic() - step_start)
     logger.info(
-        "[策略管道] 完成：筛选出 %d 只，耗时 %dms",
+        "[策略管道] 完成：筛选出 %d 只，耗时 %dms，regime=%s",
         len(result.picks), result.elapsed_ms,
+        result.market_regime,
     )
     return result.picks
 

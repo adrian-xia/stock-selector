@@ -11,8 +11,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.database import async_session_factory
-from app.strategy.factory import StrategyFactory
-from app.strategy.pipeline import execute_pipeline
+from app.strategy.base import StrategyRole
+from app.strategy.factory import (
+    StrategyFactoryV2,
+    build_v2_param_space,
+    resolve_v2_default_params,
+)
+from app.strategy.pipeline_v2 import execute_pipeline_v2
 
 router = APIRouter(prefix="/api/v1/strategy", tags=["strategy"])
 
@@ -20,69 +25,6 @@ router = APIRouter(prefix="/api/v1/strategy", tags=["strategy"])
 # ---------------------------------------------------------------------------
 # Pydantic 请求/响应模型
 # ---------------------------------------------------------------------------
-
-class StrategyRunRequest(BaseModel):
-    """选股执行请求。"""
-
-    strategy_names: list[str] = Field(
-        ..., min_length=1, description="策略名称列表"
-    )
-    target_date: date | None = Field(
-        None, description="筛选日期（默认最近交易日）"
-    )
-    base_filter: dict | None = Field(
-        None, description="Layer 1 过滤参数覆盖"
-    )
-    top_n: int = Field(30, ge=1, le=200, description="返回数量上限")
-    industries: list[str] | None = Field(
-        None, description="行业过滤（如 ['电子', '计算机']）"
-    )
-    markets: list[str] | None = Field(
-        None, description="市场过滤（如 ['主板', '创业板']）"
-    )
-
-
-class StockPickResponse(BaseModel):
-    """单只股票选股结果。"""
-
-    ts_code: str
-    name: str
-    close: float
-    pct_chg: float
-    matched_strategies: list[str]
-    match_count: int
-    weighted_score: float = 0.0
-    ai_score: int | None = None
-    ai_signal: str | None = None
-    ai_summary: str | None = None
-
-
-class StrategyRunResponse(BaseModel):
-    """选股执行响应。"""
-
-    target_date: date
-    total_picks: int
-    elapsed_ms: int
-    layer_stats: dict[str, int]
-    ai_enabled: bool = False
-    picks: list[StockPickResponse]
-
-
-class StrategyMetaResponse(BaseModel):
-    """策略元数据响应。"""
-
-    name: str
-    display_name: str
-    category: str
-    description: str
-    default_params: dict
-
-
-class StrategyListResponse(BaseModel):
-    """策略列表响应。"""
-
-    strategies: list[StrategyMetaResponse]
-
 
 class StrategySchemaResponse(BaseModel):
     """策略参数 schema 响应。"""
@@ -92,66 +34,189 @@ class StrategySchemaResponse(BaseModel):
     default_params: dict
 
 
+class StrategyRunV2Request(BaseModel):
+    """V2 选股执行请求。"""
+
+    strategy_names: list[str] = Field(
+        ..., min_length=1, description="V2 trigger 策略名称列表"
+    )
+    strategy_params: dict[str, dict] | None = Field(
+        None, description="策略参数覆盖"
+    )
+    target_date: date | None = Field(
+        None, description="筛选日期（默认最近交易日）"
+    )
+    top_n: int = Field(30, ge=1, le=200, description="返回数量上限")
+    industries: list[str] | None = Field(
+        None, description="行业过滤"
+    )
+    markets: list[str] | None = Field(
+        None, description="市场过滤"
+    )
+
+
+class StockPickV2Response(BaseModel):
+    """单只 V2 选股结果。"""
+
+    ts_code: str
+    name: str
+    close: float
+    pct_chg: float
+    matched_strategies: list[str]
+    match_count: int
+    weighted_score: float
+    quality_score: float
+    tags: dict[str, float]
+    triggered_signals: list[dict]
+    confirmed_bonus: float
+    dynamic_weight: float
+    style_bonus: float
+    final_score: float
+    market_regime: str
+
+
+class StrategyMetaV2Response(BaseModel):
+    """V2 策略元数据响应。"""
+
+    name: str
+    display_name: str
+    category: str
+    role: str
+    signal_group: str | None = None
+    description: str
+    default_params: dict
+    param_space: dict
+    ai_rating: float
+
+
+class StrategyListV2Response(BaseModel):
+    """V2 策略列表响应。"""
+
+    strategies: list[StrategyMetaV2Response]
+
+
+class StrategyRunV2Response(BaseModel):
+    """V2 选股执行响应。"""
+
+    target_date: date
+    total_picks: int
+    elapsed_ms: int
+    layer_stats: dict[str, int]
+    market_regime: str
+    ai_enabled: bool = False
+    picks: list[StockPickV2Response]
+
+
 # ---------------------------------------------------------------------------
 # 端点
 # ---------------------------------------------------------------------------
 
-@router.post("/run", response_model=StrategyRunResponse)
-async def run_strategy(req: StrategyRunRequest) -> StrategyRunResponse:
-    """执行选股策略管道。"""
-    # 校验策略名称
-    available = {m.name for m in StrategyFactory.get_all()}
-    invalid = [n for n in req.strategy_names if n not in available]
+async def _resolve_target_date(requested: date | None) -> date:
+    """解析目标日期，默认回退到最近有成交数据的交易日。"""
+    if requested is not None:
+        return requested
+
+    async with async_session_factory() as session:
+        latest = await session.execute(
+            text("SELECT MAX(trade_date) FROM stock_daily WHERE vol > 0")
+        )
+        target = latest.scalar()
+    if target is None:
+        raise HTTPException(
+            status_code=400,
+            detail="数据库中无日线数据，请先执行数据同步",
+        )
+    return target
+
+
+@router.get("/list-v2", response_model=StrategyListV2Response)
+async def list_strategies_v2() -> StrategyListV2Response:
+    """获取 V2 trigger 策略列表。"""
+    triggers = StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    strategies = []
+    for meta in triggers:
+        default_params = resolve_v2_default_params(meta)
+        strategies.append(
+            StrategyMetaV2Response(
+                name=meta.name,
+                display_name=meta.display_name,
+                category=meta.signal_group.value if meta.signal_group else meta.role.value,
+                role=meta.role.value,
+                signal_group=meta.signal_group.value if meta.signal_group else None,
+                description=meta.description,
+                default_params=default_params,
+                param_space=meta.param_space or build_v2_param_space(default_params),
+                ai_rating=meta.ai_rating,
+            )
+        )
+    return StrategyListV2Response(strategies=strategies)
+
+
+@router.get("/schema-v2/{name}", response_model=StrategySchemaResponse)
+async def get_strategy_schema_v2(name: str) -> StrategySchemaResponse:
+    """查询 V2 策略参数 schema。"""
+    try:
+        meta = StrategyFactoryV2.get_meta(name)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    return StrategySchemaResponse(
+        name=meta.name,
+        display_name=meta.display_name,
+        default_params=resolve_v2_default_params(meta),
+    )
+
+
+@router.post("/run-v2", response_model=StrategyRunV2Response)
+async def run_strategy_v2(req: StrategyRunV2Request) -> StrategyRunV2Response:
+    """执行 V2 选股管道。"""
+    available = {
+        meta.name for meta in StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    }
+    invalid = [name for name in req.strategy_names if name not in available]
     if invalid:
         raise HTTPException(
             status_code=400,
-            detail=f"未知策略：{invalid}，可用策略：{sorted(available)}",
+            detail=f"未知 V2 trigger 策略：{invalid}，可用策略：{sorted(available)}",
         )
 
-    # 确定目标日期：优先使用用户指定日期，否则查询最近有数据的交易日
-    target = req.target_date
-    if target is None:
-        async with async_session_factory() as session:
-            latest = await session.execute(
-                text("SELECT MAX(trade_date) FROM stock_daily WHERE vol > 0")
-            )
-            target = latest.scalar()
-        if target is None:
-            raise HTTPException(
-                status_code=400,
-                detail="数据库中无日线数据，请先执行数据同步",
-            )
-
-    result = await execute_pipeline(
+    target = await _resolve_target_date(req.target_date)
+    result = await execute_pipeline_v2(
         session_factory=async_session_factory,
-        strategy_names=req.strategy_names,
         target_date=target,
-        base_filter=req.base_filter,
+        trigger_names=req.strategy_names,
+        strategy_params=req.strategy_params,
         top_n=req.top_n,
         industries=req.industries,
         markets=req.markets,
     )
 
-    return StrategyRunResponse(
+    return StrategyRunV2Response(
         target_date=result.target_date,
         total_picks=len(result.picks),
         elapsed_ms=result.elapsed_ms,
         layer_stats=result.layer_stats,
+        market_regime=result.market_regime,
         ai_enabled=result.ai_enabled,
         picks=[
-            StockPickResponse(
-                ts_code=p.ts_code,
-                name=p.name,
-                close=p.close,
-                pct_chg=p.pct_chg,
-                matched_strategies=p.matched_strategies,
-                match_count=p.match_count,
-                weighted_score=p.weighted_score,
-                ai_score=p.ai_score,
-                ai_signal=p.ai_signal,
-                ai_summary=p.ai_summary,
+            StockPickV2Response(
+                ts_code=pick.ts_code,
+                name=pick.name,
+                close=pick.close,
+                pct_chg=pick.pct_chg,
+                matched_strategies=pick.matched_strategies,
+                match_count=pick.match_count,
+                weighted_score=pick.weighted_score,
+                quality_score=pick.quality_score,
+                tags=pick.tags,
+                triggered_signals=pick.triggered_signals,
+                confirmed_bonus=pick.confirmed_bonus,
+                dynamic_weight=pick.dynamic_weight,
+                style_bonus=pick.style_bonus,
+                final_score=pick.final_score,
+                market_regime=pick.market_regime,
             )
-            for p in result.picks
+            for pick in result.picks
         ],
     )
 
@@ -174,45 +239,6 @@ async def list_markets():
             text("SELECT DISTINCT market FROM stocks WHERE list_status = 'L' AND market IS NOT NULL ORDER BY market")
         )
         return [row[0] for row in result.fetchall()]
-
-
-@router.get("/list", response_model=StrategyListResponse)
-async def list_strategies(
-    category: str | None = Query(None, description="按分类过滤：technical 或 fundamental"),
-) -> StrategyListResponse:
-    """获取可用策略列表。"""
-    if category:
-        metas = StrategyFactory.get_by_category(category)
-    else:
-        metas = StrategyFactory.get_all()
-
-    return StrategyListResponse(
-        strategies=[
-            StrategyMetaResponse(
-                name=m.name,
-                display_name=m.display_name,
-                category=m.category,
-                description=m.description,
-                default_params=m.default_params,
-            )
-            for m in metas
-        ]
-    )
-
-
-@router.get("/schema/{name}", response_model=StrategySchemaResponse)
-async def get_strategy_schema(name: str) -> StrategySchemaResponse:
-    """获取指定策略的参数元数据。"""
-    try:
-        meta = StrategyFactory.get_meta(name)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"策略 '{name}' 不存在")
-
-    return StrategySchemaResponse(
-        name=meta.name,
-        display_name=meta.display_name,
-        default_params=meta.default_params,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +284,21 @@ class StrategyConfigBatchRequest(BaseModel):
     strategies: list[StrategyConfigBatchItem] = Field(..., min_length=1)
 
 
+def _get_configurable_metas():
+    return StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+
+
+def _get_configurable_meta(name: str):
+    meta = StrategyFactoryV2.get_meta(name)
+    if meta.role != StrategyRole.TRIGGER:
+        raise KeyError(name)
+    return meta
+
+
+def _config_category(meta) -> str:
+    return meta.signal_group.value if meta.signal_group else meta.role.value
+
+
 @router.get("/config", response_model=StrategyConfigListResponse)
 async def get_strategy_config() -> StrategyConfigListResponse:
     """获取所有策略的配置状态（is_enabled + params）。"""
@@ -270,7 +311,7 @@ async def get_strategy_config() -> StrategyConfigListResponse:
 
     # 合并内存注册表的元数据和 DB 的配置
     configs: list[StrategyConfigResponse] = []
-    for meta in StrategyFactory.get_all():
+    for meta in _get_configurable_metas():
         is_enabled = False
         params: dict = {}
         if meta.name in db_rows:
@@ -285,9 +326,9 @@ async def get_strategy_config() -> StrategyConfigListResponse:
         configs.append(StrategyConfigResponse(
             name=meta.name,
             display_name=meta.display_name,
-            category=meta.category,
+            category=_config_category(meta),
             description=meta.description,
-            default_params=meta.default_params,
+            default_params=resolve_v2_default_params(meta),
             params=params,
             is_enabled=is_enabled,
         ))
@@ -299,7 +340,7 @@ async def get_strategy_config() -> StrategyConfigListResponse:
 async def batch_update_strategy_config(req: StrategyConfigBatchRequest) -> dict:
     """批量更新策略配置（一次性启用/禁用多个）。"""
     # 校验所有策略名称
-    available = {m.name for m in StrategyFactory.get_all()}
+    available = {m.name for m in _get_configurable_metas()}
     invalid = [item.name for item in req.strategies if item.name not in available]
     if invalid:
         raise HTTPException(
@@ -335,7 +376,7 @@ async def update_strategy_config(
     """更新单个策略的 is_enabled 和 params。"""
     # 校验策略存在
     try:
-        meta = StrategyFactory.get_meta(name)
+        meta = _get_configurable_meta(name)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"策略 '{name}' 不存在")
 
@@ -375,9 +416,9 @@ async def update_strategy_config(
     return StrategyConfigResponse(
         name=meta.name,
         display_name=meta.display_name,
-        category=meta.category,
+        category=_config_category(meta),
         description=meta.description,
-        default_params=meta.default_params,
+        default_params=resolve_v2_default_params(meta),
         params=current_params,
         is_enabled=is_enabled,
     )
@@ -557,30 +598,23 @@ async def generate_trade_plan(target_date: date | None = None) -> dict:
     import json as _json
     from app.strategy.trade_plan import TradePlanGenerator
 
-    # 确定目标日期
-    target = target_date
-    if target is None:
-        async with async_session_factory() as session:
-            row = await session.execute(
-                text("SELECT MAX(trade_date) FROM stock_daily WHERE vol > 0")
-            )
-            target = row.scalar()
-        if target is None:
-            raise HTTPException(status_code=400, detail="数据库中无日线数据")
+    target = await _resolve_target_date(target_date)
 
-    # 读取启用的策略
     async with async_session_factory() as session:
         result = await session.execute(
             text("SELECT name, params FROM strategies WHERE is_enabled = true")
         )
         rows = result.fetchall()
 
-    if not rows:
-        raise HTTPException(status_code=400, detail="没有启用的策略")
+    available_triggers = {
+        meta.name for meta in StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
+    }
 
-    strategy_names = []
+    strategy_names: list[str] = []
     strategy_params: dict[str, dict] = {}
     for name, params_raw in rows:
+        if name not in available_triggers:
+            continue
         strategy_names.append(name)
         if params_raw:
             try:
@@ -590,12 +624,13 @@ async def generate_trade_plan(target_date: date | None = None) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    # 执行选股
-    from app.strategy.pipeline import execute_pipeline
-    pipeline_result = await execute_pipeline(
+    if not strategy_names:
+        strategy_names = sorted(available_triggers)
+
+    pipeline_result = await execute_pipeline_v2(
         session_factory=async_session_factory,
-        strategy_names=strategy_names,
         target_date=target,
+        trigger_names=strategy_names,
         top_n=50,
         strategy_params=strategy_params or None,
     )

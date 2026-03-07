@@ -52,7 +52,7 @@ class TestGridSearchOptimizer:
 
         optimizer = GridSearchOptimizer(session_factory=MagicMock())
         results = await optimizer.optimize(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             param_space={"fast": {"type": "int", "min": 3, "max": 5, "step": 1}},
             stock_codes=["600519.SH"],
             start_date=date(2025, 1, 1),
@@ -73,7 +73,7 @@ class TestGridSearchOptimizer:
 
         optimizer = GridSearchOptimizer(session_factory=MagicMock())
         results = await optimizer.optimize(
-            strategy_name="rsi-oversold",
+            strategy_name="first-negative-reversal-trigger-v2",
             param_space={"period": {"type": "int", "min": 3, "max": 5, "step": 1}},
             stock_codes=["600519.SH"],
             start_date=date(2025, 1, 1),
@@ -95,7 +95,7 @@ class TestGridSearchOptimizer:
 
         optimizer = GridSearchOptimizer(session_factory=MagicMock())
         results = await optimizer.optimize(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             param_space={"fast": {"type": "int", "min": 3, "max": 5, "step": 1}},
             stock_codes=["600519.SH"],
             start_date=date(2025, 1, 1),
@@ -113,7 +113,7 @@ class TestGridSearchOptimizer:
 
         optimizer = GridSearchOptimizer(session_factory=MagicMock())
         await optimizer.optimize(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             param_space={"fast": {"type": "int", "min": 3, "max": 5, "step": 1}},
             stock_codes=["600519.SH"],
             start_date=date(2025, 1, 1),
@@ -131,7 +131,7 @@ class TestGridSearchOptimizer:
 
         optimizer = GridSearchOptimizer(session_factory=MagicMock())
         results = await optimizer.optimize(
-            strategy_name="ma-cross",
+            strategy_name="volume-breakout-trigger-v2",
             param_space={
                 "fast": {"type": "int", "min": 3, "max": 5, "step": 1},
                 "slow": {"type": "int", "min": 10, "max": 20, "step": 5},

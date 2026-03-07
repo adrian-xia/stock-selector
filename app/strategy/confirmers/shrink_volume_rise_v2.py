@@ -25,7 +25,7 @@ class ShrinkVolumeRiseConfirmerV2(BaseStrategyV2):
     }
     ai_rating = 6.87  # 三模型均分（从 trigger 降级为 confirmer）
     bonus_weight = 0.2  # 加分权重
-    applicable_groups = [SignalGroup.TREND_CONTINUATION]  # 适用信号组
+    applicable_groups = [SignalGroup.TREND]  # 适用信号组
 
     async def execute(
         self,

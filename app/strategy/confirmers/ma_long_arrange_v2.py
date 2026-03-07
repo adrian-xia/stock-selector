@@ -23,8 +23,7 @@ class MALongArrangeConfirmerV2(BaseStrategyV2):
     ai_rating = 6.53  # 三模型均分（从独立策略降级为 confirmer）
     bonus_weight = 0.3  # 加分权重
     applicable_groups = [
-        SignalGroup.TREND_FOLLOWING,
-        SignalGroup.TREND_CONTINUATION,
+        SignalGroup.TREND,
     ]  # 适用信号组
 
     async def execute(

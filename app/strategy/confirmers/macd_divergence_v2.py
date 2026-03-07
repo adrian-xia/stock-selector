@@ -24,7 +24,7 @@ class MACDDivergenceConfirmerV2(BaseStrategyV2):
     }
     ai_rating = 6.18  # 三模型均分
     bonus_weight = 0.3  # 加分权重
-    applicable_groups = [SignalGroup.BOTTOM_REVERSAL]  # 适用信号组
+    applicable_groups = [SignalGroup.BOTTOM]  # 适用信号组
 
     async def execute(
         self,

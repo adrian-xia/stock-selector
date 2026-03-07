@@ -18,8 +18,11 @@ logger = logging.getLogger(__name__)
 def _get_strategy_display_names() -> dict[str, str]:
     """获取策略英文名 → 中文名映射。"""
     try:
-        from app.strategy.factory import STRATEGY_REGISTRY
-        return {name: meta.display_name for name, meta in STRATEGY_REGISTRY.items()}
+        from app.strategy.factory import STRATEGY_REGISTRY, STRATEGY_REGISTRY_V2
+
+        name_map = {name: meta.display_name for name, meta in STRATEGY_REGISTRY.items()}
+        name_map.update({name: meta.display_name for name, meta in STRATEGY_REGISTRY_V2.items()})
+        return name_map
     except Exception:
         return {}
 

@@ -5,7 +5,7 @@ Guard 输出布尔值（True=通过），以 AND 逻辑执行。
 """
 
 from app.strategy.adapters.guard_adapter import GuardAdapter
-from app.strategy.base import BaseStrategyV2
+from app.strategy.base import BaseStrategyV2, StrategyRole
 from app.strategy.fundamental.cashflow_quality import CashflowQualityStrategy
 from app.strategy.fundamental.financial_safety import FinancialSafetyStrategy
 
@@ -13,18 +13,21 @@ from app.strategy.fundamental.financial_safety import FinancialSafetyStrategy
 class FinancialSafetyGuardV2(BaseStrategyV2):
     """财务安全 Guard V2。"""
 
+    name = "financial-safety-guard-v2"
+    display_name = "财务安全（排雷）"
+    role = StrategyRole.GUARD
+    signal_group = None
+    description = "资产负债率/流动比率/速动比率"
+    default_params = FinancialSafetyStrategy.default_params
+    ai_rating = 6.72
+
     def __init__(self, params: dict | None = None) -> None:
         """初始化 Guard。"""
-        self._adapter = GuardAdapter(FinancialSafetyStrategy(params), ai_rating=6.20)
-        # 复制适配器的属性
-        self.name = self._adapter.name
-        self.display_name = self._adapter.display_name
-        self.role = self._adapter.role
-        self.signal_group = self._adapter.signal_group
-        self.description = self._adapter.description
-        self.default_params = self._adapter.default_params
-        self.ai_rating = self._adapter.ai_rating
-        self.params = self._adapter.params
+        super().__init__(params)
+        self._adapter = GuardAdapter(
+            FinancialSafetyStrategy(self.params),
+            ai_rating=self.ai_rating,
+        )
 
     async def execute(self, df, target_date):
         """执行 Guard 策略。"""
@@ -34,18 +37,21 @@ class FinancialSafetyGuardV2(BaseStrategyV2):
 class CashflowQualityGuardV2(BaseStrategyV2):
     """现金流质量 Guard V2。"""
 
+    name = "cashflow-quality-guard-v2"
+    display_name = "现金流质量（排雷）"
+    role = StrategyRole.GUARD
+    signal_group = None
+    description = "OCF/EPS>=1，排除纸面利润"
+    default_params = CashflowQualityStrategy.default_params
+    ai_rating = 7.33
+
     def __init__(self, params: dict | None = None) -> None:
         """初始化 Guard。"""
-        self._adapter = GuardAdapter(CashflowQualityStrategy(params), ai_rating=5.87)
-        # 复制适配器的属性
-        self.name = self._adapter.name
-        self.display_name = self._adapter.display_name
-        self.role = self._adapter.role
-        self.signal_group = self._adapter.signal_group
-        self.description = self._adapter.description
-        self.default_params = self._adapter.default_params
-        self.ai_rating = self._adapter.ai_rating
-        self.params = self._adapter.params
+        super().__init__(params)
+        self._adapter = GuardAdapter(
+            CashflowQualityStrategy(self.params),
+            ai_rating=self.ai_rating,
+        )
 
     async def execute(self, df, target_date):
         """执行 Guard 策略。"""

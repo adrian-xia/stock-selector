@@ -1,17 +1,14 @@
-import { Card, Descriptions, Tag, Typography, Empty, Spin } from 'antd'
+import { Card, Descriptions, Tag, Empty, Spin } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { fetchKline } from '../../api/data'
 import KlineChart from '../../components/charts/KlineChart'
 import type { StockPick } from '../../types'
 
-const { Paragraph } = Typography
-
 interface Props {
   stock: StockPick | null
-  aiEnabled: boolean
 }
 
-export default function StockDetail({ stock, aiEnabled }: Props) {
+export default function StockDetail({ stock }: Props) {
   // K 线数据查询（仅在选中股票时请求）
   const { data: klineData, isLoading: klineLoading } = useQuery({
     queryKey: ['kline', stock?.ts_code],
@@ -33,27 +30,30 @@ export default function StockDetail({ stock, aiEnabled }: Props) {
             {stock.pct_chg >= 0 ? '+' : ''}{stock.pct_chg.toFixed(2)}%
           </span>
         </Descriptions.Item>
-        <Descriptions.Item label="匹配策略数">{stock.match_count}</Descriptions.Item>
+        <Descriptions.Item label="触发数">{stock.match_count}</Descriptions.Item>
+        <Descriptions.Item label="质量分">{stock.quality_score.toFixed(1)}</Descriptions.Item>
+        <Descriptions.Item label="综合分">{stock.final_score.toFixed(3)}</Descriptions.Item>
+        <Descriptions.Item label="市场状态">{stock.market_regime}</Descriptions.Item>
+        <Descriptions.Item label="确认加分">{stock.confirmed_bonus.toFixed(2)}</Descriptions.Item>
+        <Descriptions.Item label="动态权重">{stock.dynamic_weight.toFixed(2)}</Descriptions.Item>
+        <Descriptions.Item label="风格增益">{stock.style_bonus.toFixed(2)}</Descriptions.Item>
       </Descriptions>
 
       <div style={{ marginTop: 8 }}>
-        <strong>匹配策略：</strong>
-        {stock.matched_strategies.map((s) => (
-          <Tag key={s} style={{ marginTop: 4 }}>{s}</Tag>
+        <strong>风格标签：</strong>
+        {Object.entries(stock.tags ?? {}).map(([key, value]) => (
+          <Tag key={key} style={{ marginTop: 4 }}>{key}:{value.toFixed(2)}</Tag>
         ))}
       </div>
 
-      {aiEnabled && stock.ai_summary && (
-        <div style={{ marginTop: 12 }}>
-          <strong>AI 分析：</strong>
-          {stock.ai_signal && (
-            <Tag color={stock.ai_signal === 'BUY' ? 'red' : stock.ai_signal === 'SELL' ? 'green' : 'default'}>
-              {stock.ai_signal} {stock.ai_score != null && `(${stock.ai_score}分)`}
-            </Tag>
-          )}
-          <Paragraph style={{ marginTop: 4 }}>{stock.ai_summary}</Paragraph>
-        </div>
-      )}
+      <div style={{ marginTop: 12 }}>
+        <strong>触发信号：</strong>
+        {stock.triggered_signals.map((signal) => (
+          <Tag key={signal.strategy} color="blue" style={{ marginTop: 4 }}>
+            {signal.group} · {signal.strategy} · c={signal.confidence.toFixed(2)} · w={signal.weight.toFixed(2)}
+          </Tag>
+        ))}
+      </div>
 
       {/* K 线走势图 */}
       <div style={{ marginTop: 12 }}>

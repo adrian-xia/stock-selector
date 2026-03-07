@@ -10,17 +10,15 @@ logger = logging.getLogger(__name__)
 
 # 策略类型分组
 _BREAKOUT_STRATEGIES = {
-    "ma-long-arrange", "boll-breakthrough", "donchian-breakout", "volume-breakout",
+    "dragon-turnaround-trigger-v2", "volume-breakout-trigger-v2", "atr-breakout-trigger-v2",
 }
 _REVERSAL_STRATEGIES = {
-    "rsi-oversold", "volume-contraction-pullback", "first-negative-reversal",
-}
-_VALUE_STRATEGIES = {
-    "low-pe-high-roe", "high-dividend", "pb-value", "financial-safety",
+    "first-negative-reversal-trigger-v2", "peak-pullback-stabilization-trigger-v2",
 }
 _VOLUME_STRATEGIES = {
-    "shrink-volume-rise", "volume-price-stable", "extreme-shrink-bottom",
-    "volume-surge-continuation", "pullback-half-rule",
+    "volume-contraction-pullback-trigger-v2", "volume-surge-continuation-trigger-v2",
+    "pullback-half-rule-trigger-v2", "extreme-shrink-bottom-trigger-v2",
+    "volume-price-stable-trigger-v2",
 }
 _STABILIZATION_STRATEGIES = {
     "volume-price-pattern",
@@ -35,8 +33,6 @@ def _classify_strategy(strategy_name: str) -> str:
         return "breakout"
     if strategy_name in _REVERSAL_STRATEGIES:
         return "reversal"
-    if strategy_name in _VALUE_STRATEGIES:
-        return "value"
     if strategy_name in _VOLUME_STRATEGIES:
         return "volume_signal"
     if strategy_name in _STABILIZATION_STRATEGIES:
@@ -76,12 +72,6 @@ def _build_plan(
         floor = close * 0.97
         trigger_condition = f"开盘价不低于 {floor:.2f} 买入"
         stop_loss = recent_low
-
-    elif trigger_type == "value":
-        # 价值型：小幅回调买入
-        trigger_price = round(close * 0.98, 2)
-        trigger_condition = f"回调至 {trigger_price:.2f} 附近买入"
-        stop_loss = round(close * 0.95, 2)
 
     elif trigger_type == "stabilization":
         # 量价配合：缩量回踩企稳买入，止损用 T0 最低价
@@ -273,7 +263,10 @@ class TradePlanGenerator:
                     logger.warning("[TradePlan] %s 无行情数据，跳过", pick.ts_code)
                     continue
 
-                primary_strategy = pick.matched_strategies[0] if pick.matched_strategies else "unknown"
+                matched = getattr(pick, "matched_strategies", None) or []
+                if not matched and getattr(pick, "triggered_signals", None):
+                    matched = [signal.get("strategy", "unknown") for signal in pick.triggered_signals]
+                primary_strategy = matched[0] if matched else "unknown"
                 plan = _build_plan(
                     ts_code=pick.ts_code,
                     plan_date=target_date,
