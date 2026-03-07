@@ -19,6 +19,10 @@ import type { SectorItem, TradePlanItem } from '../../types/research'
 
 const { Text, Title } = Typography
 
+function safePercent(value: number | null | undefined, fallback = 0) {
+    return Number.isFinite(value) ? Number(value) : fallback
+}
+
 /** 风险偏好配色 */
 function riskAppetiteTag(appetite: string) {
     const map: Record<string, { color: string; label: string }> = {
@@ -67,23 +71,35 @@ export default function ResearchPage() {
         { title: '行业', dataIndex: 'sector_name', width: 120 },
         {
             title: '综合分', dataIndex: 'final_score', width: 90, sorter: (a, b) => a.final_score - b.final_score,
-            render: (v: number) => <Text strong style={{ color: v >= 70 ? '#cf1322' : v >= 40 ? '#d48806' : '#666' }}>{v.toFixed(1)}</Text>,
+            render: (v: number) => {
+                const score = safePercent(v)
+                return <Text strong style={{ color: score >= 70 ? '#cf1322' : score >= 40 ? '#d48806' : '#666' }}>{score.toFixed(1)}</Text>
+            },
         },
         {
             title: '新闻分', dataIndex: 'news_score', width: 80,
-            render: (v: number) => <Progress percent={v} size="small" showInfo={false} strokeColor={v >= 60 ? '#52c41a' : '#faad14'} />,
+            render: (v: number) => {
+                const score = safePercent(v)
+                return <Progress percent={score} size="small" showInfo={false} strokeColor={score >= 60 ? '#52c41a' : '#faad14'} />
+            },
         },
         {
             title: '资金分', dataIndex: 'moneyflow_score', width: 80,
-            render: (v: number) => <Progress percent={v} size="small" showInfo={false} strokeColor={v >= 60 ? '#1890ff' : '#faad14'} />,
+            render: (v: number) => {
+                const score = safePercent(v)
+                return <Progress percent={score} size="small" showInfo={false} strokeColor={score >= 60 ? '#1890ff' : '#faad14'} />
+            },
         },
         {
             title: '趋势分', dataIndex: 'trend_score', width: 80,
-            render: (v: number) => <Progress percent={v} size="small" showInfo={false} strokeColor={v >= 60 ? '#722ed1' : '#faad14'} />,
+            render: (v: number) => {
+                const score = safePercent(v)
+                return <Progress percent={score} size="small" showInfo={false} strokeColor={score >= 60 ? '#722ed1' : '#faad14'} />
+            },
         },
         {
             title: '置信度', dataIndex: 'confidence', width: 80,
-            render: (v: number) => `${v.toFixed(0)}%`,
+            render: (v: number) => `${safePercent(v).toFixed(0)}%`,
         },
         {
             title: '驱动因素', dataIndex: 'drivers', width: 140,
@@ -103,11 +119,11 @@ export default function ResearchPage() {
         },
         {
             title: '仓位建议', dataIndex: 'position_suggestion', width: 90,
-            render: (v: number) => `${(v * 100).toFixed(0)}%`,
+            render: (v: number) => `${(safePercent(v) * 100).toFixed(0)}%`,
         },
         {
             title: '置信度', dataIndex: 'confidence', width: 80,
-            render: (v: number) => <Progress type="circle" percent={v} size={36} format={(p) => `${p?.toFixed(0)}`} />,
+            render: (v: number) => <Progress type="circle" percent={safePercent(v)} size={36} format={(p) => `${p?.toFixed(0)}`} />,
         },
         {
             title: '入场规则', dataIndex: 'entry_rule', ellipsis: true,

@@ -204,14 +204,27 @@ class StarMapRepository:
         sectors = await self.get_sector_resonance(trade_date, top_n=10)
         plans = await self.get_trade_plans(trade_date)
 
+        def _normalize_sector_labels(items: Any) -> list[str]:
+            if not items:
+                return []
+            result: list[str] = []
+            for item in items:
+                if isinstance(item, dict):
+                    name = item.get("sector_name") or item.get("name")
+                    if name:
+                        result.append(str(name))
+                elif item:
+                    result.append(str(item))
+            return result
+
         return {
             "trade_date": trade_date.isoformat(),
             "macro_signal": {
                 "risk_appetite": macro.risk_appetite if macro else "unknown",
                 "global_risk_score": float(macro.global_risk_score) if macro else 50.0,
                 "summary": macro.macro_summary if macro else "无数据",
-                "positive_sectors": macro.positive_sectors if macro else [],
-                "negative_sectors": macro.negative_sectors if macro else [],
+                "positive_sectors": _normalize_sector_labels(macro.positive_sectors) if macro else [],
+                "negative_sectors": _normalize_sector_labels(macro.negative_sectors) if macro else [],
             },
             "top_sectors": [
                 {
@@ -221,6 +234,8 @@ class StarMapRepository:
                     "news_score": float(s.news_score),
                     "moneyflow_score": float(s.moneyflow_score),
                     "trend_score": float(s.trend_score),
+                    "confidence": float(s.confidence) if s.confidence is not None else 0.0,
+                    "drivers": s.drivers or [],
                 }
                 for s in sectors
             ],
@@ -239,11 +254,18 @@ class StarMapRepository:
                     "confidence": float(p.confidence),
                     "position_suggestion": float(p.position_suggestion),
                     "market_regime": p.market_regime,
+                    "market_risk_score": float(p.market_risk_score) if getattr(p, "market_risk_score", None) is not None else 0.0,
+                    "sector_name": getattr(p, "sector_name", "") or "",
+                    "sector_score": float(p.sector_score) if getattr(p, "sector_score", None) is not None else None,
                     "entry_rule": p.entry_rule,
                     "stop_loss_rule": p.stop_loss_rule,
                     "take_profit_rule": p.take_profit_rule,
+                    "emergency_exit_text": getattr(p, "emergency_exit_text", "") or "",
                     "plan_status": p.plan_status,
-                    "risk_flags": p.risk_flags,
+                    "triggered": getattr(p, "triggered", None),
+                    "actual_price": float(p.actual_price) if getattr(p, "actual_price", None) is not None else None,
+                    "reasoning": getattr(p, "reasoning", None) or [],
+                    "risk_flags": p.risk_flags or [],
                 }
                 for p in plans
             ],
