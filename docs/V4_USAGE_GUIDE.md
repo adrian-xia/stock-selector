@@ -73,9 +73,18 @@ ORDER BY updated_at DESC;
 - `stabilization_ready`: 企稳信号出现，可介入
 - `washout`: 洗盘失败，已出局
 
-### 4. 交易计划
+### 4. StarMap 增强交易计划
 
-**API 端点：** `/api/v1/strategy/plan/history`
+**API 端点：** `/api/v1/strategy/plan/history`、`/api/v1/research/plans`
+
+V4 不会直接生成一套独立于系统之外的计划表。当前真实链路是：
+
+```text
+V4 观察池状态机
+  -> 当日命中写入 strategy_picks
+  -> StarMap 统一生成增强计划
+  -> trade_plan_daily_ext
+```
 
 V4 策略生成的交易计划包含：
 
@@ -240,7 +249,7 @@ V4 策略生成的交易计划包含：
 ## 相关资源
 
 - **API 文档：** `/api/v1/strategy/picks/by-date`
-- **数据库表：** `strategy_watchpool`, `strategy_picks`, `trade_plans`
+- **数据库表：** `strategy_watchpool`, `strategy_picks`, `trade_plan_daily_ext`
 - **回测报告：** `/docs/design/v4_planning/02-V4详细设计-回测与参数调优.md`
 - **参数优化：** `/api/v1/optimization/market-opt/run`
 

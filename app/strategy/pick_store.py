@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class _PickLike(Protocol):
     ts_code: str
     close: float
+    weighted_score: float
 
     @property
     def matched_strategies(self) -> list[str]:
@@ -42,7 +43,11 @@ async def save_strategy_picks(
                 "strategy_name": strategy_name,
                 "pick_date": target_date,
                 "ts_code": pick.ts_code,
-                "pick_score": float(pick.ai_score) if pick.ai_score is not None else None,
+                "pick_score": (
+                    float(pick.ai_score)
+                    if pick.ai_score is not None
+                    else float(pick.weighted_score)
+                ),
                 "pick_close": pick.close if pick.close else None,
             })
 

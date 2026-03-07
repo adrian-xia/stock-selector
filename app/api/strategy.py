@@ -4,11 +4,11 @@
 """
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.database import async_session_factory
 from app.strategy.base import StrategyRole
@@ -578,7 +578,7 @@ class TradePlanResponse(BaseModel):
     id: int
     ts_code: str
     plan_date: date
-    valid_date: date
+    valid_date: date | None
     direction: str
     trigger_type: str
     trigger_condition: str
@@ -590,97 +590,83 @@ class TradePlanResponse(BaseModel):
     confidence: float | None
     triggered: bool | None
     actual_price: float | None
+    plan_status: str
+    market_regime: str | None = None
+    position_suggestion: float | None = None
+    entry_rule: str | None = None
+    stop_loss_rule: str | None = None
+    take_profit_rule: str | None = None
+    risk_flags: list[str] = Field(default_factory=list)
+
+
+def _build_trade_plan_response(row) -> TradePlanResponse:
+    """将 StarMap 计划记录转换为统一响应。"""
+    def _f(v) -> float | None:
+        return float(v) if v is not None else None
+
+    return TradePlanResponse(
+        id=row.id,
+        ts_code=row.ts_code,
+        plan_date=row.trade_date,
+        valid_date=row.valid_date,
+        direction=row.direction,
+        trigger_type=row.plan_type,
+        trigger_condition=row.entry_rule,
+        trigger_price=_f(row.trigger_price),
+        stop_loss=_f(row.stop_loss_price),
+        take_profit=_f(row.take_profit_price),
+        risk_reward_ratio=_f(row.risk_reward_ratio),
+        source_strategy=row.source_strategy,
+        confidence=_f(row.confidence),
+        triggered=row.triggered,
+        actual_price=_f(row.actual_price),
+        plan_status=row.plan_status,
+        market_regime=row.market_regime,
+        position_suggestion=_f(row.position_suggestion),
+        entry_rule=row.entry_rule,
+        stop_loss_rule=row.stop_loss_rule,
+        take_profit_rule=row.take_profit_rule,
+        risk_flags=list(row.risk_flags or []),
+    )
 
 
 @router.post("/plan/generate")
 async def generate_trade_plan(target_date: date | None = None) -> dict:
-    """生成交易计划。基于最新选股结果。"""
-    import json as _json
-    from app.strategy.trade_plan import TradePlanGenerator
+    """生成统一 StarMap 交易计划。"""
+    from app.research.repository.starmap_repo import StarMapRepository
+    from app.scheduler.jobs import pipeline_step
+    from app.scheduler.starmap_job import starmap_job
 
     target = await _resolve_target_date(target_date)
-
-    async with async_session_factory() as session:
-        result = await session.execute(
-            text("SELECT name, params FROM strategies WHERE is_enabled = true")
-        )
-        rows = result.fetchall()
-
-    available_triggers = {
-        meta.name for meta in StrategyFactoryV2.get_by_role(StrategyRole.TRIGGER)
-    }
-
-    strategy_names: list[str] = []
-    strategy_params: dict[str, dict] = {}
-    for name, params_raw in rows:
-        if name not in available_triggers:
-            continue
-        strategy_names.append(name)
-        if params_raw:
-            try:
-                p = _json.loads(params_raw) if isinstance(params_raw, str) else params_raw
-                if p:
-                    strategy_params[name] = p
-            except (ValueError, TypeError):
-                pass
-
-    if not strategy_names:
-        strategy_names = sorted(available_triggers)
-
-    pipeline_result = await execute_pipeline_v2(
-        session_factory=async_session_factory,
-        target_date=target,
-        trigger_names=strategy_names,
-        top_n=50,
-        strategy_params=strategy_params or None,
-    )
-
-    if not pipeline_result.picks:
-        return {"target_date": str(target), "generated": 0, "message": "选股结果为空"}
-
-    # 生成交易计划
-    generator = TradePlanGenerator()
-    plans = await generator.generate(async_session_factory, pipeline_result.picks, target)
+    picks = await pipeline_step(target)
+    starmap_result = await starmap_job(target)
+    repo = StarMapRepository(async_session_factory)
+    plans = await repo.get_trade_plans(target)
 
     return {
         "target_date": str(target),
         "generated": len(plans),
-        "picks": len(pipeline_result.picks),
+        "picks": len(picks),
+        "starmap_status": starmap_result.get("status") if starmap_result else "failed",
     }
 
 
 @router.get("/plan/latest", response_model=list[TradePlanResponse])
 async def get_latest_plan(limit: int = Query(20, ge=1, le=200)) -> list[TradePlanResponse]:
-    """获取最新交易计划。"""
+    """获取最新 StarMap 交易计划。"""
+    from app.research.repository.starmap_repo import StarMapRepository
+
+    repo = StarMapRepository(async_session_factory)
     async with async_session_factory() as session:
-        result = await session.execute(
-            text("""
-                SELECT id, ts_code, plan_date, valid_date,
-                       direction, trigger_type, trigger_condition, trigger_price,
-                       stop_loss, take_profit, risk_reward_ratio,
-                       source_strategy, confidence, triggered, actual_price
-                FROM trade_plans
-                WHERE plan_date = (SELECT MAX(plan_date) FROM trade_plans)
-                ORDER BY id
-                LIMIT :limit
-            """),
-            {"limit": limit},
+        latest_date_result = await session.execute(
+            text("SELECT MAX(trade_date) FROM trade_plan_daily_ext")
         )
-        rows = result.fetchall()
+        latest_date = latest_date_result.scalar()
+    if latest_date is None:
+        return []
 
-    def _f(v) -> float | None:
-        return float(v) if v is not None else None
-
-    return [
-        TradePlanResponse(
-            id=r[0], ts_code=r[1], plan_date=r[2], valid_date=r[3],
-            direction=r[4], trigger_type=r[5], trigger_condition=r[6],
-            trigger_price=_f(r[7]), stop_loss=_f(r[8]), take_profit=_f(r[9]),
-            risk_reward_ratio=_f(r[10]), source_strategy=r[11],
-            confidence=_f(r[12]), triggered=r[13], actual_price=_f(r[14]),
-        )
-        for r in rows
-    ]
+    plans = await repo.get_trade_plans(latest_date)
+    return [_build_trade_plan_response(row) for row in plans[:limit]]
 
 
 # ---------------------------------------------------------------------------
@@ -889,13 +875,13 @@ async def get_post_market_overview(
             for r in hit_result.fetchall()
         ]
 
-        # 最新交易计划
+        # 最新交易计划（统一读 StarMap）
         plans_result = await session.execute(
             text("""
-                SELECT ts_code, trigger_type, trigger_price, stop_loss, take_profit,
+                SELECT ts_code, plan_type, trigger_price, stop_loss_price, take_profit_price,
                        source_strategy, confidence
-                FROM trade_plans
-                WHERE plan_date = (SELECT MAX(plan_date) FROM trade_plans)
+                FROM trade_plan_daily_ext
+                WHERE trade_date = (SELECT MAX(trade_date) FROM trade_plan_daily_ext)
                 ORDER BY confidence DESC NULLS LAST
                 LIMIT 20
             """)
@@ -925,47 +911,19 @@ async def get_plan_history(
     ts_code: str | None = Query(None, description="股票代码，不传则返回所有"),
     days: int = Query(7, ge=1, le=90, description="查询最近 N 天"),
 ) -> list[TradePlanResponse]:
-    """获取历史交易计划。"""
+    """获取 StarMap 历史交易计划。"""
+    from app.models.starmap import TradePlanDailyExt
+
+    cutoff_date = date.today() - timedelta(days=days)
     async with async_session_factory() as session:
-        if ts_code:
-            result = await session.execute(
-                text("""
-                    SELECT id, ts_code, plan_date, valid_date,
-                           direction, trigger_type, trigger_condition, trigger_price,
-                           stop_loss, take_profit, risk_reward_ratio,
-                           source_strategy, confidence, triggered, actual_price
-                    FROM trade_plans
-                    WHERE ts_code = :ts_code
-                      AND plan_date >= CURRENT_DATE - :days * INTERVAL '1 day'
-                    ORDER BY plan_date DESC, id
-                """),
-                {"ts_code": ts_code, "days": days},
-            )
-        else:
-            result = await session.execute(
-                text("""
-                    SELECT id, ts_code, plan_date, valid_date,
-                           direction, trigger_type, trigger_condition, trigger_price,
-                           stop_loss, take_profit, risk_reward_ratio,
-                           source_strategy, confidence, triggered, actual_price
-                    FROM trade_plans
-                    WHERE plan_date >= CURRENT_DATE - :days * INTERVAL '1 day'
-                    ORDER BY plan_date DESC, id
-                """),
-                {"days": days},
-            )
-        rows = result.fetchall()
-
-    def _f(v) -> float | None:
-        return float(v) if v is not None else None
-
-    return [
-        TradePlanResponse(
-            id=r[0], ts_code=r[1], plan_date=r[2], valid_date=r[3],
-            direction=r[4], trigger_type=r[5], trigger_condition=r[6],
-            trigger_price=_f(r[7]), stop_loss=_f(r[8]), take_profit=_f(r[9]),
-            risk_reward_ratio=_f(r[10]), source_strategy=r[11],
-            confidence=_f(r[12]), triggered=r[13], actual_price=_f(r[14]),
+        query = (
+            select(TradePlanDailyExt)
+            .where(TradePlanDailyExt.trade_date >= cutoff_date)
+            .order_by(TradePlanDailyExt.trade_date.desc(), TradePlanDailyExt.id.desc())
         )
-        for r in rows
-    ]
+        if ts_code:
+            query = query.where(TradePlanDailyExt.ts_code == ts_code)
+        result = await session.execute(query)
+        rows = list(result.scalars().all())
+
+    return [_build_trade_plan_response(row) for row in rows]

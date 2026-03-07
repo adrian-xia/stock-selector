@@ -32,6 +32,7 @@ class RankedStock:
     liquidity_score_n: float  # 流动性分（归一化）
     source_strategies: list[str]  # 命中的策略列表
     sector_name: str  # 所属行业
+    close: float  # 当日收盘价
 
 
 async def calc_stock_rank_fusion(
@@ -61,7 +62,7 @@ async def calc_stock_rank_fusion(
         try:
             rows = await session.execute(
                 text(
-                    "SELECT ts_code, strategy_name, pick_score "
+                    "SELECT ts_code, strategy_name, pick_score, pick_close "
                     "FROM strategy_picks "
                     "WHERE pick_date = :td "
                     "ORDER BY pick_score DESC"
@@ -85,6 +86,7 @@ async def calc_stock_rank_fusion(
                 stock_data[code] = {
                     "strategy_score": float(r.pick_score or 0),
                     "strategies": [r.strategy_name],
+                    "close": float(r.pick_close or 0),
                 }
             else:
                 stock_data[code]["strategy_score"] = max(
@@ -93,6 +95,8 @@ async def calc_stock_rank_fusion(
                 )
                 if r.strategy_name not in stock_data[code]["strategies"]:
                     stock_data[code]["strategies"].append(r.strategy_name)
+                if not stock_data[code].get("close") and r.pick_close is not None:
+                    stock_data[code]["close"] = float(r.pick_close or 0)
 
         codes = list(stock_data.keys())
 
@@ -170,6 +174,7 @@ async def calc_stock_rank_fusion(
             liquidity_score_n=liquidity_n[i],
             source_strategies=stock_data[code].get("strategies", []),
             sector_name=stock_data[code].get("sector_name", ""),
+            close=float(stock_data[code].get("close", 0) or 0),
         ))
 
     # 按 rank 降序

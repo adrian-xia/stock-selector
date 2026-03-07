@@ -272,15 +272,14 @@ async def run_starmap(
         try:
             from app.research.planner.plan_generator import generate_trade_plans
 
+            repo = StarMapRepository(session_factory)
+            valid_date = await repo.get_next_trade_date(trade_date)
             plans = generate_trade_plans(
-                ranked_stocks, market_regime, sector_scores, trade_date,
+                ranked_stocks, market_regime, sector_scores, trade_date, valid_date,
             )
             result["stats"]["plans_generated"] = len(plans)
 
             # 落库
-            from app.research.repository.starmap_repo import StarMapRepository
-
-            repo = StarMapRepository(session_factory)
             await repo.upsert_trade_plans_batch(plans)
             result["steps_completed"].append("plan_generation")
         except Exception as e:

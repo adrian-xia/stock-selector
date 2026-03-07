@@ -55,8 +55,10 @@ class TestRetryFailedStocksJob:
 
         # Mock session for retry_count increment
         mock_session = AsyncMock()
-        mock_mgr.session_factory = AsyncMock()
-        mock_mgr.session_factory.return_value.__aenter__.return_value = mock_session
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__.return_value = mock_session
+        mock_session_factory.return_value.__aexit__.return_value = False
+        mock_mgr.session_factory = mock_session_factory
 
         await retry_failed_stocks_job()
 
@@ -81,8 +83,10 @@ class TestRetryFailedStocksJob:
         mock_build.return_value = mock_mgr
 
         mock_session = AsyncMock()
-        mock_mgr.session_factory = AsyncMock()
-        mock_mgr.session_factory.return_value.__aenter__.return_value = mock_session
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__.return_value = mock_session
+        mock_session_factory.return_value.__aexit__.return_value = False
+        mock_mgr.session_factory = mock_session_factory
 
         await retry_failed_stocks_job()
 

@@ -17,6 +17,44 @@ logger = logging.getLogger(__name__)
 _task_logger = TaskLogger(async_session_factory)
 
 
+async def _send_starmap_report(
+    target: date,
+    result: dict,
+    elapsed: float,
+) -> None:
+    """生成并推送 StarMap Markdown 报告。"""
+    from app.notification import NotificationManager
+    from app.research.repository.starmap_repo import StarMapRepository
+    from app.scheduler.report import generate_starmap_report
+
+    repo = StarMapRepository(async_session_factory)
+    macro_signal = await repo.get_macro_signal(target)
+    sectors = await repo.get_sector_resonance(target, top_n=20)
+    plans = await repo.get_trade_plans(target)
+
+    summary_text, md_content = generate_starmap_report(
+        trade_date=target,
+        elapsed=elapsed,
+        result=result,
+        macro_signal=macro_signal,
+        sectors=sectors,
+        plans=plans,
+    )
+
+    title = (
+        f"✅ StarMap 盘后投研完成 — {target}"
+        if result.get("status") == "success"
+        else f"⚠️ StarMap 盘后投研完成（部分降级）— {target}"
+    )
+    notifier = NotificationManager()
+    await notifier.send_report(
+        title=title,
+        summary_text=summary_text,
+        markdown_content=md_content,
+        filename=f"starmap_{target}.md",
+    )
+
+
 async def starmap_job(target_date: date | None = None) -> dict | None:
     """StarMap 投研任务入口。
 
@@ -50,6 +88,12 @@ async def starmap_job(target_date: date | None = None) -> dict | None:
             target, result.get("status"), elapsed,
         )
 
+        try:
+            await _send_starmap_report(target, result, elapsed)
+            logger.info("[StarMap Job] Markdown 报告已生成并推送")
+        except Exception:
+            logger.warning("[StarMap Job] 报告推送失败\n%s", traceback.format_exc())
+
         await _task_logger.finish(
             log_id,
             status="success" if result.get("status") == "success" else "partial",
@@ -69,6 +113,17 @@ async def starmap_job(target_date: date | None = None) -> dict | None:
             "[StarMap Job] 失败: %s, 耗时 %.1fs\n%s",
             target, elapsed, traceback.format_exc(),
         )
+        try:
+            from app.notification import NotificationManager
+
+            notifier = NotificationManager()
+            await notifier.send(
+                level="error",
+                title="❌ StarMap 盘后投研失败",
+                message=f"日期 {target}\n耗时 {elapsed:.1f}s\n错误: {traceback.format_exc().splitlines()[-1]}",
+            )
+        except Exception:
+            logger.warning("[StarMap Job] 失败通知发送失败\n%s", traceback.format_exc())
         await _task_logger.finish(
             log_id,
             status="failed",

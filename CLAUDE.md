@@ -75,7 +75,7 @@ tsc -b                                               # TypeScript 类型检查
 5. 策略执行 — V2 Pipeline 执行已启用 trigger（`app/strategy/pipeline_v2.py`）
 6. 命中率回填 — 回填 `strategy_picks` 的 N 日收益率（`app/data/manager.py` / 调度链路）
 7. 缓存刷新 — 刷新 Redis 缓存
-8. ⭐ StarMap 投研（`app/research/orchestrator.py`，开发中）
+8. ⭐ StarMap 投研（`app/research/orchestrator.py`，已接入生产主链）
 
 核心入口：`sync_daily_by_date(dates)` — 按日期批量同步全市场数据（3 次 API 调用拉全市场）。
 
@@ -152,7 +152,7 @@ tsc -b                                               # TypeScript 类型检查
 
 | 模块 | 设计文档 |
 |------|---------|
-| **StarMap 盘后投研系统** | `archived/18-starmap/` 目录（详细设计 + PoC 结果，Phase 0-4 基本完成） |
+| **StarMap 盘后投研系统** | `archived/18-starmap/` 目录（详细设计 + PoC 结果；当前代码已接入主链并作为统一计划层） |
 | 数据采集 | `archived/01-详细设计-数据采集.md` |
 | 策略引擎 | `archived/02-详细设计-策略引擎.md` |
 | AI 与回测 | `archived/03-详细设计-AI与回测.md` |
@@ -243,7 +243,7 @@ docker-compose down  # 停止服务
 
 **⚡ 每次新会话开始时，必须先读取 `PROJECT_TASKS.md`**。该文件包含 V4 StarMap 的详细 checkpoint 进度（Phase 0~4，27 个子任务 checkbox）。完成工作后务必更新对应 checkbox。
 
-当前阶段：V4 StarMap 实施中。设计文档 `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）。
+当前阶段：V2/V4 → StarMap 统一链路已落地，StarMap 为唯一计划层与 Markdown/Telegram 报告输出层。设计文档 `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）。
 
 ## 不做
 

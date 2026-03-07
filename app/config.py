@@ -124,6 +124,7 @@ class Settings(BaseSettings):
     wecom_webhook_url: str = ""                  # 企业微信 Webhook URL（为空则不启用）
     telegram_bot_token: str = ""                 # Telegram Bot Token（为空则不启用）
     telegram_chat_id: str = ""                   # Telegram Chat ID
+    report_output_dir: str = "reports"           # Markdown 报告落盘目录（相对项目根目录）
 
     # --- TimescaleDB (可选) ---
     timescale_enabled: bool = True               # 是否启用 TimescaleDB（未安装时自动降级）

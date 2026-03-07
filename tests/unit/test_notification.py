@@ -2,9 +2,10 @@
 
 import pytest
 import logging
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from app.notification import NotificationLevel, NotificationManager
+import app.notification as notification_module
+from app.notification import NotificationLevel, NotificationManager, TelegramChannel
 
 
 @pytest.mark.asyncio
@@ -85,3 +86,30 @@ async def test_send_notification_without_metadata():
         assert "测试通知" in call_args
         assert "测试消息" in call_args
         assert "元数据" not in call_args  # 无元数据时不应包含
+
+
+@pytest.mark.asyncio
+async def test_send_report_persists_markdown_and_sends_document(tmp_path, monkeypatch):
+    """测试 send_report 会落盘并通过 Telegram 发送附件。"""
+    manager = NotificationManager()
+    channel = TelegramChannel("bot123:token", "chat456")
+    manager._channels = [channel]
+
+    monkeypatch.setattr(notification_module.settings, "report_output_dir", str(tmp_path))
+
+    with (
+        patch.object(manager, "send", new=AsyncMock()) as mock_send,
+        patch.object(channel, "send_document", new=AsyncMock(return_value=True)) as mock_send_document,
+    ):
+        await manager.send_report(
+            title="测试报告",
+            summary_text="这里是摘要",
+            markdown_content="# 报告标题\n\n内容",
+            filename="demo_report.md",
+        )
+
+    report_path = tmp_path / "demo_report.md"
+    assert report_path.exists()
+    assert report_path.read_text(encoding="utf-8") == "# 报告标题\n\n内容"
+    mock_send.assert_awaited_once()
+    mock_send_document.assert_awaited_once()

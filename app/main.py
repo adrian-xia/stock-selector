@@ -153,8 +153,8 @@ async def _cleanup_obsolete_strategy_data(
             {"obsolete_names": obsolete_names},
         ),
         (
-            "trade_plans",
-            text("DELETE FROM trade_plans WHERE source_strategy IN :obsolete_names")
+            "trade_plan_daily_ext",
+            text("DELETE FROM trade_plan_daily_ext WHERE source_strategy IN :obsolete_names")
             .bindparams(bindparam("obsolete_names", expanding=True)),
             {"obsolete_names": obsolete_names},
         ),
