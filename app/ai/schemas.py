@@ -18,6 +18,6 @@ class AIAnalysisItem(BaseModel):
 
 
 class AIAnalysisResponse(BaseModel):
-    """Gemini 返回的完整分析响应。"""
+    """AI 返回的完整分析响应。"""
 
     analysis: list[AIAnalysisItem]

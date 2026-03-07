@@ -22,7 +22,7 @@ def test_generate_starmap_report_contains_core_sections():
     macro_signal = SimpleNamespace(
         risk_appetite="high",
         global_risk_score=72.5,
-        model_name="gemini-2.0-flash",
+        model_name="gpt-5.3-codex",
         prompt_version="v1",
         content_hash="abcdef1234567890abcdef",
         macro_summary="流动性改善，风险偏好回升，成长方向更占优。",

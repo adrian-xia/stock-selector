@@ -18,6 +18,13 @@ def set_realtime_manager(manager) -> None:
     _manager = manager
 
 
+def get_watchlist_snapshot() -> list[str]:
+    """返回当前实时监控自选股快照。"""
+    if not _manager:
+        return []
+    return sorted(_manager.collector.watchlist)
+
+
 # --- Pydantic Schemas ---
 
 class WatchlistRequest(BaseModel):

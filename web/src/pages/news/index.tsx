@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag,
+  Alert, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -86,7 +86,8 @@ export default function NewsPage() {
     { title: '中性', dataIndex: 'neutral_count', width: 60 },
   ]
 
-  const trendData = trendQuery.data ?? []
+  const trendData = trendQuery.data?.items ?? []
+  const trendCoverage = trendQuery.data?.coverage
   const trendOption = mergeChartOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['平均情感', '新闻数'] },
@@ -134,9 +135,32 @@ export default function NewsPage() {
             {trendQuery.error ? (
               <QueryErrorAlert error={trendQuery.error} refetch={trendQuery.refetch} />
             ) : trendData.length > 0 ? (
-              <ReactECharts option={trendOption} style={{ height: 300 }} />
+              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                {trendCoverage && (
+                  <Alert
+                    type={trendCoverage.status === 'covered_signal' ? 'success' : 'info'}
+                    showIcon
+                    message={trendCoverage.message}
+                    description={
+                      trendCoverage.matched_scopes.length > 0
+                        ? `覆盖来源：${trendCoverage.matched_scopes.join('、')}`
+                        : undefined
+                    }
+                  />
+                )}
+                <ReactECharts option={trendOption} style={{ height: 300 }} />
+              </Space>
             ) : (
-              <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无数据</div>
+              <Alert
+                type={trendCoverage?.status === 'uncovered' ? 'warning' : 'info'}
+                showIcon
+                message={trendCoverage?.message || '暂无数据'}
+                description={
+                  trendCoverage?.matched_scopes?.length
+                    ? `覆盖来源：${trendCoverage.matched_scopes.join('、')}`
+                    : undefined
+                }
+              />
             )}
           </Card>
         </Col>

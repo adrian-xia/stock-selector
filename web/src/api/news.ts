@@ -2,7 +2,7 @@ import apiClient from './client'
 import type {
   NewsListParams,
   NewsListResponse,
-  SentimentTrendItem,
+  SentimentTrendResponse,
   SentimentSummaryResponse,
 } from '../types/news'
 
@@ -14,7 +14,7 @@ export async function fetchNewsList(params: NewsListParams = {}) {
 
 /** 查询指定股票的情感趋势 */
 export async function fetchSentimentTrend(tsCode: string, days = 30) {
-  const { data } = await apiClient.get<SentimentTrendItem[]>(
+  const { data } = await apiClient.get<SentimentTrendResponse>(
     `/news/sentiment-trend/${tsCode}`,
     { params: { days } },
   )

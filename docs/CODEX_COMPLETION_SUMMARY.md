@@ -8,7 +8,7 @@
 ### 1. 核心功能
 - ✅ 实现 Codex API 客户端（`app/ai/clients/codex.py`）
 - ✅ 支持 gmn.chuangzuoli.com 专有协议
-- ✅ AIManager 多提供商支持（Gemini/Codex 切换）
+- ✅ AIManager / AIGateway 统一走 Codex
 - ✅ 完整的错误处理和重试机制
 - ✅ Token 用量统计
 
@@ -144,13 +144,6 @@ CODEX_API_KEY=your-api-key
 2. 重启服务：
 ```bash
 uv run uvicorn app.main:app --reload
-```
-
-### 切换回 Gemini
-
-```bash
-AI_PROVIDER=gemini
-GEMINI_API_KEY=your-gemini-key
 ```
 
 ### 禁用 AI

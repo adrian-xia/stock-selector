@@ -131,19 +131,25 @@ async def run_starmap(
     if cleaned_news and "NEWS_PIPELINE_FAILED" not in degrade_flags:
         try:
             from app.research.llm.prompts import build_macro_prompt, PROMPT_VERSION
-            from app.research.llm.parser import parse_macro_signal, build_default_signal
+            from app.research.llm.parser import build_default_signal
+            from app.research.llm.schema import MacroSignalOutput
 
             prompt = build_macro_prompt(cleaned_news)
 
             # 调用 LLM（复用现有 AI 客户端体系）
-            from app.ai.manager import get_ai_manager
+            from app.ai.gateway import AIRequest, get_ai_gateway
 
-            ai_manager = get_ai_manager()
-            if ai_manager.is_enabled():
-                client = ai_manager._get_client()
-                if client:
-                    llm_response = await client.generate(prompt)
-                    macro_signal = parse_macro_signal(llm_response)
+            gateway = get_ai_gateway()
+            if gateway.is_enabled:
+                ai_response = await gateway.execute(
+                    AIRequest(
+                        prompt=prompt,
+                        response_format="json",
+                        task_name="starmap_macro_signal",
+                    )
+                )
+                if ai_response.ok and ai_response.content is not None:
+                    macro_signal = MacroSignalOutput.model_validate(ai_response.content)
                     result["stats"]["llm_invoked"] = True
 
             if macro_signal is None:
@@ -196,7 +202,7 @@ async def run_starmap(
                 "key_drivers": [d.model_dump() for d in macro_signal.key_drivers],
                 "raw_payload": {"news_count": len(cleaned_news), "degrade_flags": degrade_flags},
                 "content_hash": content_hash_combined or "no-news",
-                "model_name": settings.gemini_model_id,
+                "model_name": settings.codex_model_id,
                 "prompt_version": "v1.0",
             })
             result["steps_completed"].append("macro_signal_persist")

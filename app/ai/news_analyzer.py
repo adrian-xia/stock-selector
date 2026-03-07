@@ -1,6 +1,6 @@
 """新闻情感分析器。
 
-复用 GeminiClient 对新闻进行情感打分和分类，支持批量分析和每日聚合。
+通过统一 AI 网关对新闻进行情感打分和分类，支持批量处理和每日聚合。
 """
 
 import json
@@ -14,7 +14,7 @@ import yaml
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.ai.clients.gemini import GeminiClient, GeminiError
+from app.ai.gateway import AIRequest, AIGateway, get_ai_gateway
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -32,32 +32,24 @@ def _load_prompt_template() -> dict:
 class NewsSentimentAnalyzer:
     """新闻情感分析器。
 
-    使用 Gemini Flash 对新闻进行情感打分，支持批量处理。
+    使用统一 AI 网关对新闻进行情感打分，支持批量处理。
     """
 
-    def __init__(self) -> None:
-        self._client: GeminiClient | None = None
+    def __init__(self, ai_gateway: AIGateway | None = None) -> None:
         self._template = _load_prompt_template()
-        self._enabled = bool(settings.gemini_api_key) or bool(settings.gemini_use_adc)
+        self._gateway = ai_gateway or get_ai_gateway()
+        self._enabled = self._gateway.is_enabled
 
-    def _get_client(self) -> GeminiClient:
-        if self._client is None:
-            self._client = GeminiClient(
-                api_key=settings.gemini_api_key or None,
-                model_id=settings.gemini_model_id,
-                timeout=settings.gemini_timeout,
-                max_retries=settings.gemini_max_retries,
-                use_adc=settings.gemini_use_adc,
-                gcp_project=settings.gemini_gcp_project,
-                gcp_location=settings.gemini_gcp_location,
-            )
-        return self._client
-
-    async def analyze(self, news_items: list[dict]) -> list[dict]:
+    async def analyze(
+        self,
+        news_items: list[dict],
+        trade_date: date | None = None,
+    ) -> list[dict]:
         """对新闻列表进行情感分析。
 
         Args:
             news_items: 新闻字典列表，每个包含 ts_code, title, summary
+            trade_date: 目标交易日
 
         Returns:
             带有 sentiment_score 和 sentiment_label 的新闻列表
@@ -66,9 +58,9 @@ class NewsSentimentAnalyzer:
             return []
 
         if not self._enabled:
-            logger.warning("AI 未启用，所有新闻标记为中性")
+            logger.warning("AI 未启用，新闻仅保存原文，不生成情感分数")
             return [
-                {**item, "sentiment_score": 0.0, "sentiment_label": "中性"}
+                {**item, "sentiment_score": None, "sentiment_label": None}
                 for item in news_items
             ]
 
@@ -78,16 +70,20 @@ class NewsSentimentAnalyzer:
 
         for i in range(0, len(news_items), batch_size):
             batch = news_items[i:i + batch_size]
-            batch_results = await self._analyze_batch(batch)
+            batch_results = await self._analyze_batch(batch, trade_date=trade_date)
             results.extend(batch_results)
 
         return results
 
-    async def _analyze_batch(self, batch: list[dict]) -> list[dict]:
+    async def _analyze_batch(
+        self,
+        batch: list[dict],
+        trade_date: date | None = None,
+    ) -> list[dict]:
         """分析一批新闻。"""
         # 构建 Prompt
         news_text = "\n".join(
-            f"- [{item['ts_code']}] {item['title']}"
+            f"- [{item['ts_code']}] {item['title']}：{(item.get('summary') or '')[:120]}"
             for item in batch
         )
         user_prompt = self._template["user_prompt_template"].format(
@@ -96,12 +92,18 @@ class NewsSentimentAnalyzer:
         )
 
         try:
-            client = self._get_client()
-            raw = await client.chat_json(
-                prompt=user_prompt,
-                system_prompt=self._template.get("system_prompt", ""),
-                max_tokens=settings.gemini_max_tokens,
+            response = await self._gateway.execute(
+                AIRequest(
+                    prompt=user_prompt,
+                    system_prompt=self._template.get("system_prompt", ""),
+                    response_format="json",
+                    task_name="news_sentiment",
+                    max_tokens=None,
+                )
             )
+            if not response.ok:
+                raise RuntimeError(response.error or "ai_execute_failed")
+            raw = response.content
 
             # 解析结果
             if isinstance(raw, list):
@@ -124,15 +126,15 @@ class NewsSentimentAnalyzer:
                 ai_item = ai_map.get(key, {})
                 results.append({
                     **item,
-                    "sentiment_score": ai_item.get("sentiment_score", 0.0),
-                    "sentiment_label": ai_item.get("sentiment_label", "中性"),
+                    "sentiment_score": ai_item.get("sentiment_score"),
+                    "sentiment_label": ai_item.get("sentiment_label"),
                 })
             return results
 
-        except (GeminiError, Exception) as exc:
-            logger.warning("情感分析失败，标记为中性: %s", exc)
+        except Exception as exc:
+            logger.warning("情感分析失败，保留原文不打分: %s", exc)
             return [
-                {**item, "sentiment_score": 0.0, "sentiment_label": "中性"}
+                {**item, "sentiment_score": None, "sentiment_label": None}
                 for item in batch
             ]
 
@@ -163,6 +165,8 @@ def aggregate_daily_sentiment(
             for item in items
             if item.get("sentiment_score") is not None
         ]
+        if not scores:
+            continue
 
         avg_score = sum(scores) / len(scores) if scores else 0.0
         positive = sum(1 for s in scores if s > 0.2)
@@ -172,13 +176,15 @@ def aggregate_daily_sentiment(
         # 按来源统计
         source_counts: dict[str, int] = defaultdict(int)
         for item in items:
+            if item.get("sentiment_score") is None:
+                continue
             source_counts[item.get("source", "unknown")] += 1
 
         results.append({
             "ts_code": ts_code,
             "trade_date": trade_date,
             "avg_sentiment": round(avg_score, 4),
-            "news_count": len(items),
+            "news_count": len(scores),
             "positive_count": positive,
             "negative_count": negative,
             "neutral_count": neutral,

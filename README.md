@@ -69,7 +69,7 @@
 | 数据库 | PostgreSQL + asyncpg + TimescaleDB（可选） |
 | 缓存 | Redis + hiredis |
 | 回测引擎 | Backtrader |
-| AI 分析 | Gemini Flash / Codex（可选，支持多提供商切换） |
+| AI 分析 | Codex（可选） |
 | 定时任务 | APScheduler |
 | 包管理 | uv |
 | 前端框架 | React 19 + TypeScript |
@@ -101,7 +101,7 @@ uv sync
 # 复制环境变量配置
 cp .env.example .env
 # 编辑 .env，填入数据库连接和 Tushare Token
-# AI 分析可选：支持 Gemini 或 Codex，通过 AI_PROVIDER 配置切换
+# AI 分析可选：当前仅支持 Codex
 ```
 
 ### 配置
@@ -115,20 +115,13 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/stock_selecto
 # Tushare API Token（必填）
 TUSHARE_TOKEN=your-tushare-token-here
 
-# AI 分析（可选，支持 Gemini 或 Codex）
-AI_PROVIDER=gemini                          # 可选：gemini/codex（为空则禁用 AI）
-
-# Gemini 配置
-GEMINI_API_KEY=your-gemini-api-key
-# 或使用 ADC 认证
-# GEMINI_USE_ADC=true
-# GEMINI_GCP_PROJECT=your-gcp-project-id
-# GEMINI_GCP_LOCATION=us-central1
+# AI 分析（可选，当前仅支持 Codex）
+AI_PROVIDER=codex                           # 固定：codex（为空则禁用 AI）
 
 # Codex 配置
 CODEX_API_KEY=your-codex-api-key
-CODEX_BASE_URL=https://api.openai.com/v1  # 需要兼容 OpenAI API 的服务
-CODEX_MODEL_ID=gpt-4
+CODEX_BASE_URL=https://gmn.chuangzuoli.com
+CODEX_MODEL_ID=gpt-5.3-codex
 CODEX_THINKING_DEFAULT=xhigh
 
 # Redis（可选，不配置则缓存功能自动降级）
@@ -270,7 +263,7 @@ uv sync
 
 # 4. 配置环境变量
 cp .env.example .env
-vim .env  # 填入数据库连接、Redis 等（AI 分析由 OpenClaw 接管，无需 Gemini Key）
+vim .env  # 填入数据库连接、Redis 等（如启用 AI，请配置 Codex Key）
 
 # 5. 初始化数据库
 uv run alembic upgrade head
@@ -472,11 +465,11 @@ stock-selector/
 │   │   ├── market_regime.py    #   市场状态判定
 │   │   ├── weight_engine.py    #   动态权重 / 风格增益
 │   │   └── pick_store.py       #   strategy_picks 持久化
-│   ├── ai/                     # AI 分析模块（已停用，分析由 OpenClaw 接管）
-│   │   ├── clients/gemini.py   #   Gemini Flash 客户端（已停用）
+│   ├── ai/                     # AI 分析模块（统一走 Codex）
+│   │   ├── clients/codex.py    #   Codex 客户端
 │   │   ├── prompts.py          #   Prompt 模板
 │   │   ├── schemas.py          #   响应校验模型
-│   │   └── manager.py          #   AIManager 编排器（已停用）
+│   │   └── manager.py          #   AIManager 编排器
 │   ├── backtest/               # 回测引擎
 │   │   ├── engine.py           #   Cerebro 配置
 │   │   ├── strategy.py         #   AStockStrategy 基类
