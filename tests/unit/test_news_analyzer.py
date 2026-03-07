@@ -1,8 +1,10 @@
-"""新闻情感分析器单元测试：mock Gemini 测试情感分析和每日聚合。"""
+"""新闻情感分析器单元测试。"""
 
 import pytest
 from datetime import date
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+from app.ai.gateway import AIResponse
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +46,16 @@ class TestAggregateDailySentiment:
         from app.ai.news_analyzer import aggregate_daily_sentiment
         assert aggregate_daily_sentiment([], date(2026, 2, 18)) == []
 
+    def test_skip_unscored_records(self):
+        """未完成情感分析的记录不生成趋势。"""
+        from app.ai.news_analyzer import aggregate_daily_sentiment
+
+        announcements = [
+            {"ts_code": "600519.SH", "sentiment_score": None, "source": "eastmoney"},
+        ]
+
+        assert aggregate_daily_sentiment(announcements, date(2026, 2, 18)) == []
+
     def test_source_breakdown(self):
         """来源统计正确。"""
         from app.ai.news_analyzer import aggregate_daily_sentiment
@@ -81,64 +93,57 @@ class TestNewsSentimentAnalyzer:
     @pytest.mark.asyncio
     async def test_analyze_empty_list(self):
         """空列表直接返回空。"""
-        with patch("app.ai.news_analyzer.settings") as mock_settings:
-            mock_settings.gemini_api_key = "test-key"
-            mock_settings.gemini_use_adc = False
-            mock_settings.news_sentiment_batch_size = 10
-            from app.ai.news_analyzer import NewsSentimentAnalyzer
-            analyzer = NewsSentimentAnalyzer()
-            result = await analyzer.analyze([])
+        from app.ai.news_analyzer import NewsSentimentAnalyzer
+
+        mock_gateway = MagicMock()
+        mock_gateway.is_enabled = True
+        analyzer = NewsSentimentAnalyzer(ai_gateway=mock_gateway)
+        result = await analyzer.analyze([])
         assert result == []
 
     @pytest.mark.asyncio
     async def test_analyze_without_ai(self):
         """AI 未启用时标记为中性。"""
-        with patch("app.ai.news_analyzer.settings") as mock_settings:
-            mock_settings.gemini_api_key = ""
-            mock_settings.gemini_use_adc = False
-            mock_settings.news_sentiment_batch_size = 10
-            from app.ai.news_analyzer import NewsSentimentAnalyzer
-            analyzer = NewsSentimentAnalyzer()
-            items = [
-                {"ts_code": "600519.SH", "title": "测试新闻", "summary": "摘要"},
-            ]
-            result = await analyzer.analyze(items)
+        from app.ai.news_analyzer import NewsSentimentAnalyzer
+
+        mock_gateway = MagicMock()
+        mock_gateway.is_enabled = False
+        analyzer = NewsSentimentAnalyzer(ai_gateway=mock_gateway)
+        items = [
+            {"ts_code": "600519.SH", "title": "测试新闻", "summary": "摘要"},
+        ]
+        result = await analyzer.analyze(items)
 
         assert len(result) == 1
-        assert result[0]["sentiment_score"] == 0.0
-        assert result[0]["sentiment_label"] == "中性"
+        assert result[0]["sentiment_score"] is None
+        assert result[0]["sentiment_label"] is None
 
     @pytest.mark.asyncio
     async def test_analyze_with_ai_success(self):
         """AI 正常返回情感分析结果。"""
-        mock_client = AsyncMock()
-        mock_client.chat_json.return_value = [
-            {
-                "ts_code": "600519.SH",
-                "title": "贵州茅台业绩大增",
-                "sentiment_score": 0.85,
-                "sentiment_label": "利好",
-            }
+        from app.ai.news_analyzer import NewsSentimentAnalyzer
+
+        mock_gateway = MagicMock()
+        mock_gateway.is_enabled = True
+        mock_gateway.execute = AsyncMock(return_value=AIResponse(
+            ok=True,
+            provider="codex",
+            task_name="news_sentiment",
+            content=[
+                {
+                    "ts_code": "600519.SH",
+                    "title": "贵州茅台业绩大增",
+                    "sentiment_score": 0.85,
+                    "sentiment_label": "利好",
+                }
+            ],
+        ))
+        analyzer = NewsSentimentAnalyzer(ai_gateway=mock_gateway)
+
+        items = [
+            {"ts_code": "600519.SH", "title": "贵州茅台业绩大增", "summary": "摘要"},
         ]
-
-        with patch("app.ai.news_analyzer.settings") as mock_settings:
-            mock_settings.gemini_api_key = "test-key"
-            mock_settings.gemini_use_adc = False
-            mock_settings.news_sentiment_batch_size = 10
-            mock_settings.gemini_model_id = "gemini-2.0-flash"
-            mock_settings.gemini_timeout = 30
-            mock_settings.gemini_max_retries = 3
-            mock_settings.gemini_gcp_project = ""
-            mock_settings.gemini_gcp_location = ""
-            mock_settings.gemini_max_tokens = 4096
-            from app.ai.news_analyzer import NewsSentimentAnalyzer
-            analyzer = NewsSentimentAnalyzer()
-            analyzer._client = mock_client
-
-            items = [
-                {"ts_code": "600519.SH", "title": "贵州茅台业绩大增", "summary": "摘要"},
-            ]
-            result = await analyzer.analyze(items)
+        result = await analyzer.analyze(items)
 
         assert len(result) == 1
         assert result[0]["sentiment_score"] == 0.85
@@ -146,29 +151,24 @@ class TestNewsSentimentAnalyzer:
 
     @pytest.mark.asyncio
     async def test_analyze_ai_failure_fallback(self):
-        """AI 调用失败时降级为中性。"""
-        mock_client = AsyncMock()
-        mock_client.chat_json.side_effect = Exception("API error")
+        """AI 调用失败时保留原文但不打分。"""
+        from app.ai.news_analyzer import NewsSentimentAnalyzer
 
-        with patch("app.ai.news_analyzer.settings") as mock_settings:
-            mock_settings.gemini_api_key = "test-key"
-            mock_settings.gemini_use_adc = False
-            mock_settings.news_sentiment_batch_size = 10
-            mock_settings.gemini_model_id = "gemini-2.0-flash"
-            mock_settings.gemini_timeout = 30
-            mock_settings.gemini_max_retries = 3
-            mock_settings.gemini_gcp_project = ""
-            mock_settings.gemini_gcp_location = ""
-            mock_settings.gemini_max_tokens = 4096
-            from app.ai.news_analyzer import NewsSentimentAnalyzer
-            analyzer = NewsSentimentAnalyzer()
-            analyzer._client = mock_client
+        mock_gateway = MagicMock()
+        mock_gateway.is_enabled = True
+        mock_gateway.execute = AsyncMock(return_value=AIResponse(
+            ok=False,
+            provider="codex",
+            task_name="news_sentiment",
+            error="api error",
+        ))
+        analyzer = NewsSentimentAnalyzer(ai_gateway=mock_gateway)
 
-            items = [
-                {"ts_code": "600519.SH", "title": "测试", "summary": "摘要"},
-            ]
-            result = await analyzer.analyze(items)
+        items = [
+            {"ts_code": "600519.SH", "title": "测试", "summary": "摘要"},
+        ]
+        result = await analyzer.analyze(items)
 
         assert len(result) == 1
-        assert result[0]["sentiment_score"] == 0.0
-        assert result[0]["sentiment_label"] == "中性"
+        assert result[0]["sentiment_score"] is None
+        assert result[0]["sentiment_label"] is None

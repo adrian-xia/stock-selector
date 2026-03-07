@@ -87,17 +87,7 @@ class Settings(BaseSettings):
     pipeline_completeness_deadline: str = "18:00"      # 完整性告警截止时间
 
     # --- AI Provider (AI 提供商选择) ---
-    ai_provider: str = "gemini"                 # 可选：gemini/codex（为空则禁用 AI）
-
-    # --- AI (Gemini) ---
-    gemini_api_key: str = ""                    # 为空则 Gemini 不可用
-    gemini_use_adc: bool = False                # 使用 Google ADC 认证（与 API Key 二选一）
-    gemini_gcp_project: str = ""                # GCP 项目 ID（ADC 模式必填）
-    gemini_gcp_location: str = "us-central1"    # GCP 区域（ADC 模式）
-    gemini_model_id: str = "gemini-2.0-flash"   # V1 固定用 Flash
-    gemini_max_tokens: int = 4000               # 单次请求最大输出 token
-    gemini_timeout: int = 30                    # 请求超时（秒）
-    gemini_max_retries: int = 2                 # 瞬态错误重试次数
+    ai_provider: str = "codex"                  # 固定：codex；空值则禁用 AI
 
     # --- AI (Codex) ---
     codex_api_key: str = ""                     # 为空则 Codex 不可用
@@ -117,6 +107,7 @@ class Settings(BaseSettings):
     news_crawl_timeout: int = 30                 # 单次采集超时（秒）
     news_crawl_max_pages: int = 5                # 每个数据源最大采集页数
     news_sentiment_batch_size: int = 10           # 情感分析批次大小
+    news_coverage_scopes: list[str] = ["daily_candidates"]  # 舆情覆盖范围（并集）
 
     # --- Realtime Monitor (实时监控) ---
     realtime_poll_interval: int = 3              # 实时行情轮询间隔（秒）

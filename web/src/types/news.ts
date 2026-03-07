@@ -37,6 +37,22 @@ export interface SentimentTrendItem {
   neutral_count: number
 }
 
+export interface SentimentCoverageInfo {
+  covered: boolean
+  status: 'uncovered' | 'covered_no_news' | 'covered_pending_analysis' | 'covered_neutral' | 'covered_signal'
+  message: string
+  reference_date: string | null
+  requested_scopes: string[]
+  matched_scopes: string[]
+}
+
+export interface SentimentTrendResponse {
+  ts_code: string
+  days: number
+  coverage: SentimentCoverageInfo
+  items: SentimentTrendItem[]
+}
+
 export interface SentimentSummaryItem {
   ts_code: string
   avg_sentiment: number

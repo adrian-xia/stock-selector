@@ -5,21 +5,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.ai.clients.gemini import GeminiTimeoutError
+from app.ai.gateway import AIResponse
 from app.ai.manager import AIManager
 from app.strategy.pick_types import StockPick
 
 
-def _make_settings(api_key: str = "test-key", use_adc: bool = False) -> MagicMock:
+def _make_settings(api_key: str = "test-key") -> MagicMock:
     """构造 mock Settings。"""
     s = MagicMock()
-    s.ai_provider = "gemini"
-    s.gemini_api_key = api_key
-    s.gemini_use_adc = use_adc
-    s.gemini_model_id = "gemini-2.0-flash"
-    s.gemini_max_tokens = 4000
-    s.gemini_timeout = 30
-    s.gemini_max_retries = 2
+    s.ai_provider = "codex"
+    s.codex_api_key = api_key
+    s.codex_base_url = "https://example.com"
+    s.codex_model_id = "gpt-test"
+    s.codex_thinking_default = "medium"
+    s.codex_max_tokens = 4000
+    s.codex_timeout = 30
+    s.codex_max_retries = 2
     s.ai_daily_call_limit = 5
     return s
 
@@ -68,18 +69,26 @@ class TestAIManagerAnalyze:
         result = await manager.analyze([], {}, date(2026, 2, 7))
         assert result == []
 
-    @patch("app.ai.manager.GeminiClient")
-    async def test_successful_analysis(self, mock_client_cls: MagicMock) -> None:
+    @patch("app.ai.manager.AIGateway")
+    async def test_successful_analysis(self, mock_gateway_cls: MagicMock) -> None:
         """成功分析后应设置 ai_score 并按分数排序。"""
-        mock_client = MagicMock()
-        mock_client.chat_json = AsyncMock(return_value={
-            "analysis": [
-                {"ts_code": "600519.SH", "score": 90, "signal": "STRONG_BUY", "reasoning": "强势"},
-                {"ts_code": "000858.SZ", "score": 70, "signal": "BUY", "reasoning": "看好"},
-                {"ts_code": "600036.SH", "score": 50, "signal": "HOLD", "reasoning": "中性"},
-            ]
-        })
-        mock_client_cls.return_value = mock_client
+        mock_gateway = MagicMock()
+        mock_gateway.provider = "codex"
+        mock_gateway.is_enabled = True
+        mock_gateway.execute = AsyncMock(return_value=AIResponse(
+            ok=True,
+            provider="codex",
+            task_name="stock_pick_analysis",
+            content={
+                "analysis": [
+                    {"ts_code": "600519.SH", "score": 90, "signal": "STRONG_BUY", "reasoning": "强势"},
+                    {"ts_code": "000858.SZ", "score": 70, "signal": "BUY", "reasoning": "看好"},
+                    {"ts_code": "600036.SH", "score": 50, "signal": "HOLD", "reasoning": "中性"},
+                ]
+            },
+        ))
+        mock_gateway.get_last_usage.return_value = {}
+        mock_gateway_cls.return_value = mock_gateway
 
         manager = AIManager(_make_settings())
         picks = _make_picks(3)
@@ -95,14 +104,19 @@ class TestAIManagerAnalyze:
         assert result[0].ai_signal == "STRONG_BUY"
         assert result[0].ai_summary == "强势"
 
-    @patch("app.ai.manager.GeminiClient")
-    async def test_timeout_graceful_degradation(self, mock_client_cls: MagicMock) -> None:
-        """Gemini 超时时应返回原始 picks。"""
-        mock_client = MagicMock()
-        mock_client.chat_json = AsyncMock(
-            side_effect=GeminiTimeoutError("timeout")
-        )
-        mock_client_cls.return_value = mock_client
+    @patch("app.ai.manager.AIGateway")
+    async def test_timeout_graceful_degradation(self, mock_gateway_cls: MagicMock) -> None:
+        """统一网关失败时应返回原始 picks。"""
+        mock_gateway = MagicMock()
+        mock_gateway.provider = "codex"
+        mock_gateway.is_enabled = True
+        mock_gateway.execute = AsyncMock(return_value=AIResponse(
+            ok=False,
+            provider="codex",
+            task_name="stock_pick_analysis",
+            error="timeout",
+        ))
+        mock_gateway_cls.return_value = mock_gateway
 
         manager = AIManager(_make_settings())
         picks = _make_picks()
@@ -111,12 +125,19 @@ class TestAIManagerAnalyze:
         assert len(result) == 3
         assert all(p.ai_score is None for p in result)
 
-    @patch("app.ai.manager.GeminiClient")
-    async def test_invalid_response_graceful_degradation(self, mock_client_cls: MagicMock) -> None:
+    @patch("app.ai.manager.AIGateway")
+    async def test_invalid_response_graceful_degradation(self, mock_gateway_cls: MagicMock) -> None:
         """响应校验失败时应返回原始 picks。"""
-        mock_client = MagicMock()
-        mock_client.chat_json = AsyncMock(return_value={"wrong_field": []})
-        mock_client_cls.return_value = mock_client
+        mock_gateway = MagicMock()
+        mock_gateway.provider = "codex"
+        mock_gateway.is_enabled = True
+        mock_gateway.execute = AsyncMock(return_value=AIResponse(
+            ok=True,
+            provider="codex",
+            task_name="stock_pick_analysis",
+            content={"wrong_field": []},
+        ))
+        mock_gateway_cls.return_value = mock_gateway
 
         manager = AIManager(_make_settings())
         picks = _make_picks()
@@ -125,17 +146,23 @@ class TestAIManagerAnalyze:
         assert len(result) == 3
         assert all(p.ai_score is None for p in result)
 
-    @patch("app.ai.manager.GeminiClient")
-    async def test_partial_response(self, mock_client_cls: MagicMock) -> None:
+    @patch("app.ai.manager.AIGateway")
+    async def test_partial_response(self, mock_gateway_cls: MagicMock) -> None:
         """AI 只返回部分结果时，未匹配的股票 ai_score 为 None。"""
-        mock_client = MagicMock()
-        mock_client.chat_json = AsyncMock(return_value={
-            "analysis": [
-                {"ts_code": "600519.SH", "score": 90, "signal": "STRONG_BUY", "reasoning": "强势"},
-                # 缺少 000858.SZ 和 600036.SH
-            ]
-        })
-        mock_client_cls.return_value = mock_client
+        mock_gateway = MagicMock()
+        mock_gateway.provider = "codex"
+        mock_gateway.is_enabled = True
+        mock_gateway.execute = AsyncMock(return_value=AIResponse(
+            ok=True,
+            provider="codex",
+            task_name="stock_pick_analysis",
+            content={
+                "analysis": [
+                    {"ts_code": "600519.SH", "score": 90, "signal": "STRONG_BUY", "reasoning": "强势"},
+                ]
+            },
+        ))
+        mock_gateway_cls.return_value = mock_gateway
 
         manager = AIManager(_make_settings())
         picks = _make_picks(3)

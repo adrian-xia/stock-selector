@@ -1,6 +1,6 @@
 """AI 分析 Prompt 模板。
 
-从 YAML 文件加载模板，构建发送给 Gemini 的综合分析提示词。
+从 YAML 文件加载模板，构建发送给统一 AI 网关的综合分析提示词。
 """
 
 from __future__ import annotations

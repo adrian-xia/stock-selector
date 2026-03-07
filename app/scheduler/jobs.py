@@ -12,6 +12,7 @@ from app.data.manager import DataManager
 from app.data.tushare import TushareClient
 from app.database import async_session_factory
 from app.scheduler.task_logger import TaskLogger
+from app.news.coverage import normalize_news_scopes
 from app.strategy.base import StrategyRole
 from app.strategy.factory import StrategyFactoryV2
 from app.strategy.market_regime import compute_and_store_regime
@@ -268,61 +269,6 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 time.monotonic() - p4_gap_start, traceback.format_exc(),
             )
 
-        # 步骤 3.9：新闻采集与情感分析（受 news_crawl_enabled 控制，失败不阻断）
-        if settings.news_crawl_enabled:
-            news_start = time.monotonic()
-            try:
-                from app.ai.news_analyzer import (
-                    NewsSentimentAnalyzer,
-                    aggregate_daily_sentiment,
-                    save_announcements,
-                    save_daily_sentiment,
-                )
-                from app.data.sources.fetcher import fetch_all_news
-
-                # 获取活跃股票代码（取前 100 只热门股票）
-                from sqlalchemy import text as sa_text
-                async with async_session_factory() as session:
-                    rows = await session.execute(
-                        sa_text(
-                            "SELECT ts_code FROM stocks "
-                            "WHERE list_status = 'L' "
-                            "ORDER BY ts_code LIMIT 100"
-                        )
-                    )
-                    active_codes = [r.ts_code for r in rows]
-
-                if active_codes:
-                    # 采集新闻
-                    raw_news = await fetch_all_news(active_codes, target)
-                    logger.info("[新闻采集] 采集到 %d 条新闻", len(raw_news))
-
-                    # 情感分析
-                    analyzer = NewsSentimentAnalyzer()
-                    analyzed = await analyzer.analyze(raw_news)
-
-                    # 保存公告
-                    saved_ann = await save_announcements(analyzed, async_session_factory)
-
-                    # 聚合并保存每日情感
-                    daily = aggregate_daily_sentiment(analyzed, target)
-                    saved_daily = await save_daily_sentiment(daily, async_session_factory)
-
-                    logger.info(
-                        "[新闻舆情] 完成：采集 %d 条，保存公告 %d 条，每日聚合 %d 条，耗时 %.1fs",
-                        len(raw_news), saved_ann, saved_daily,
-                        time.monotonic() - news_start,
-                    )
-                else:
-                    logger.info("[新闻舆情] 无活跃股票，跳过")
-            except Exception:
-                logger.warning(
-                    "[新闻舆情] 失败（继续执行），耗时 %.1fs\n%s",
-                    time.monotonic() - news_start, traceback.format_exc(),
-                )
-        else:
-            logger.info("[新闻舆情] 未启用（news_crawl_enabled=false），跳过")
-
         # 步骤 4：缓存刷新（非关键，失败不阻断）
         await cache_refresh_step(target)
 
@@ -358,6 +304,30 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 picks = await pipeline_step(target)
             except Exception:
                 logger.error("[盘后链路] 策略管道执行失败\n%s", traceback.format_exc())
+
+            # 步骤 5.0：新闻采集与情感分析（依赖候选池覆盖范围，失败不阻断）
+            if settings.news_crawl_enabled:
+                news_start = time.monotonic()
+                try:
+                    news_result = await news_sentiment_step(
+                        target,
+                        candidate_codes=[pick.ts_code for pick in picks],
+                    )
+                    logger.info(
+                        "[新闻舆情] 完成：覆盖 %d 只，采集 %d 条，保存公告 %d 条，每日聚合 %d 条，耗时 %.1fs",
+                        news_result["coverage_count"],
+                        news_result["raw_news_count"],
+                        news_result["saved_announcements"],
+                        news_result["saved_daily"],
+                        time.monotonic() - news_start,
+                    )
+                except Exception:
+                    logger.warning(
+                        "[新闻舆情] 失败（继续执行），耗时 %.1fs\n%s",
+                        time.monotonic() - news_start, traceback.format_exc(),
+                    )
+            else:
+                logger.info("[新闻舆情] 未启用（news_crawl_enabled=false），跳过")
 
             # 步骤 5.1：回填选股收益率（非关键，失败不阻断）
             returns_start = time.monotonic()
@@ -402,8 +372,7 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                             for p in top_picks
                         }
                         analyzed = await ai_manager.analyze(top_picks, market_data, target)
-                        # 获取 token 用量并持久化
-                        token_usage = ai_manager._get_client().get_last_usage() if ai_manager._client else None
+                        token_usage = ai_manager.get_last_usage()
                         saved = await ai_manager.save_results(
                             analyzed, target, async_session_factory, token_usage
                         )
@@ -683,6 +652,60 @@ async def pipeline_step(target_date: date) -> list:
         result.market_regime,
     )
     return combined_picks
+
+
+async def news_sentiment_step(
+    target_date: date,
+    candidate_codes: list[str] | None = None,
+) -> dict[str, int]:
+    """执行新闻采集与情感分析。"""
+    from app.ai.news_analyzer import (
+        NewsSentimentAnalyzer,
+        aggregate_daily_sentiment,
+        save_announcements,
+        save_daily_sentiment,
+    )
+    from app.data.sources.fetcher import fetch_all_news
+    from app.news.coverage import resolve_news_coverage_universe
+
+    coverage = await resolve_news_coverage_universe(
+        target_date=target_date,
+        session_factory=async_session_factory,
+        scopes=normalize_news_scopes(),
+        candidate_codes=candidate_codes,
+    )
+    active_codes = coverage.ts_codes
+
+    if not active_codes:
+        logger.info(
+            "[新闻舆情] 覆盖范围为空，跳过：scopes=%s",
+            coverage.requested_scopes,
+        )
+        return {
+            "coverage_count": 0,
+            "raw_news_count": 0,
+            "saved_announcements": 0,
+            "saved_daily": 0,
+        }
+
+    raw_news = await fetch_all_news(active_codes, target_date)
+    logger.info(
+        "[新闻采集] 覆盖 %d 只股票（scopes=%s），采集到 %d 条新闻",
+        len(active_codes), coverage.resolved_scopes, len(raw_news),
+    )
+
+    analyzer = NewsSentimentAnalyzer()
+    analyzed = await analyzer.analyze(raw_news, trade_date=target_date)
+    saved_ann = await save_announcements(analyzed, async_session_factory)
+    daily = aggregate_daily_sentiment(analyzed, target_date)
+    saved_daily = await save_daily_sentiment(daily, async_session_factory)
+
+    return {
+        "coverage_count": len(active_codes),
+        "raw_news_count": len(raw_news),
+        "saved_announcements": saved_ann,
+        "saved_daily": saved_daily,
+    }
 
 
 async def sync_stock_list_job() -> None:

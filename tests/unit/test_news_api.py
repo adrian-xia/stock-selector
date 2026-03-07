@@ -7,10 +7,11 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from app.api.news import (
     AnnouncementItem,
     NewsListResponse,
-    SentimentTrendItem,
+    SentimentTrendResponse,
     SentimentSummaryItem,
     SentimentSummaryResponse,
 )
+from app.news.coverage import NewsCoverageUniverse
 
 
 class TestNewsListEndpoint:
@@ -98,14 +99,25 @@ class TestSentimentTrendEndpoint:
 
         mock_factory = MagicMock(return_value=mock_session)
 
-        with patch("app.api.news.async_session_factory", mock_factory):
+        with patch("app.api.news.async_session_factory", mock_factory), \
+             patch("app.api.news.get_latest_news_reference_date", new_callable=AsyncMock) as mock_ref_date, \
+             patch("app.api.news.resolve_news_coverage_universe", new_callable=AsyncMock) as mock_coverage:
+            mock_ref_date.return_value = date(2026, 2, 18)
+            mock_coverage.return_value = NewsCoverageUniverse(
+                ts_codes=["600519.SH"],
+                requested_scopes=["daily_candidates"],
+                resolved_scopes=["daily_candidates"],
+                code_sources={"600519.SH": ["daily_candidates"]},
+            )
             from app.api.news import get_sentiment_trend
             result = await get_sentiment_trend(ts_code="600519.SH", days=30)
 
-        assert len(result) == 2
+        assert isinstance(result, SentimentTrendResponse)
+        assert len(result.items) == 2
         # 应按日期升序返回（reverse）
-        assert result[0].trade_date == date(2026, 2, 17)
-        assert result[1].trade_date == date(2026, 2, 18)
+        assert result.items[0].trade_date == date(2026, 2, 17)
+        assert result.items[1].trade_date == date(2026, 2, 18)
+        assert result.coverage.status == "covered_signal"
 
     @pytest.mark.asyncio
     async def test_trend_empty(self):
@@ -117,11 +129,50 @@ class TestSentimentTrendEndpoint:
 
         mock_factory = MagicMock(return_value=mock_session)
 
-        with patch("app.api.news.async_session_factory", mock_factory):
+        with patch("app.api.news.async_session_factory", mock_factory), \
+             patch("app.api.news.get_latest_news_reference_date", new_callable=AsyncMock) as mock_ref_date, \
+             patch("app.api.news.resolve_news_coverage_universe", new_callable=AsyncMock) as mock_coverage:
+            mock_ref_date.return_value = date(2026, 2, 18)
+            mock_coverage.return_value = NewsCoverageUniverse(
+                ts_codes=[],
+                requested_scopes=["daily_candidates"],
+                resolved_scopes=["daily_candidates"],
+                code_sources={},
+            )
             from app.api.news import get_sentiment_trend
             result = await get_sentiment_trend(ts_code="999999.SH", days=30)
 
-        assert result == []
+        assert result.items == []
+        assert result.coverage.status == "uncovered"
+
+    @pytest.mark.asyncio
+    async def test_trend_pending_analysis(self):
+        """有原始新闻但无情感打分时返回待分析。"""
+        mock_stats = MagicMock(total_count=3, scored_count=0)
+        mock_ann_stats = MagicMock()
+        mock_ann_stats.first.return_value = mock_stats
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[[], mock_ann_stats])
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_factory = MagicMock(return_value=mock_session)
+
+        with patch("app.api.news.async_session_factory", mock_factory), \
+             patch("app.api.news.get_latest_news_reference_date", new_callable=AsyncMock) as mock_ref_date, \
+             patch("app.api.news.resolve_news_coverage_universe", new_callable=AsyncMock) as mock_coverage:
+            mock_ref_date.return_value = date(2026, 2, 18)
+            mock_coverage.return_value = NewsCoverageUniverse(
+                ts_codes=["600519.SH"],
+                requested_scopes=["daily_candidates"],
+                resolved_scopes=["daily_candidates"],
+                code_sources={"600519.SH": ["daily_candidates"]},
+            )
+            from app.api.news import get_sentiment_trend
+            result = await get_sentiment_trend(ts_code="600519.SH", days=30)
+
+        assert result.items == []
+        assert result.coverage.status == "covered_pending_analysis"
 
 
 class TestSentimentSummaryEndpoint:

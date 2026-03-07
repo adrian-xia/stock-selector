@@ -71,9 +71,6 @@ async def example():
 # 使用 Codex
 settings = Settings(ai_provider="codex", codex_api_key="...")
 
-# 使用 Gemini
-settings = Settings(ai_provider="gemini", gemini_api_key="...")
-
 # 禁用 AI
 settings = Settings(ai_provider="")
 ```

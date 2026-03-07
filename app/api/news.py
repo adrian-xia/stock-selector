@@ -4,13 +4,17 @@
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.database import async_session_factory
+from app.news.coverage import (
+    get_latest_news_reference_date,
+    resolve_news_coverage_universe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,26 @@ class SentimentTrendItem(BaseModel):
     positive_count: int
     negative_count: int
     neutral_count: int
+
+
+class SentimentCoverageInfo(BaseModel):
+    """情感覆盖状态。"""
+
+    covered: bool
+    status: str
+    message: str
+    reference_date: date | None = None
+    requested_scopes: list[str] = Field(default_factory=list)
+    matched_scopes: list[str] = Field(default_factory=list)
+
+
+class SentimentTrendResponse(BaseModel):
+    """情感趋势响应。"""
+
+    ts_code: str
+    days: int
+    coverage: SentimentCoverageInfo
+    items: list[SentimentTrendItem]
 
 
 class SentimentSummaryItem(BaseModel):
@@ -134,11 +158,11 @@ async def get_news_list(
     return NewsListResponse(total=total, page=page, page_size=page_size, items=items)
 
 
-@router.get("/sentiment-trend/{ts_code}", response_model=list[SentimentTrendItem])
+@router.get("/sentiment-trend/{ts_code}", response_model=SentimentTrendResponse)
 async def get_sentiment_trend(
     ts_code: str,
     days: int = Query(30, ge=1, le=365, description="查询天数"),
-) -> list[SentimentTrendItem]:
+) -> SentimentTrendResponse:
     """查询指定股票的情感趋势（按日期升序）。"""
     async with async_session_factory() as session:
         rows = await session.execute(
@@ -159,9 +183,69 @@ async def get_sentiment_trend(
             )
             for r in rows
         ]
-    # 返回按日期升序
-    items.reverse()
-    return items
+        items.reverse()
+
+        reference_date = await get_latest_news_reference_date(async_session_factory)
+        coverage_universe = await resolve_news_coverage_universe(
+            target_date=reference_date,
+            session_factory=async_session_factory,
+        )
+        matched_scopes = coverage_universe.code_sources.get(ts_code, [])
+        covered = bool(matched_scopes) or bool(items)
+
+        if items:
+            has_signal = any(
+                item.positive_count > 0 or item.negative_count > 0
+                for item in items
+            )
+            if has_signal:
+                status = "covered_signal"
+                message = "已纳入舆情覆盖，最近窗口内存在明显情感波动。"
+            else:
+                status = "covered_neutral"
+                message = "已纳入舆情覆盖，但最近窗口内新闻情感以中性为主。"
+        elif covered:
+            cutoff_date = (reference_date or date.today()) - timedelta(days=days - 1)
+            ann_stats = await session.execute(
+                text(
+                    """
+                    SELECT
+                        COUNT(*) AS total_count,
+                        COUNT(sentiment_score) AS scored_count
+                    FROM announcements
+                    WHERE ts_code = :ts_code
+                      AND pub_date >= :cutoff_date
+                    """
+                ),
+                {"ts_code": ts_code, "cutoff_date": cutoff_date},
+            )
+            stats_row = ann_stats.first()
+            total_count = stats_row.total_count if stats_row else 0
+            scored_count = stats_row.scored_count if stats_row else 0
+
+            if total_count > 0 and scored_count == 0:
+                status = "covered_pending_analysis"
+                message = "已纳入舆情覆盖，但最近新闻尚未完成情感分析。"
+            else:
+                status = "covered_no_news"
+                message = "已纳入舆情覆盖，但最近窗口内没有形成情感趋势数据。"
+        else:
+            status = "uncovered"
+            message = "当前股票不在默认舆情覆盖范围内。"
+
+    return SentimentTrendResponse(
+        ts_code=ts_code,
+        days=days,
+        coverage=SentimentCoverageInfo(
+            covered=covered,
+            status=status,
+            message=message,
+            reference_date=reference_date,
+            requested_scopes=coverage_universe.requested_scopes,
+            matched_scopes=matched_scopes,
+        ),
+        items=items,
+    )
 
 
 @router.get("/sentiment-summary", response_model=SentimentSummaryResponse)

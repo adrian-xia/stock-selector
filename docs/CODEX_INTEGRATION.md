@@ -6,7 +6,7 @@
 
 - ✅ 创建 `app/ai/clients/codex.py` - Codex API 客户端（gmn.chuangzuoli.com 专有协议）
 - ✅ 修改 `app/config.py` - 添加 AI 提供商配置和 Codex 相关配置
-- ✅ 修改 `app/ai/manager.py` - 支持多 AI 提供商（Gemini/Codex）
+- ✅ 修改 `app/ai/manager.py` - 统一通过 Codex 网关处理 AI 请求
 - ✅ 更新 `pyproject.toml` - 添加 httpx 依赖
 - ✅ 更新 `.env.example` - 添加 Codex 配置示例
 - ✅ 更新 `docker/.env.docker` - 添加 Codex 配置
@@ -17,7 +17,7 @@
 
 ```bash
 # --- AI Provider (AI 提供商选择) ---
-AI_PROVIDER=codex                            # 可选：gemini/codex（为空则禁用 AI）
+AI_PROVIDER=codex                            # 固定：codex（为空则禁用 AI）
 
 # --- AI (Codex) ---
 CODEX_API_KEY=your-api-key-here
@@ -31,13 +31,9 @@ CODEX_MAX_RETRIES=2
 
 ### 3. 使用方式
 
-切换 AI 提供商只需修改 `AI_PROVIDER` 配置：
+当前 AI 实现固定使用 Codex：
 
 ```bash
-# 使用 Gemini
-AI_PROVIDER=gemini
-
-# 使用 Codex
 AI_PROVIDER=codex
 
 # 禁用 AI
@@ -112,7 +108,7 @@ AI_PROVIDER=
 
 ### AIManager 特性
 
-- 多提供商支持（Gemini/Codex）
+- 统一 Codex 网关
 - 延迟初始化客户端
 - 每日调用上限控制
 - 结果持久化
