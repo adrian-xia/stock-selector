@@ -59,13 +59,13 @@ class Settings(BaseSettings):
     data_integrity_check_days: int = 30         # 检查最近 N 天的数据完整性
 
     # --- Scheduler ---
-    scheduler_post_market_cron: str = "30 15 * * 1-5"  # 周一至周五 15:30
+    scheduler_post_market_cron: str = "0 18 * * 1-5"   # 周一至周五 18:00
     scheduler_stock_sync_cron: str = "0 8 * * 6"       # 周六 08:00
 
     # --- Auto Data Update (自动数据更新) ---
     auto_update_enabled: bool = True                    # 是否启用自动数据更新
     auto_update_probe_interval: int = 15                # 嗅探间隔（分钟）
-    auto_update_probe_timeout: str = "18:00"            # 嗅探超时时间
+    auto_update_probe_timeout: str = "19:00"            # 嗅探超时时间
     auto_update_probe_stocks: list[str] = [             # 嗅探样本股票
         "600519.SH",  # 贵州茅台
         "000001.SZ",  # 平安银行
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
         "601318.SH",  # 中国平安
     ]
     auto_update_probe_threshold: float = 0.8            # 嗅探成功阈值（80%样本有数据）
-    scheduler_auto_update_cron: str = "30 15 * * 1-5"  # 自动更新任务触发时间（周一至周五 15:30）
+    scheduler_auto_update_cron: str = "0 18 * * 1-5"   # 自动更新任务触发时间（周一至周五 18:00）
 
     # --- Sync Progress (累积进度追踪) ---
     data_start_date: str = "2024-01-01"               # 历史数据起始日期（新股首次同步从此日期开始）
@@ -158,7 +158,7 @@ class Settings(BaseSettings):
 
     # --- StarMap (盘后投研) ---
     starmap_enabled: bool = True                           # 是否启用 StarMap 盘后投研
-    starmap_cron: str = "10 16 * * 1-5"                    # StarMap 执行 cron（周一至周五 16:10）
+    starmap_cron: str = "40 18 * * 1-5"                    # StarMap 执行 cron（周一至周五 18:40，兜底）
     starmap_max_plans: int = 20                            # 最大生成计划数
     starmap_news_source_whitelist: list[str] = ["sina"]    # 新闻源白名单（空=跳过新闻模块）
     starmap_degrade_threshold: float = 0.30                # 行业对齐失败率阈值（超过则降级纯量化）

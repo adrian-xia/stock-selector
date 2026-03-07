@@ -34,7 +34,7 @@ def _build_manager() -> DataManager:
 
 
 async def auto_update_job(target_date: date | None = None) -> None:
-    """自动数据更新任务（每日 15:30 触发）。
+    """自动数据更新任务（每日 18:00 触发）。
 
     工作流程：
     1. 检查是否交易日
@@ -134,7 +134,7 @@ async def probe_and_sync_job(target_date: date) -> None:
 
     工作流程：
     1. 检查任务状态（如已完成则跳过）
-    2. 检查是否超时（18:00）
+    2. 检查是否超时（默认 19:00）
     3. 数据嗅探
     4. 如有数据 → 执行盘后链路 → 停止嗅探任务
     5. 如无数据 → 继续等待下次嗅探

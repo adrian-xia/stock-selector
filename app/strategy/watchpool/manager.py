@@ -128,21 +128,21 @@ async def update_watchpool(
 
     if stopped_ids:
         await session.execute(text(
-            "UPDATE strategy_watchpool SET status='stopped', updated_at=:d WHERE id = ANY(:ids)"
-        ), {"ids": stopped_ids, "d": target_date})
+            "UPDATE strategy_watchpool SET status='stopped', updated_at=NOW() WHERE id = ANY(:ids)"
+        ), {"ids": stopped_ids})
         stats["stopped"] = len(stopped_ids)
 
     if expired_ids:
         await session.execute(text(
-            "UPDATE strategy_watchpool SET status='expired', updated_at=:d WHERE id = ANY(:ids)"
-        ), {"ids": expired_ids, "d": target_date})
+            "UPDATE strategy_watchpool SET status='expired', updated_at=NOW() WHERE id = ANY(:ids)"
+        ), {"ids": expired_ids})
         stats["expired"] = len(expired_ids)
 
     for wid, days, mvol, mlow in update_batch:
         await session.execute(text(
             "UPDATE strategy_watchpool SET washout_days=:d, min_washout_vol=:v, "
-            "min_washout_low=:l, updated_at=:dt WHERE id=:id"
-        ), {"id": wid, "d": days, "v": mvol, "l": mlow, "dt": target_date})
+            "min_washout_low=:l, updated_at=NOW() WHERE id=:id"
+        ), {"id": wid, "d": days, "v": mvol, "l": mlow})
     stats["updated"] = len(update_batch)
 
     return stats
@@ -168,7 +168,7 @@ async def check_stabilization(
 
     await session.execute(text(
         "UPDATE strategy_watchpool SET status='triggered', triggered_date=:d, "
-        "updated_at=:d WHERE id = ANY(:ids)"
+        "updated_at=NOW() WHERE id = ANY(:ids)"
     ), {"ids": triggered_ids, "d": target_date})
 
     logger.info("[watchpool] %d 只股票企稳触发: %s", len(triggered_codes), triggered_codes[:5])

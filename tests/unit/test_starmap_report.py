@@ -45,6 +45,7 @@ def test_generate_starmap_report_contains_core_sections():
     plans = [
         SimpleNamespace(
             ts_code="688981.SH",
+            stock_name="中芯国际",
             source_strategy="volume-breakout-trigger-v2",
             plan_type="breakout",
             plan_status="PENDING",
@@ -76,7 +77,9 @@ def test_generate_starmap_report_contains_core_sections():
     assert "## 行业共振" in markdown
     assert "## 增强交易计划" in markdown
     assert "688981.SH" in markdown
+    assert "中芯国际" in markdown
     assert "半导体" in markdown
     assert "降准预期" in markdown
     assert "增强计划 1 条" in summary_text
+    assert "688981.SH 中芯国际" in summary_text
     assert "降级标记 1 个" in summary_text

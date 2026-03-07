@@ -12,6 +12,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.models.market import Stock
 from app.models.starmap import MacroSignalDaily, SectorResonanceDaily, TradePlanDailyExt
 
 logger = logging.getLogger(__name__)
@@ -154,15 +155,21 @@ class StarMapRepository:
     ) -> list[TradePlanDailyExt]:
         """查询指定日期的交易计划。"""
         async with self._session_factory() as session:
-            query = select(TradePlanDailyExt).where(
-                TradePlanDailyExt.trade_date == trade_date
+            query = (
+                select(TradePlanDailyExt, Stock.name)
+                .outerjoin(Stock, Stock.ts_code == TradePlanDailyExt.ts_code)
+                .where(TradePlanDailyExt.trade_date == trade_date)
             )
             if status:
                 query = query.where(TradePlanDailyExt.plan_status == status)
             query = query.order_by(TradePlanDailyExt.confidence.desc())
 
             result = await session.execute(query)
-            return list(result.scalars().all())
+            plans: list[TradePlanDailyExt] = []
+            for plan, stock_name in result.all():
+                setattr(plan, "stock_name", stock_name)
+                plans.append(plan)
+            return plans
 
     async def get_next_trade_date(self, current_date: date) -> date:
         """获取下一个交易日；若不存在则回退到当前日期。"""
@@ -220,6 +227,7 @@ class StarMapRepository:
             "trade_plans": [
                 {
                     "ts_code": p.ts_code,
+                    "stock_name": getattr(p, "stock_name", None),
                     "valid_date": p.valid_date.isoformat() if p.valid_date else None,
                     "source_strategy": p.source_strategy,
                     "plan_type": p.plan_type,

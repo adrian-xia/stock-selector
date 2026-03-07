@@ -62,13 +62,12 @@ async def calc_sector_resonance(
         try:
             rows = await session.execute(
                 text(
-                    "SELECT ci.ts_code, ci.name, cd.pct_change, cd.turnover_rate, "
-                    "       cd.amount "
+                    "SELECT ci.ts_code, ci.name, cd.pct_chg AS pct_change, cd.amount "
                     "FROM concept_daily cd "
                     "JOIN concept_index ci ON cd.ts_code = ci.ts_code "
                     "WHERE cd.trade_date = :td"
                 ),
-                {"td": trade_date.strftime("%Y%m%d")},
+                {"td": trade_date},
             )
 
             all_rows = rows.fetchall()

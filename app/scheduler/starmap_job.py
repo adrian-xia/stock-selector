@@ -8,6 +8,8 @@ import time
 import traceback
 from datetime import date
 
+from sqlalchemy import text
+
 from app.config import settings
 from app.database import async_session_factory
 from app.scheduler.task_logger import TaskLogger
@@ -73,7 +75,7 @@ async def starmap_job(target_date: date | None = None) -> dict | None:
     target = target_date or date.today()
     log_id = await _task_logger.start(
         task_name="starmap_research",
-        trigger="cron",
+        trade_date=target,
     )
 
     start = time.monotonic()
@@ -133,5 +135,27 @@ async def starmap_job(target_date: date | None = None) -> dict | None:
 
 
 async def starmap_cron_job() -> None:
-    """独立 cron 入口（无参数，自动取今日日期）。"""
-    await starmap_job()
+    """独立 cron 入口（无参数，自动取今日日期）。
+
+    若主盘后链路已经为当日执行过 StarMap，则跳过重复执行。
+    """
+    target = date.today()
+    async with async_session_factory() as session:
+        existing_status = await session.scalar(
+            text(
+                """
+                SELECT status
+                FROM task_execution_log
+                WHERE task_name = 'starmap_research'
+                  AND trade_date = :trade_date
+                  AND status IN ('success', 'partial')
+                ORDER BY started_at DESC
+                LIMIT 1
+                """
+            ),
+            {"trade_date": target},
+        )
+    if existing_status:
+        logger.info("[StarMap Cron] %s 已执行过（status=%s），跳过重复运行", target, existing_status)
+        return
+    await starmap_job(target)

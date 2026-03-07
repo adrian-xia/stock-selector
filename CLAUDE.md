@@ -77,6 +77,11 @@ tsc -b                                               # TypeScript 类型检查
 7. 缓存刷新 — 刷新 Redis 缓存
 8. ⭐ StarMap 投研（`app/research/orchestrator.py`，已接入生产主链）
 
+当前默认调度口径：
+- 盘后主链 / 自动数据更新默认周一至周五 `18:00`
+- 数据嗅探默认补探到 `19:00`
+- StarMap 独立 cron 默认周一至周五 `18:40`，仅作兜底；若主链已执行过当日 StarMap，则自动跳过重复执行
+
 核心入口：`sync_daily_by_date(dates)` — 按日期批量同步全市场数据（3 次 API 调用拉全市场）。
 
 ### 数据分层
@@ -104,6 +109,7 @@ tsc -b                                               # TypeScript 类型检查
   - `volume-price-pattern`（V4 独立策略，通过 `v4_daily_runner` 纳入日常选股落库流程）
   - `cashflow_quality` / `financial_safety` / `high_dividend` / `low_pe_high_roe` 四个基础策略供 adapter 复用
 - `strategies` 表启动时会同步活跃策略，并物理清理废弃 V1 策略及其关联历史
+- P4 板块日线 `sync_concept_daily()` 已接入最近 7 天缺口补追；若当天板块数据晚于股票数据落地，可在后续交易日盘后自动补齐最近缺口
 
 ### API 路由
 
@@ -244,6 +250,50 @@ docker-compose down  # 停止服务
 **⚡ 每次新会话开始时，必须先读取 `PROJECT_TASKS.md`**。该文件包含 V4 StarMap 的详细 checkpoint 进度（Phase 0~4，27 个子任务 checkbox）。完成工作后务必更新对应 checkbox。
 
 当前阶段：V2/V4 → StarMap 统一链路已落地，StarMap 为唯一计划层与 Markdown/Telegram 报告输出层。设计文档 `docs/design/18-盘后自动投研与交易计划系统设计-详细版.md`（V5 已封版）。
+
+## 项目长期约定（会话记忆落地）
+
+以下内容视为当前项目的稳定口径；后续新会话默认按此理解，除非用户明确要求调整并同步更新文档/代码。
+
+### 一、当前生产主链
+
+- 日常生产主链统一为：`V2 Pipeline + V4 Daily Runner -> strategy_picks -> StarMap -> trade_plan_daily_ext`
+- `V2 Pipeline` 是当前生产主执行链，负责 20 个 V2 策略的日常选股
+- `V4 Daily Runner` 是独立专题链，负责 `volume-price-pattern` 的日常命中，不并入 `Pipeline V2`
+- `V2` 与 `V4` 的日常命中结果都统一落入 `strategy_picks`
+- `StarMap` 基于 `strategy_picks` 做盘后投研融合，并生成最终计划
+
+### 二、计划层与报告层口径
+
+- `StarMap` 是唯一计划层，不再保留并行的旧交易计划链路
+- 最终增强交易计划统一写入 `trade_plan_daily_ext`
+- 工作台/API/盘后总览默认读取 `trade_plan_daily_ext`
+- `StarMap` 同时是唯一 Markdown 报告输出层与 Telegram 推送来源
+- 报告生成后需先落盘到 `reports/`，再发送 Telegram 摘要与附件
+
+### 三、V2 / V4 / 优化层职责边界
+
+- **执行层 / V2 策略池**：当前生产主链；盘后运行 `execute_pipeline_v2`，生成候选并写入 `strategy_picks`
+- **执行层 / V4 量价配合**：独立专题链路；使用自身流程执行，日常命中汇总写入 `strategy_picks`
+- **优化层 / V2 参数优化**：只优化 V2 trigger，通过全市场回放 `execute_pipeline_v2` 评估，结果写入 `market_optimization_tasks`
+- **优化层 / V4 参数优化**：只优化 `volume-price-pattern`，通过独立 `run_backtest` / `run_grid_search` 评估，结果写入 `v4_backtest_results`
+- **投研层 / StarMap**：对 V2/V4 当日结果做统一融合，输出增强交易计划与投研报告
+
+### 四、已退场与保留原则
+
+- 旧 `trade_plan` 代码链路已退场；如发现新增逻辑仍写回旧表/旧接口，视为偏离当前架构
+- V1 主执行链路与废弃 V1 策略已删除；不要重新接回生产主路径
+- 当前允许保留的旧基础策略，仅限被 V2 adapter 复用的能力型策略
+- 若后续新增策略链路，优先判断其应归属：执行层、优化层，还是投研层；避免再次出现“多计划层并存”
+
+### 五、文档同步要求
+
+- 只要主链关系、计划落库表、报告出口、策略职责边界发生变化，必须同步更新：
+  - `README.md`
+  - `CLAUDE.md`
+  - `docs/用户指南.md`
+  - `docs/数据库表清单.md`
+- 若涉及设计口径调整，还必须同步对应设计文档，避免“代码已改、文档仍沿用旧叙事”
 
 ## 不做
 

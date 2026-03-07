@@ -240,6 +240,34 @@ async def run_post_market_chain(target_date: date | None = None) -> None:
                 time.monotonic() - gap_start, traceback.format_exc(),
             )
 
+        # 步骤 3.86：P4 板块日线补追（单独处理最近 7 天缺口）
+        p4_gap_start = time.monotonic()
+        try:
+            p4_gap_result = await manager.gap_fill_concept_daily(
+                start_date=target - timedelta(days=7),
+                end_date=target,
+            )
+            if p4_gap_result.get("missing_dates"):
+                logger.info(
+                    "[P4板块补追] 完成：missing=%s, filled=%d, raw=%d, cleaned=%d, tech=%d，耗时 %.1fs",
+                    p4_gap_result.get("missing_dates"),
+                    p4_gap_result.get("filled_dates", 0),
+                    p4_gap_result.get("raw_inserted", 0),
+                    p4_gap_result.get("cleaned_inserted", 0),
+                    p4_gap_result.get("tech_success", 0),
+                    time.monotonic() - p4_gap_start,
+                )
+            else:
+                logger.info(
+                    "[P4板块补追] 无缺口，耗时 %.1fs",
+                    time.monotonic() - p4_gap_start,
+                )
+        except Exception:
+            logger.warning(
+                "[P4板块补追] 失败（继续执行），耗时 %.1fs\n%s",
+                time.monotonic() - p4_gap_start, traceback.format_exc(),
+            )
+
         # 步骤 3.9：新闻采集与情感分析（受 news_crawl_enabled 控制，失败不阻断）
         if settings.news_crawl_enabled:
             news_start = time.monotonic()

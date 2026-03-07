@@ -98,6 +98,24 @@ def _append_bullets(md: list[str], title: str, items: Any, empty: str = "无") -
     md.append("")
 
 
+def _get_stock_name(item: Any) -> str:
+    """从对象中提取股票名称。"""
+    return (
+        getattr(item, "stock_name", None)
+        or getattr(item, "name", None)
+        or ""
+    )
+
+
+def _stock_label(item: Any) -> str:
+    """返回“代码 名称”格式；缺名称时仅返回代码。"""
+    ts_code = getattr(item, "ts_code", "") or ""
+    stock_name = _get_stock_name(item)
+    if stock_name and stock_name != ts_code:
+        return f"{ts_code} {stock_name}"
+    return ts_code
+
+
 def generate_starmap_report(
     trade_date: date,
     elapsed: float,
@@ -135,6 +153,9 @@ def generate_starmap_report(
         f"🌍 风险偏好 {risk_appetite} | 风险分 {risk_score:.1f}",
         f"🏭 行业共振 {sector_count} 个 | 增强计划 {plan_count} 条",
     ]
+    if plans:
+        top_plan_labels = " / ".join(_stock_label(plan) for plan in plans[:3])
+        summary_lines.append(f"🎯 Top计划 {top_plan_labels}")
     if degrade_flags:
         summary_lines.append(f"⚠️ 降级标记 {len(degrade_flags)} 个")
     if errors:
@@ -220,12 +241,13 @@ def generate_starmap_report(
         md.append(f"- 计划类型分布：{', '.join(f'{k}×{v}' for k, v in plan_type_counter.most_common())}")
         md.append("")
 
-        md.append("| 排名 | 代码 | 来源策略 | 类型 | 置信度 | 仓位 | 市场状态 | 行业 | 风险提示 |")
-        md.append("|------|------|----------|------|--------|------|----------|------|----------|")
+        md.append("| 排名 | 代码 | 名称 | 来源策略 | 类型 | 置信度 | 仓位 | 市场状态 | 行业 | 风险提示 |")
+        md.append("|------|------|------|----------|------|--------|------|----------|------|----------|")
         for idx, plan in enumerate(plans, 1):
             md.append(
                 f"| {idx} "
                 f"| {getattr(plan, 'ts_code', '')} "
+                f"| {_get_stock_name(plan) or '—'} "
                 f"| {_display(getattr(plan, 'source_strategy', 'unknown'), name_map)} "
                 f"| {getattr(plan, 'plan_type', '')} "
                 f"| {_safe_float(getattr(plan, 'confidence', 0)):.1f} "
@@ -240,8 +262,12 @@ def generate_starmap_report(
         md.append("### 重点计划明细\n")
         for plan in detail_plans:
             strategy_name = getattr(plan, "source_strategy", "unknown")
+            stock_name = _get_stock_name(plan)
+            title = getattr(plan, "ts_code", "")
+            if stock_name:
+                title = f"{title} {stock_name}"
             md.append(
-                f"#### {getattr(plan, 'ts_code', '')}｜{_display(strategy_name, name_map)}\n"
+                f"#### {title}｜{_display(strategy_name, name_map)}\n"
             )
             md.append(f"- 计划类型：{getattr(plan, 'plan_type', '')}")
             md.append(f"- 计划状态：{getattr(plan, 'plan_status', '')}")
@@ -303,6 +329,10 @@ def generate_post_market_report(
     pick_count = len(picks) if picks else 0
     plan_count = len(plans) if plans else 0
     _pool = watchpool or []
+    pick_name_map = {
+        getattr(p, "ts_code", ""): getattr(p, "name", "") or getattr(p, "ts_code", "")
+        for p in picks or []
+    }
 
     # 检测 V4 策略命中
     v4_picks = [p for p in picks if V4_STRATEGY_NAME in p.matched_strategies] if picks else []
@@ -314,6 +344,17 @@ def generate_post_market_report(
         f"🎯 选股 {pick_count} 条 | 交易计划 {plan_count} 条",
         f"📈 完成率 {summary.get('completion_rate', 0) * 100:.1f}%",
     ]
+    if plans:
+        top_plan_labels = " / ".join(
+            (
+                f"{pl.get('ts_code', '')} {pick_name_map.get(pl.get('ts_code', ''), '')}"
+                if pick_name_map.get(pl.get("ts_code", ""))
+                and pick_name_map.get(pl.get("ts_code", "")) != pl.get("ts_code", "")
+                else pl.get("ts_code", "")
+            )
+            for pl in plans[:3]
+        )
+        lines.append(f"📝 Top计划 {top_plan_labels}")
     if v4_picks:
         lines.append(f"🐉 V4量价配合(龙回头) 命中 {len(v4_picks)} 只")
     summary_text = "\n".join(lines)
@@ -362,16 +403,17 @@ def generate_post_market_report(
 
     if v4_plans:
         md.append("### V4 交易计划\n")
-        md.append("| 代码 | 触发类型 | 触发价 | 止损 | 止盈 | 信心 |")
-        md.append("|------|----------|--------|------|------|------|")
+        md.append("| 代码 | 名称 | 触发类型 | 触发价 | 止损 | 止盈 | 信心 |")
+        md.append("|------|------|----------|--------|------|------|------|")
         for pl in v4_plans:
             code = pl.get("ts_code", "")
+            name = pick_name_map.get(code, "—")
             trigger = pl.get("trigger_type", "")
             tp = pl.get("trigger_price", "")
             sl = pl.get("stop_loss", "")
             tkp = pl.get("take_profit", "")
             conf = pl.get("confidence", "")
-            md.append(f"| {code} | {trigger} | {tp} | {sl} | {tkp} | {conf} |")
+            md.append(f"| {code} | {name} | {trigger} | {tp} | {sl} | {tkp} | {conf} |")
         md.append("")
 
     # 策略分布
@@ -423,16 +465,17 @@ def generate_post_market_report(
     # 交易计划
     if plans:
         md.append(f"## 交易计划（共 {plan_count} 条）\n")
-        md.append("| 序号 | 代码 | 触发类型 | 触发价 | 止损 | 止盈 | 来源策略 |")
-        md.append("|------|------|----------|--------|------|------|----------|")
+        md.append("| 序号 | 代码 | 名称 | 触发类型 | 触发价 | 止损 | 止盈 | 来源策略 |")
+        md.append("|------|------|------|----------|--------|------|------|----------|")
         for i, pl in enumerate(plans, 1):
             code = pl.get("ts_code", "")
+            name = pick_name_map.get(code, "—")
             trigger = pl.get("trigger_type", "")
             tp = pl.get("trigger_price", "")
             sl = pl.get("stop_loss", "")
             tkp = pl.get("take_profit", "")
             strategy = _display(pl.get("source_strategy", ""), name_map)
-            md.append(f"| {i} | {code} | {trigger} | {tp} | {sl} | {tkp} | {strategy} |")
+            md.append(f"| {i} | {code} | {name} | {trigger} | {tp} | {sl} | {tkp} | {strategy} |")
         md.append("")
 
     md.append("---\n*选股系统自动生成*\n")

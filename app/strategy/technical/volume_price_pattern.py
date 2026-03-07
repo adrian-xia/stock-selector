@@ -107,7 +107,6 @@ class VolumePricePatternStrategy(BaseStrategy):
                 )
                 if strong:
                     # 更新板块得分
-                    from app.models.strategy import StrategyWatchpool  # noqa: avoid circular
                     for code in triggered_codes:
                         score = 1.0 if code in strong else 0.0
                         await session.execute(text(

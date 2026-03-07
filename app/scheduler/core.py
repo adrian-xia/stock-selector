@@ -50,7 +50,7 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     from app.scheduler.market_opt_job import weekly_market_opt_job
     from app.scheduler.v4_opt_job import weekly_v4_opt_job
 
-    # 自动数据更新任务：默认周一至周五 15:30（替换原有盘后链路任务）
+    # 自动数据更新任务：默认周一至周五 18:00（替换原有盘后链路任务）
     if settings.auto_update_enabled:
         auto_update_cron = settings.scheduler_auto_update_cron
         parts = auto_update_cron.split()
@@ -154,7 +154,7 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     else:
         logger.info("V4量价配合策略优化已禁用（V4_OPT_ENABLED=false）")
 
-    # StarMap 盘后投研：默认周一至周五 16:10
+    # StarMap 盘后投研：默认周一至周五 18:40（主链内已执行，此 cron 作为兜底）
     if settings.starmap_enabled:
         from app.scheduler.starmap_job import starmap_cron_job
 

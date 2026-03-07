@@ -2520,6 +2520,89 @@ class DataManager:
         logger.info(f"[sync_concept_daily] 完成")
         return {"raw_inserted": raw_inserted, "cleaned_inserted": cleaned_inserted}
 
+    async def gap_fill_concept_daily(
+        self,
+        start_date: date,
+        end_date: date,
+    ) -> dict:
+        """补追 P4 板块日线缺口，并补算对应技术指标。
+
+        P4 板块数据未纳入统一 `sync_raw_tables(..., mode=\"gap_fill\")`，
+        因此需要单独扫描 `concept_daily` 的缺失交易日并补拉。
+
+        Args:
+            start_date: 起始日期
+            end_date: 截止日期
+
+        Returns:
+            补追统计信息
+        """
+        trading_dates = await self.get_trade_calendar(start_date, end_date)
+        if not trading_dates:
+            return {
+                "checked_dates": 0,
+                "missing_dates": [],
+                "filled_dates": 0,
+                "raw_inserted": 0,
+                "cleaned_inserted": 0,
+                "tech_success": 0,
+            }
+
+        async with self._session_factory() as session:
+            existing_result = await session.execute(
+                text(
+                    """
+                    SELECT DISTINCT trade_date
+                    FROM concept_daily
+                    WHERE trade_date BETWEEN :start_date AND :end_date
+                    """
+                ),
+                {"start_date": start_date, "end_date": end_date},
+            )
+            existing_dates = {row[0] for row in existing_result.fetchall()}
+
+        missing_dates = [trade_date for trade_date in trading_dates if trade_date not in existing_dates]
+        if not missing_dates:
+            return {
+                "checked_dates": len(trading_dates),
+                "missing_dates": [],
+                "filled_dates": 0,
+                "raw_inserted": 0,
+                "cleaned_inserted": 0,
+                "tech_success": 0,
+            }
+
+        raw_inserted = 0
+        cleaned_inserted = 0
+        tech_success = 0
+        filled_dates = 0
+
+        for missing_date in missing_dates:
+            sync_result = await self.sync_concept_daily(
+                trade_date=missing_date.strftime("%Y%m%d")
+            )
+            raw_rows = int(sync_result.get("raw_inserted", 0))
+            cleaned_rows = int(sync_result.get("cleaned_inserted", 0))
+            raw_inserted += raw_rows
+            cleaned_inserted += cleaned_rows
+
+            if raw_rows <= 0 and cleaned_rows <= 0:
+                continue
+
+            filled_dates += 1
+            tech_result = await self.update_concept_indicators(missing_date)
+            if int(tech_result.get("success", 0)) > 0:
+                tech_success += 1
+
+        return {
+            "checked_dates": len(trading_dates),
+            "missing_dates": [trade_date.isoformat() for trade_date in missing_dates],
+            "filled_dates": filled_dates,
+            "raw_inserted": raw_inserted,
+            "cleaned_inserted": cleaned_inserted,
+            "tech_success": tech_success,
+        }
+
     async def sync_concept_member(self, ts_code: str, src: str = "THS") -> dict:
         """同步板块成分股（API → raw → concept_member）。
 

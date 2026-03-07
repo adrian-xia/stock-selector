@@ -13,7 +13,7 @@ from app.scheduler.state import SyncState, SyncStateManager
 
 @pytest.mark.asyncio
 async def test_scenario_1_trading_day_data_ready():
-    """测试场景 1：交易日 15:30 触发，数据已就绪。
+    """测试场景 1：交易日 18:00 触发，数据已就绪。
 
     预期：立即执行盘后链路，标记完成。
     """
@@ -55,7 +55,7 @@ async def test_scenario_1_trading_day_data_ready():
 
 @pytest.mark.asyncio
 async def test_scenario_2_trading_day_data_not_ready():
-    """测试场景 2：交易日 15:30 触发，数据未就绪，启动嗅探任务。
+    """测试场景 2：交易日 18:00 触发，数据未就绪，启动嗅探任务。
 
     预期：启动嗅探任务，每 15 分钟嗅探一次。
     """
@@ -96,7 +96,7 @@ async def test_scenario_2_trading_day_data_not_ready():
 
 @pytest.mark.asyncio
 async def test_scenario_3_probe_timeout():
-    """测试场景 3：交易日 15:30 触发，数据未就绪，18:00 超时。
+    """测试场景 3：交易日 18:00 触发，数据未就绪，19:00 超时。
 
     预期：发送超时报警，停止嗅探任务。
     """
@@ -119,11 +119,11 @@ async def test_scenario_3_probe_timeout():
         # 模拟数据未就绪
         mock_probe.return_value = False
 
-        # 模拟当前时间超过 18:00
+        # 模拟当前时间超过 19:00
         mock_now = MagicMock()
-        mock_now.time.return_value = time(18, 30)
+        mock_now.time.return_value = time(19, 30)
         mock_datetime.now.return_value = mock_now
-        mock_datetime.strptime.return_value = MagicMock(time=lambda: time(18, 0))
+        mock_datetime.strptime.return_value = MagicMock(time=lambda: time(19, 0))
 
         # 模拟通知管理器
         mock_notifier = AsyncMock()
@@ -141,7 +141,7 @@ async def test_scenario_3_probe_timeout():
 
 @pytest.mark.asyncio
 async def test_scenario_4_non_trading_day():
-    """测试场景 4：非交易日 15:30 触发。
+    """测试场景 4：非交易日 18:00 触发。
 
     预期：记录日志并退出，不执行任何操作。
     """

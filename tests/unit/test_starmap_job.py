@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.scheduler.starmap_job import starmap_job
+from app.scheduler.starmap_job import starmap_cron_job, starmap_job
 
 
 @pytest.mark.asyncio
@@ -36,3 +36,20 @@ async def test_starmap_job_generates_and_pushes_report(
     mock_send_report.assert_awaited_once()
     mock_task_logger.start.assert_awaited_once()
     mock_task_logger.finish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@patch("app.scheduler.starmap_job.starmap_job", new_callable=AsyncMock)
+async def test_starmap_cron_job_skips_when_today_already_ran(
+    mock_starmap_job: AsyncMock,
+):
+    """若当天已成功执行过 StarMap，则独立 cron 应跳过重复运行。"""
+    mock_session = AsyncMock()
+    mock_session.scalar.return_value = "success"
+    mock_session_factory = MagicMock()
+    mock_session_factory.return_value.__aenter__.return_value = mock_session
+
+    with patch("app.scheduler.starmap_job.async_session_factory", mock_session_factory):
+        await starmap_cron_job()
+
+    mock_starmap_job.assert_not_awaited()
